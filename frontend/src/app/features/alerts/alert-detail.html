@@ -1,0 +1,70 @@
+<div class="drawer-backdrop" (click)="closed.emit()" aria-hidden="true"></div>
+<aside #dialog class="drawer sheet" role="dialog" aria-modal="true" aria-labelledby="drawer-title" (keydown)="trap($event)">
+  @let a = alert();
+  <header class="sheet-head">
+    <div class="row">
+      <oci-severity [value]="a.severity" /><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span><oci-evidence [value]="a.evidenceLevel" />
+      <span class="spacer"></span>
+      <button class="btn btn--sm btn--ghost btn--icon" type="button" (click)="closed.emit()" aria-label="Close alert details">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <h2 id="drawer-title" tabindex="-1">{{ a.ruleName }}</h2>
+    <p class="summary">{{ a.summary }}</p>
+    <dl class="meta">
+      <div><dt>Alert</dt><dd class="mono">{{ a.id }}</dd></div>
+      <div><dt>Network</dt><dd><oci-net [value]="a.network" /></dd></div>
+      <div><dt>Created</dt><dd>{{ a.createdAt | date: 'yyyy-MM-dd HH:mm' : 'UTC' }} UTC</dd></div>
+      @if (a.occurrenceCount && a.occurrenceCount > 1) { <div><dt>Occurrences</dt><dd class="num">{{ a.occurrenceCount }}</dd></div> }
+      <div><dt>Evidence</dt><dd>{{ evidenceHelp(a) }}</dd></div>
+    </dl>
+  </header>
+
+  <div class="sheet-body">
+    <oci-alert-why class="why" [alert]="a" aria-labelledby="h-why" />
+
+    <div class="side">
+      <section aria-labelledby="h-life">
+        <h3 id="h-life">Lifecycle</h3>
+        <label>Reason, kept in history<input [value]="reason()" (input)="reason.set($any($event.target).value)" placeholder="Optional, for example known exchange rebalancing" /></label>
+        <div class="acts">
+          @for (act of actions(a.status); track act.to) {
+            <button class="btn btn--sm" [class.btn--primary]="act.primary" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button>
+          }
+        </div>
+      </section>
+
+      <section aria-labelledby="h-asg">
+        <h3 id="h-asg">Assignee</h3>
+        <form class="assign" (submit)="assign($event)" novalidate>
+          <label class="grow"><span class="sr-only">Assignee email</span><input type="email" [formField]="assignForm.assignee" placeholder="Email, or empty to unassign" /></label>
+          <button class="btn btn--sm" type="submit" [disabled]="busy()">Assign</button>
+        </form>
+        @if (assignForm.assignee().touched() && assignForm.assignee().invalid()) { <p class="field-error">{{ assignForm.assignee().errors()[0]?.message }}</p> }
+      </section>
+
+      @if (actionError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+
+      <section aria-labelledby="h-hist">
+        <h3 id="h-hist">History</h3>
+        <ol class="timeline">
+          @for (h of a.history; track $index) {
+            <li><span class="strong">{{ action(h.action) }}</span><span class="small">&#32;by {{ h.actor }}</span>
+              <div class="small muted"><time [attr.datetime]="h.at">{{ h.at | date: 'MMM d, HH:mm' : 'UTC' }} UTC</time>, {{ ago(h.at) }}</div>
+              @if (h.detail) { <div class="small">{{ h.detail }}</div> }</li>
+          }
+        </ol>
+      </section>
+
+      <section aria-labelledby="h-com">
+        <h3 id="h-com">Comments</h3>
+        @for (c of a.comments; track c.id) {
+          <div class="comment"><div class="small muted">{{ c.author }}, {{ ago(c.createdAt) }}</div><p>{{ c.body }}</p></div>
+        } @empty { <p class="small muted">No comment yet. Write down what you checked so the next analyst does not repeat it.</p> }
+        <form class="stack" (submit)="comment($event)" novalidate>
+          <label>Add a comment<textarea rows="3" [formField]="commentForm.body"></textarea></label>
+          <div><button class="btn btn--sm" type="submit" [disabled]="busy() || !commentModel().body.trim()">Post comment</button></div>
+        </form>
+      </section>
+    </div>
+  </div>
+</aside>

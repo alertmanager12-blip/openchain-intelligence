@@ -4,6 +4,7 @@ import { ApiError } from '../core/api-error';
 import { EvidenceLevel, NetworkId, RiskLevel, Severity } from '../core/models';
 import { RiskGauge } from './risk-gauge';
 import { shortHash } from './format';
+import { Skeleton, SkeletonKind } from './skeleton';
 
 /** "FALSE_POSITIVE" -> "False positive": enum values are shown in sentence case. */
 export function sentence(v: string): string {
@@ -11,9 +12,13 @@ export function sentence(v: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-/** Loading / error / empty wrapper. Content is projected only when there is something to show. */
+/**
+ * Loading / error / empty wrapper. Content is projected only when there is something to show.
+ * While loading for the first time it shows a skeleton shaped like the content (table, readout or lines).
+ */
 @Component({
   selector: 'oci-state',
+  imports: [Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (error(); as e) {
@@ -24,11 +29,9 @@ export function sentence(v: string): string {
         @if (e.retryable || retryAlways()) { <button class="btn btn--sm" type="button" (click)="retry.emit()">Retry</button> }
       </div>
     } @else if (loading() && !hasData()) {
-      <div class="state" aria-busy="true" aria-live="polite">
-        <span class="spinner" aria-hidden="true"></span><span>{{ loadingText() }}</span>
-      </div>
+      <oci-skeleton [kind]="skeleton()" [rows]="skeletonRows()" [columns]="skeletonColumns()" [label]="loadingText()" [style.--cols]="gridCols()" />
     } @else if (empty()) {
-      <div class="state state--empty" role="status"><span>{{ emptyText() }}</span><ng-content select="[empty]" /></div>
+      <div class="empty" role="status"><span>{{ emptyText() }}</span><ng-content select="[empty]" /></div>
     } @else {
       <ng-content />
     }
@@ -40,8 +43,12 @@ export class StateComponent {
   readonly empty = input(false);
   readonly hasData = input(false);
   readonly retryAlways = input(true);
-  readonly loadingText = input('Loading…');
+  readonly loadingText = input('Loading');
   readonly emptyText = input('Nothing to show yet.');
+  readonly skeleton = input<SkeletonKind>('lines');
+  readonly skeletonRows = input(5);
+  readonly skeletonColumns = input<number[]>([70, 90, 60, 80, 50]);
+  readonly gridCols = computed(() => this.skeletonColumns().map(() => 'minmax(0, 1fr)').join(' '));
   readonly retry = output<void>();
 }
 

@@ -28,6 +28,18 @@ their own licences, including:
   - Cytoscape.js (MIT)
     https://js.cytoscape.org
 
+Fonts (font files only, distributed unmodified as separate files under the
+SIL Open Font License, Version 1.1; see ADR-0012 amendment 1; the licence text
+is included with each font package):
+
+  - Barlow and Barlow Semi Condensed
+    Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+    SIL Open Font License, Version 1.1
+  - JetBrains Mono
+    Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+    SIL Open Font License, Version 1.1
+  - Packaged by Fontsource (https://fontsource.org)
+
 The complete list of bundled third-party components and their licences is
 generated at build time (license-maven-plugin / npm licence report) and
 published with each release.

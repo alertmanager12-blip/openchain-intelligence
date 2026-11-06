@@ -103,10 +103,10 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
     </div>
   `,
   styles: `
-    .group { border: 1px solid var(--line); border-radius: var(--r-panel); padding: 10px 12px; display: grid; gap: 8px; background: var(--surface); }
-    .nested { background: var(--bg); border-left: 2px solid var(--accent); }
-    .kw { font-weight: 600; color: var(--ink); font-size: 14px; min-width: 44px; }
-    .joiner { font-size: 12px; font-weight: 600; color: var(--muted); padding-left: 12px; }
+    .group { border: 1px solid var(--line); border-radius: var(--r-well); padding: 12px 14px; display: grid; gap: 10px; background: var(--surface); }
+    .nested { background: var(--surface-2); border-left: 3px solid var(--accent); }
+    .kw { font: 600 15px var(--font-display); color: var(--ink); min-width: 48px; }
+    .joiner { font: 600 13px var(--font-display); color: var(--accent); padding-left: 12px; }
     .cond { display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto; gap: 8px; align-items: end; padding: 8px 0 10px; border-bottom: 1px solid var(--line-soft); }
     .cond.invalid { border-bottom-color: var(--risk-critical); }
     .cond select, .cond input { width: 100%; }

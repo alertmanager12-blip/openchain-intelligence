@@ -1,0 +1,80 @@
+<div class="page">
+  <oci-page-header heading="Wallet risk" lede="Every score is the sum of explained contributions, each with its source, confidence and age. A score helps you prioritise; it is never a verdict about a person." />
+
+  <form class="card lookup" (submit)="$event.preventDefault(); submit()">
+    <label class="grow">Address<input name="a" class="mono" [ngModel]="addrInput()" (ngModelChange)="addrInput.set($event)" placeholder="Address to score" autocomplete="off" spellcheck="false" /></label>
+    <label>Network<select name="n" [ngModel]="netInput()" (ngModelChange)="netInput.set($event)">
+      @for (n of networks; track n) { <option [ngValue]="n">{{ n }}</option> }
+    </select></label>
+    <button class="btn btn--primary" type="submit" [disabled]="!addrInput().trim()">Score wallet</button>
+  </form>
+
+  @if (address() && network()) {
+    <oci-state [loading]="risk.loading()" [error]="risk.error()" [hasData]="!!risk.value()" (retry)="risk.reload()" skeleton="readout" [skeletonRows]="3" loadingText="Computing score">
+      @if (risk.value(); as r) {
+        <section class="panel-raised primary" aria-labelledby="h-g">
+          <div class="well score">
+            <div class="gauge-col">
+              <h2 id="h-g" class="sr-only">Score</h2>
+              <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" />
+              <p class="small muted">Method {{ r.method }}, model {{ r.modelVersion }}, computed {{ ago(r.computedAt) }}.</p>
+            </div>
+            <dl class="facts">
+              <div><dt>Contributions</dt><dd>{{ r.contributions.length }}</dd></div>
+              <div><dt>Largest</dt><dd>@if (top(); as c) { {{ c.points > 0 ? '+' : '' }}{{ c.points }} <span class="unit">{{ sentence(c.factor) }}</span> } @else { – }</dd></div>
+              <div class="wide"><dt>Strongest evidence</dt><dd>@if (strongest(); as s) { <oci-evidence [value]="s" /> } @else { – }</dd></div>
+            </dl>
+          </div>
+          <div class="row actions">
+            <span class="small addr"><oci-addr [address]="r.address" [network]="r.network" [full]="true" /></span>
+            <span class="spacer"></span>
+            <a class="btn" [routerLink]="['/wallets', r.network, r.address]">Open wallet</a>
+            <a class="btn" [routerLink]="['/investigation']" [queryParams]="{ address: r.address, network: r.network }">Trace fund flows</a>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="h-c">
+          <div class="section-head"><h2 id="h-c">Contributions</h2><p>Expand a row for the explanation, the source and the weight.</p></div>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th scope="col" class="x"><span class="sr-only">Details</span></th>
+              <th scope="col">Factor</th>
+              <th scope="col" [attr.aria-sort]="t.aria('ev')"><button type="button" (click)="t.sort('ev')">Evidence {{ t.icon('ev') }}</button></th>
+              <th scope="col" class="right" [attr.aria-sort]="t.aria('points')"><button type="button" (click)="t.sort('points')">Points {{ t.icon('points') }}</button></th>
+              <th scope="col" class="right" [attr.aria-sort]="t.aria('confidence')"><button type="button" (click)="t.sort('confidence')">Confidence {{ t.icon('confidence') }}</button></th>
+              <th scope="col" class="right" [attr.aria-sort]="t.aria('age')"><button type="button" (click)="t.sort('age')">Age {{ t.icon('age') }}</button></th>
+            </tr></thead>
+            <tbody>
+              @for (c of t.view(); track c.factor) {
+                <tr>
+                  <td class="x"><button class="expander" type="button" [attr.aria-expanded]="open() === c.factor" [attr.aria-controls]="'rc-' + $index" [attr.aria-label]="'Details of ' + sentence(c.factor)" (click)="toggle(c.factor)">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
+                  <td><span class="strong">{{ sentence(c.factor) }}</span><div class="sub">{{ c.source }}</div></td>
+                  <td><oci-evidence [value]="c.evidenceLevel" /></td>
+                  <td class="right pts" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
+                  <td class="right nowrap"><span class="conf" aria-hidden="true"><span [style.width.%]="c.confidence * 100"></span></span> {{ (c.confidence * 100).toFixed(0) }}%</td>
+                  <td class="right nowrap">{{ age(c.ageSeconds) }}</td>
+                </tr>
+                @if (open() === c.factor) {
+                  <tr class="detail-row" [id]="'rc-' + $index"><td colspan="6"><div class="detail">
+                    <p class="expl">{{ c.explanation }}</p>
+                    <dl class="kv"><dt>Source</dt><dd>{{ c.source }}</dd><dt>Weight</dt><dd>{{ c.weight.toFixed(2) }}</dd>
+                      @if (c.signalId) { <dt>Signal</dt><dd class="mono">{{ c.signalId }}</dd> }</dl>
+                  </div></td></tr>
+                }
+              } @empty { <tr><td colspan="6" class="muted">No contribution: nothing notable was observed.</td></tr> }
+            </tbody>
+            <tfoot><tr><td></td><td colspan="2">Score, sum clamped to 0 to 100</td><td class="right pts">{{ r.score }}</td><td colspan="2"></td></tr></tfoot>
+          </table></div>
+          <dl class="legend" aria-label="Evidence levels">
+            <div><dt><oci-evidence value="ANOMALY" /></dt><dd>Statistically unusual behaviour. Not a risk claim.</dd></div>
+            <div><dt><oci-evidence value="RISK_SIGNAL" /></dt><dd>A pattern associated with risk. Not proof.</dd></div>
+            <div><dt><oci-evidence value="CONFIRMED_BY_SOURCE" /></dt><dd>Stated by a cited external source, such as an official list.</dd></div>
+          </dl>
+        </section>
+      }
+    </oci-state>
+  } @else {
+    <div class="empty"><strong>Score a wallet</strong><span>Enter an address above and choose its network to see how its score is built.</span></div>
+  }
+</div>

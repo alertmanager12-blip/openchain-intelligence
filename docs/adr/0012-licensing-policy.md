@@ -40,3 +40,31 @@ Chosen option: **1**.
 - `NOTICE` lists bundled third-party notices required by Apache-2.0 dependencies.
 - Redis is not a default dependency; if a cache is needed we document **Valkey** (BSD-3-Clause).
 - Docker images contain only the JRE base (GPLv2 + Classpath Exception, permitted as the runtime) and our artefact.
+
+## Amendment 1 (2026-11-06): OFL-1.1 for font files only
+
+- Status: accepted
+
+### Context
+
+The console needs self-hosted web fonts: the nginx Content-Security-Policy is `default-src 'self'`, so fonts cannot come from a CDN, and the system font stack renders differently on every analyst's machine (tabular figures in particular). Good open fonts are almost all published under the SIL Open Font License 1.1, which was outside the allowlist.
+
+### Decision
+
+**OFL-1.1 is allowed for font files only.** Scope and conditions:
+
+| Condition | Rule |
+|---|---|
+| Scope | Font assets (`.woff2` / `.woff`) and the `@font-face` CSS that declares them. Never code: a package under OFL-1.1 that ships JavaScript is not covered. |
+| Packaging | Fonts are kept as separate files in the build output (`dist/frontend/browser/media/`), never inlined into or merged with Apache-2.0 code, never renamed. Using OFL fonts in a document or a web page does not change the licence of that page (OFL-1.1, permission 4 and the FAQ). |
+| Modification | Fonts are used unmodified (only the upstream Fontsource Latin subsets are shipped). A modified font must not use the Reserved Font Name. |
+| Attribution | Each font is credited in `NOTICE` with its copyright line and licence. The OFL text ships inside each npm package (`LICENSE`). |
+| Enforcement | The CI npm licence check allows `OFL-1.1` only for the named font packages (`@fontsource/barlow`, `@fontsource/barlow-semi-condensed`, `@fontsource/jetbrains-mono`); every other package is still checked against the original allowlist. Adding another font package requires updating that list and `NOTICE`. |
+
+Fonts adopted: Barlow (UI text), Barlow Semi Condensed (titles, numeric readouts, table headers), JetBrains Mono (addresses, hashes, YAML), via Fontsource 5.3.0, weights 400/500/600, 500/600 and 400 respectively, Latin subset.
+
+### Consequences
+
+- Consistent rendering and tabular figures (OpenType `tnum`, verified in the shipped Barlow and Barlow Semi Condensed files) across platforms.
+- About 134 KB of WOFF2 for the six faces (272 KB on disk including the WOFF fallbacks); browsers download only the faces a page uses (`font-display: swap`).
+

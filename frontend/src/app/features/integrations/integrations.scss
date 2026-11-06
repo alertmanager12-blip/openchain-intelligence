@@ -1,0 +1,7 @@
+.secret { display: grid; gap: 8px; margin-top: 16px; }
+.secret code { word-break: break-all; }
+.unavailable { margin-top: -6px; }
+.hint { margin: 0; }
+.target { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.types button { padding: 4px 10px; }
+.card-head .status-line { flex-basis: 100%; }

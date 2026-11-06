@@ -1,0 +1,65 @@
+<div class="page">
+  <oci-page-header heading="Alerts" lede="Alerts are raised by your rules. Triage them, record your reasoning, and mark false positives so the rules can be tuned.">
+    <button class="btn" type="button" (click)="list.reload(); summary.reload()" [disabled]="list.loading()">Refresh</button>
+  </oci-page-header>
+  @if (selectedId() && detail.error(); as e) {
+    <div class="state state--error" role="alert"><strong>{{ e.title }}</strong><p>{{ e.detail }} Pick the alert from the list instead.</p></div>
+  }
+
+  <div class="quick" role="group" aria-label="Filter by status">
+    @if (counts(); as c) {
+      @for (s of active; track s) {
+        <button type="button" class="qf" [attr.aria-pressed]="status() === s" (click)="filterStatus(status() === s ? '' : s)">
+          <span class="status st-{{ s.toLowerCase() }}">{{ sentence(s) }}</span><strong>{{ c.byStatus[s] ?? 0 }}</strong></button>
+      }
+      <p class="urgent" [class.bad]="(c.openBySeverity.CRITICAL ?? 0) > 0"><strong>{{ (c.openBySeverity.CRITICAL ?? 0) + (c.openBySeverity.HIGH ?? 0) }}</strong> open alerts are critical or high
+        <span class="muted">({{ c.openBySeverity.CRITICAL ?? 0 }} critical, {{ c.openBySeverity.HIGH ?? 0 }} high)</span></p>
+    } @else if (summary.error()) {
+      <p class="small muted">Counts are unavailable right now. The list below is still up to date.</p>
+    } @else {
+      @for (i of [1, 2, 3]; track i) { <span class="skel sk" aria-hidden="true"></span> }
+    }
+  </div>
+
+  <section class="card card--flush" aria-label="Alert list">
+    <div class="toolbar">
+      <label>Status<select [ngModel]="status()" (ngModelChange)="status.set($event)">
+        <option value="">All statuses</option>@for (s of statuses; track s) { <option [value]="s">{{ sentence(s) }}</option> }
+      </select></label>
+      <label>Severity<select [ngModel]="severity()" (ngModelChange)="severity.set($event)">
+        <option value="">All severities</option>@for (s of severities; track s) { <option [value]="s">{{ sentence(s) }}</option> }
+      </select></label>
+      <label class="grow">Search<input type="search" [ngModel]="t.filter()" (ngModelChange)="t.filter.set($event)" placeholder="Rule, address, alert id or assignee" /></label>
+      <span class="small muted count" aria-live="polite"><span class="num">{{ t.view().length }}</span> {{ t.view().length === 1 ? 'alert' : 'alerts' }}</span>
+    </div>
+    <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="t.view().length === 0" skeleton="table" [skeletonColumns]="[40, 90, 50, 50, 50, 40]"
+      emptyText="No alert matches these filters. Clear the search or choose another status." (retry)="list.reload()">
+      <div class="table-wrap"><table [class.stale]="list.loading()">
+        <thead><tr>
+          <th scope="col" class="hide-sm" [attr.aria-sort]="t.aria('severity')"><button type="button" (click)="t.sort('severity')">Severity {{ t.icon('severity') }}</button></th>
+          <th scope="col">Alert</th>
+          <th scope="col" [attr.aria-sort]="t.aria('status')"><button type="button" (click)="t.sort('status')">Status {{ t.icon('status') }}</button></th>
+          <th scope="col" class="hide-sm">Evidence</th>
+          <th scope="col" class="hide-sm" [attr.aria-sort]="t.aria('assignee')"><button type="button" (click)="t.sort('assignee')">Assignee {{ t.icon('assignee') }}</button></th>
+          <th scope="col" class="right" [attr.aria-sort]="t.aria('created')"><button type="button" (click)="t.sort('created')">Created {{ t.icon('created') }}</button></th>
+        </tr></thead>
+        <tbody>
+          @for (a of t.view(); track a.id) {
+            <tr class="clickable" [class.selected]="selectedId() === a.id" (click)="open(a)" (keydown.enter)="open(a)" tabindex="0" [attr.aria-label]="'Open alert ' + a.id + ', ' + a.ruleName">
+              <td class="hide-sm"><oci-severity [value]="a.severity" /></td>
+              <td><oci-severity class="show-sm" [value]="a.severity" /><span class="rule">{{ a.ruleName }}</span><div class="sub"><span class="mono">{{ a.id }}</span><oci-net [value]="a.network" /></div></td>
+              <td><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span></td>
+              <td class="hide-sm"><oci-evidence [value]="a.evidenceLevel" /></td>
+              <td class="small hide-sm" [class.muted]="!a.assignee">{{ a.assignee ?? 'Unassigned' }}</td>
+              <td class="small nowrap right muted">{{ ago(a.createdAt) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table></div>
+    </oci-state>
+  </section>
+</div>
+
+@if (selected(); as a) {
+  <oci-alert-detail [alert]="a" (updated)="onUpdated($event)" (closed)="close()" />
+}

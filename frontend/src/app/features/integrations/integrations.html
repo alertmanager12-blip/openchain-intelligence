@@ -1,0 +1,65 @@
+<div class="page">
+  <oci-page-header heading="Integrations" lede="Where alerts are delivered. Rules reference a connector by its id in their actions." />
+
+
+  <div class="split">
+    <section class="card card--flush" aria-labelledby="h-con">
+      <div class="card-head"><h2 id="h-con">Connectors</h2>
+        @if (list.value()) {
+          <p class="status-line">
+            <span><strong>{{ stats().total }}</strong> {{ stats().total === 1 ? 'connector' : 'connectors' }}</span>
+            @if (stats().failed) { <span class="bad"><strong>{{ stats().failed }}</strong> failed on the last delivery</span> }
+            @if (stats().never) { <span><strong>{{ stats().never }}</strong> never delivered</span> }
+            <span>last delivery {{ ago(stats().last) }}</span>
+          </p>
+        }
+      </div>
+      <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="(list.value() ?? []).length === 0" skeleton="table" [skeletonRows]="3"
+        emptyText="No connector yet. Add one with the form to start delivering alerts." (retry)="list.reload()">
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Target</th><th scope="col">Last delivery</th><th scope="col" class="right"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>@for (w of list.value() ?? []; track w.id) {
+            <tr>
+              <td><span class="strong">{{ w.name }}</span><div class="sub mono">{{ w.id }}</div></td>
+              <td>{{ typeLabel(w.type) }}</td>
+              <td class="mono small target" [attr.title]="'Target hidden. Ends in ' + w.target.slice(-4)">{{ mask(w.target) }}</td>
+              <td>
+                @if (w.lastDeliveryStatus) { <span class="status" [class.st-ok]="w.lastDeliveryStatus === 'OK'" [class.st-failed]="w.lastDeliveryStatus === 'FAILED'">{{ w.lastDeliveryStatus === 'OK' ? 'Delivered' : 'Failed' }}</span><div class="sub">{{ ago(w.lastDeliveryAt) }}</div> }
+                @else { <span class="status st-none muted">Never</span> }
+                @if (lastTest()?.id === w.id) { <div class="sub" [class.ok]="lastTest()!.ok" [class.bad]="!lastTest()!.ok">{{ lastTest()!.message }}</div> }
+              </td>
+              <td class="right nowrap"><span class="row-actions">
+                <button class="btn btn--sm" type="button" (click)="test(w)" [disabled]="testing() === w.id" [attr.aria-label]="'Send test to ' + w.name">{{ testing() === w.id ? 'Sending' : 'Send test' }}</button>
+                <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove(w)" [attr.aria-label]="'Delete ' + w.name">Delete</button>
+              </span></td>
+            </tr>
+          }</tbody>
+        </table></div>
+      </oci-state>
+    </section>
+
+    <section class="card" aria-labelledby="h-add">
+      <h2 id="h-add">Add a connector</h2>
+      <form class="stack" (submit)="create($event)" novalidate>
+        <div class="seg types" role="radiogroup" aria-label="Connector type">
+          @for (t of types; track t.type) { <button type="button" role="radio" [attr.aria-checked]="type() === t.type" [disabled]="t.available === false" (click)="type.set(t.type)">{{ t.label }}</button> }
+        </div>
+        <p class="hint">{{ meta().help }}</p>
+        <p class="hint unavailable">Email is not available yet: the server has no mail transport. Use a webhook to your mail relay meanwhile.</p>
+        <label>Name<input [formField]="connector.name" placeholder="SOC on-call" />
+          @if (connector.name().touched() && connector.name().invalid()) { <span class="field-error">{{ connector.name().errors()[0]?.message }}</span> }</label>
+        <label>{{ meta().target }}<input class="mono" [formField]="connector.target" [placeholder]="meta().placeholder" />
+          @if (connector.target().touched() && connector.target().invalid()) { <span class="field-error">{{ connector.target().errors()[0]?.message }}</span> }</label>
+        @if (createError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+        <div><button class="btn btn--primary" type="submit" [disabled]="busy()">Create connector</button></div>
+      </form>
+      @if (secret(); as s) {
+        <div class="note note--warn secret" role="alert">
+          <strong>Copy the signing secret now. It will not be shown again.</strong>
+          <code class="mono">{{ s }}</code>
+          <div class="row"><button class="btn btn--sm" type="button" (click)="copy(s)">Copy secret</button><button class="btn btn--sm btn--ghost" type="button" (click)="secret.set(null)">I stored it</button></div>
+        </div>
+      }
+    </section>
+  </div>
+</div>
