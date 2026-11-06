@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.1.2</version>
+    <relativePath/>
+  </parent>
+  <groupId>io.openchain</groupId>
+  <artifactId>openchain-intelligence</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>OpenChain Intelligence</name>
+  <description>Open Source Blockchain Investigation, Risk Intelligence &amp; Programmable Monitoring Platform</description>
+  <licenses><license><name>Apache License 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0</url></license></licenses>
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+  <modules>
+    <module>oci-core</module>
+    <module>oci-blockchain</module>
+    <module>oci-intelligence</module>
+    <module>oci-alerting</module>
+    <module>oci-app</module>
+  </modules>
+  <dependencyManagement>
+    <dependencies>
+      <dependency><groupId>io.openchain</groupId><artifactId>oci-core</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>io.openchain</groupId><artifactId>oci-blockchain</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>io.openchain</groupId><artifactId>oci-intelligence</artifactId><version>${project.version}</version></dependency>
+      <dependency><groupId>io.openchain</groupId><artifactId>oci-alerting</artifactId><version>${project.version}</version></dependency>
+    </dependencies>
+  </dependencyManagement>
+</project>
