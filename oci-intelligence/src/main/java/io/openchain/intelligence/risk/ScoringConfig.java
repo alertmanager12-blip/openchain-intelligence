@@ -53,6 +53,12 @@ public record ScoringConfig(Map<String, Double> weights, double defaultSignalWei
         w.put(labelFactor(LabelCategory.SCAM), 0.70);
         w.put(labelFactor(LabelCategory.PHISHING), 0.70);
         w.put(labelFactor(LabelCategory.FLAGGED_COMMUNITY), 0.40);
+        // Issuer freeze: an authoritative on-chain FACT (the issuer's own contract, reliability 1.0) that the issuer
+        // froze the address, but the reason is undisclosed (law-enforcement request, sanctions, hack recovery, or a
+        // precautionary/erroneous freeze that may be reversed). Placed above community flags (0.40) and below
+        // mixer/scam (0.70) and sanctions (0.95): alone it yields 60/100 = MEDIUM, never HIGH/CRITICAL. It does not
+        // decay while the freeze is active; the unfreeze removes the label.
+        w.put(labelFactor(LabelCategory.ISSUER_FROZEN), 0.60);
         for (LabelCategory c : LabelCategory.values()) w.putIfAbsent(labelFactor(c), 0.0);
         w.put(signalFactor(SignalType.SANCTIONED_EXPOSURE), 0.80);
         w.put(signalFactor(SignalType.MIXER_EXPOSURE), 0.50);
@@ -73,6 +79,6 @@ public record ScoringConfig(Map<String, Double> weights, double defaultSignalWei
         Map<Severity, Double> sev = new EnumMap<>(Severity.class);
         sev.put(Severity.INFO, 0.1); sev.put(Severity.LOW, 0.4); sev.put(Severity.MEDIUM, 0.7);
         sev.put(Severity.HIGH, 0.9); sev.put(Severity.CRITICAL, 1.0);
-        return new ScoringConfig(w, 0.15, Duration.ofDays(180), Set.of(labelFactor(LabelCategory.SANCTIONED)), sev, "oci-risk-1");
+        return new ScoringConfig(w, 0.15, Duration.ofDays(180), Set.of(labelFactor(LabelCategory.SANCTIONED), labelFactor(LabelCategory.ISSUER_FROZEN)), sev, "oci-risk-1");
     }
 }

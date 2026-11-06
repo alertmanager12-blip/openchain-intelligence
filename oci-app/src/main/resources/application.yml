@@ -83,6 +83,12 @@ oci:
   # chains:
   #   tron:     { enabled: true, provider: trongrid, url: https://api.trongrid.io, api-key-header: TRON-PRO-API-KEY, api-key: ${TRONGRID_API_KEY} }
   #   ethereum: { enabled: true, provider: json-rpc, url: https://your-rpc.example, start-block: -100 }
+  # approvals-of-unknown-tokens: true also ingests APPROVAL events of tokens absent from the token registry (default false)
+  # watched-contracts: [0x...] adds contracts whose OwnershipTransferred / EIP-1967 Upgraded / AdminChanged logs become
+  #   CONTRACT_ADMIN_CHANGE events (token registry contracts are always watched); admin-changes-of-all-contracts: true = all
+  # freeze-backfill: { from-block: 19000000 }  bounded historical scan of issuer freeze events (disabled when from-block is
+  #   unset; to-block default = finalized head, chunk-size 2000, min-chunk-size 10, pause 250ms, run-on-startup true);
+  #   also POST /api/v1/admin/backfill/freezes (keys:admin). Progress is persisted in PostgreSQL mode.
   # Operator state (API keys, connectors, rules, alerts, deliveries, label reports, users) is stored in PostgreSQL when
   # SPRING_DATASOURCE_URL (spring.datasource.url) is set - schema migrated by Flyway at startup - and in memory otherwise.
   persistence:

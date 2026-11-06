@@ -116,7 +116,7 @@
     "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
     "fieldName": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,40}(\\.[a-z][a-z0-9_]{0,40}){0,5}$", "description": "Must exist in the field catalog." },
     "decimal": { "type": ["number", "string"], "description": "Exact decimal; strings recommended for large or fractional values." },
-    "eventType": { "enum": ["TOKEN_TRANSFER", "NATIVE_TRANSFER", "CONTRACT_CALL", "CONTRACT_ADMIN_CHANGE", "APPROVAL", "RISK_SCORE_CHANGED", "DETECTION_SIGNAL"] },
+    "eventType": { "enum": ["TOKEN_TRANSFER", "NATIVE_TRANSFER", "CONTRACT_CALL", "CONTRACT_ADMIN_CHANGE", "APPROVAL", "RISK_SCORE_CHANGED", "DETECTION_SIGNAL", "STABLECOIN_FREEZE", "STABLECOIN_UNFREEZE"] },
     "duration": {
       "oneOf": [
         { "type": "string", "pattern": "^[1-9]\\d{0,6}(s|m|h|d)$" },

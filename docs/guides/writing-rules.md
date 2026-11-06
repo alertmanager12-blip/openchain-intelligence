@@ -48,6 +48,17 @@ Common fields of `ChainEvent.fields` (the full catalogue, with an `available` fl
 | `wallet.risk_score`, `counterparty.risk_score` | integer 0–100 | enriched transfers (`RISK_SCORE_CHANGED` events are not produced yet) |
 | `wallet.labels`, `counterparty.labels` | comma-separated category ids | `sanctioned,exchange` (use `CONTAINS`) |
 | `signal.type`, `signal.evidence_level` | string | on `DETECTION_SIGNAL` events |
+| `transaction.fee`, `transaction.success`, `transaction.method` | decimal / boolean / string | on `NATIVE_TRANSFER` events (native units, e.g. `ETH`, `TRX`) |
+| `approval.owner`, `approval.spender`, `approval.amount`, `approval.unlimited` | address / decimal / boolean | on `APPROVAL` events (owner also as `wallet.*`, spender as `counterparty.*`) |
+| `approval.spender_is_contract` | boolean | on `APPROVAL` events with a real provider (EVM `eth_getCode`, TRON `/wallet/getcontract`); absent on simulated chains or when the lookup failed |
+| `approval.spender_age_days` | integer | days since the platform first saw the spender in an indexed value flow (not the deployment date); absent when never seen |
+| `approval.spender_verified` | boolean | **not populated** (no source-code verification source); a condition on it never matches |
+| `contract.address`, `contract.event`, `contract.new_owner` | address / string | on `CONTRACT_ADMIN_CHANGE` (`OwnershipTransferred`, `Upgraded`, `AdminChanged`; new owner/admin/implementation), registry tokens + `watched-contracts` |
+| `freeze.address`, `freeze.token`, `freeze.action`*, `freeze.issuer`, `freeze.event`, `freeze.known_counterparties` | string / integer | on `STABLECOIN_FREEZE` / `STABLECOIN_UNFREEZE` (frozen address also as `wallet.*`; `*` source-backed) |
+
+Event types produced today: `TOKEN_TRANSFER`, `NATIVE_TRANSFER`, `APPROVAL`, `CONTRACT_ADMIN_CHANGE`, `STABLECOIN_FREEZE`,
+`STABLECOIN_UNFREEZE`, `DETECTION_SIGNAL` (`GET /api/v1/rules/event-types`). An issuer freeze states what the issuer did; write rule text
+accordingly (see `rules/generic/issuer-freeze-counterparty.yaml`).
 
 **Numbers**: write decimals as strings (`"50000.5"`) to keep them exact. Integers may be plain.
 

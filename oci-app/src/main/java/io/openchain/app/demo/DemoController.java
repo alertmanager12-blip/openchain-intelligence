@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Demo mode only: fictitious scenarios A-E and the evidence the real pipeline produced for them. */
+/** Demo mode only: fictitious scenarios A-F and the evidence the real pipeline produced for them. */
 @RestController
 @RequestMapping("/api/v1/demo")
 @ConditionalOnProperty(prefix = "oci.demo", name = "enabled", havingValue = "true")

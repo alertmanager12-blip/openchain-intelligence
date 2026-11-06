@@ -65,6 +65,8 @@ public final class FailoverProvider implements BlockchainProvider {
         return call("getAddressTransactions", p -> p.getAddressTransactions(a, cursor, limit));
     }
     @Override public List<TokenTransfer> getTokenTransfers(long from, long to) { return call("getTokenTransfers", p -> p.getTokenTransfers(from, to)); }
+    @Override public BlockActivity getBlockActivity(long from, long to) { return call("getBlockActivity", p -> p.getBlockActivity(from, to)); }
+    @Override public Optional<Boolean> isContract(Address a, long atBlock) { return call("isContract", p -> p.isContract(a, atBlock)); }
     @Override public List<Balance> getAddressBalance(Address a) { return call("getAddressBalance", p -> p.getAddressBalance(a)); }
 
     /** First healthy status starting from the preferred delegate; the last unhealthy one otherwise. */

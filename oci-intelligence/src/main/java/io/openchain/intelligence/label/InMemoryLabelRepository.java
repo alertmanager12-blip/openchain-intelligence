@@ -14,6 +14,11 @@ public final class InMemoryLabelRepository implements LabelRepository {
                 .merge(l.key(), l, (old, neu) -> neu.observedAt().isBefore(old.observedAt()) ? old : neu);
     }
 
+    @Override public boolean remove(Address a, LabelCategory category, String source) {
+        var m = byAddress.get(a);
+        return m != null && m.remove(a + "|" + category + "|" + source) != null;
+    }
+
     @Override public List<AddressLabel> findByAddress(Address a) {
         var m = byAddress.get(a);
         if (m == null) return List.of();

@@ -41,8 +41,9 @@ public final class JsonRpcClient {
         if (Json.present(err)) {
             int code = err.path("code").asInt(0);
             String msg = Json.text(err, "message");
-            throw new ProviderException(transport.endpoint().name() + ": " + method + " RPC error " + code
-                    + (msg == null ? "" : " " + truncate(msg)), RETRYABLE_CODES.contains(code));
+            throw new JsonRpcException(transport.endpoint().name() + ": " + method + " RPC error " + code
+                    + (msg == null ? "" : " " + truncate(msg)), method, code, msg == null ? null : truncate(msg),
+                    RETRYABLE_CODES.contains(code));
         }
         if (resp == null || !resp.has("result")) {
             throw new ProviderException(transport.endpoint().name() + ": " + method + " returned no result", true);

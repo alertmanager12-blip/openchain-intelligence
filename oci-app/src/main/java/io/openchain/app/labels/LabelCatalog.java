@@ -24,6 +24,12 @@ public final class LabelCatalog implements LabelRepository {
         all.merge(label.key(), label, (old, neu) -> neu.observedAt().isBefore(old.observedAt()) ? old : neu);
     }
 
+    @Override public boolean remove(Address address, io.openchain.intelligence.label.LabelCategory category, String source) {
+        boolean removed = delegate.remove(address, category, source);
+        all.remove(address + "|" + category + "|" + source);
+        return removed;
+    }
+
     @Override public List<AddressLabel> findByAddress(Address address) { return delegate.findByAddress(address); }
 
     @Override public int size() { return delegate.size(); }

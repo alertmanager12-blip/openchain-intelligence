@@ -169,6 +169,8 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 | GET | `/api-keys` | keys:admin | List (prefix, scopes, expiry, last use, revocation; never secrets) |
 | POST | `/api-keys/{id}/revoke` | keys:admin | Revoke (`DELETE /api-keys/{id}` is an alias) |
 | GET / PATCH | `/users`, `/users/{id}` | keys:admin | Console users and their role `{ role }` |
+| POST | `/admin/backfill/freezes?network=` | keys:admin | Queue the bounded freeze backfill of one network (or of every configured one without `network`) → **202** `{ items: [status] }`; a run already queued/running is not started twice; 404 when the network has no backfill configured (`oci.chains.<network>.freeze-backfill.from-block` + real provider), 409 when none is |
+| GET | `/admin/backfill/freezes` | keys:admin | Backfill status per network: `state` (IDLE/QUEUED/RUNNING/COMPLETED/CANCELLED/FAILED), `fromBlock`, `toBlock`, `chunkSize`, `lastScannedBlock`, `freezesFound`, `replayedAtStartup`, `lastResult` (chunks, queries, halvings, finalChunkSize…), `lastError` |
 | GET | `/signals?network=&type=&cursor=&limit=` | risk:read | Recent detection signals |
 | GET | `/rules/fields` | rules:read | Field catalog usable in rules; `available=false` marks fields the pipeline does not populate yet |
 | GET | `/rules/export` | rules:read | All current rule sources, `---` separated |

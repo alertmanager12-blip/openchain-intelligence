@@ -4,7 +4,11 @@ import io.openchain.alerting.alert.AlertRepository;
 import io.openchain.alerting.alert.InMemoryAlertRepository;
 import io.openchain.alerting.notify.delivery.DeliveryStore;
 import io.openchain.alerting.notify.delivery.InMemoryDeliveryStore;
+import io.openchain.app.chain.JdbcFreezeBackfillStore;
 import io.openchain.app.config.OciProperties;
+import io.openchain.blockchain.backfill.FreezeBackfillStore;
+import io.openchain.blockchain.backfill.InMemoryFreezeBackfillStore;
+import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.app.labels.InMemoryLabelReportRepository;
 import io.openchain.app.labels.JdbcLabelReportRepository;
 import io.openchain.app.labels.LabelReportRepository;
@@ -43,7 +47,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Operator-state stores. JDBC (PostgreSQL, schema managed by Flyway at startup) when {@code spring.datasource.url}
  * is set, in memory otherwise; services depend only on the repository interfaces. Chain-derived state is always in
- * memory (see {@link PersistenceMode}).
+ * memory (see {@link PersistenceMode}), except the freeze backfill progress and the freezes it found.
  */
 @Configuration(proxyBeanMethods = false)
 public class PersistenceConfiguration {
@@ -63,6 +67,7 @@ public class PersistenceConfiguration {
         @Bean ConnectorRepository connectorRepository() { return new InMemoryConnectorRepository(); }
         @Bean RuleRepository ruleRepository() { return new InMemoryRuleRepository(); }
         @Bean LabelReportRepository labelReportRepository() { return new InMemoryLabelReportRepository(); }
+        @Bean FreezeBackfillStore freezeBackfillStore() { return new InMemoryFreezeBackfillStore(); }
 
         @Bean @Order(Ordered.HIGHEST_PRECEDENCE)
         ApplicationRunner persistenceReport(OciProperties props) {
@@ -104,6 +109,9 @@ public class PersistenceConfiguration {
         @Bean ConnectorRepository connectorRepository(NamedParameterJdbcTemplate jdbc, SecretCipher cipher) { return new JdbcConnectorRepository(jdbc, cipher); }
         @Bean RuleRepository ruleRepository(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) { return new JdbcRuleRepository(jdbc, tx); }
         @Bean LabelReportRepository labelReportRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcLabelReportRepository(jdbc); }
+        @Bean FreezeBackfillStore freezeBackfillStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, TokenRegistry tokens) {
+            return new JdbcFreezeBackfillStore(jdbc, tx, tokens);
+        }
 
         @Bean @Order(Ordered.HIGHEST_PRECEDENCE)
         ApplicationRunner persistenceReport(ObjectProvider<Flyway> flyway, SecretCipher cipher, Environment env) {

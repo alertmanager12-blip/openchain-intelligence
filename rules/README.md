@@ -13,7 +13,7 @@ validated against a whitelist of fields (the *field catalog*) and compiled into 
 rules/
   tron/        large-usdt-transfer.yaml, suspicious-wallet.yaml
   ethereum/    contract-exploit.yaml, suspicious-approval.yaml
-  generic/     wallet-draining.yaml, fund-splitting.yaml
+  generic/     wallet-draining.yaml, fund-splitting.yaml, issuer-freeze-counterparty.yaml, ...
 ```
 
 * One rule per file, file name = `<id>.yaml`.

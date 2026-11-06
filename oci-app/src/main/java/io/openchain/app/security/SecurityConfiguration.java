@@ -101,7 +101,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/webhooks", API + "/webhooks/**").hasAuthority(authority(Scopes.WEBHOOKS_READ))
                         .requestMatchers(API + "/webhooks", API + "/webhooks/**").hasAuthority(authority(Scopes.WEBHOOKS_WRITE))
                         // administration
-                        .requestMatchers(API + "/api-keys", API + "/api-keys/**", API + "/users", API + "/users/**")
+                        .requestMatchers(API + "/api-keys", API + "/api-keys/**", API + "/users", API + "/users/**", API + "/admin/**")
                         .hasAuthority(authority(Scopes.KEYS_ADMIN))
                         .anyRequest().authenticated());
 

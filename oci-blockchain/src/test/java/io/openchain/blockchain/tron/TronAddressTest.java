@@ -14,6 +14,17 @@ class TronAddressTest {
         assertThat(TronAddress.fromHex("410000000000000000000000000000000000000000")).isEqualTo("T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb");
     }
 
+    @Test void zeroAddressBase58MatchesTheCoreConstantUsedForRenouncements() {
+        assertThat(TronAddress.fromHex("0".repeat(40))).isEqualTo(io.openchain.core.model.Address.TRON_ZERO);
+        assertThat(TronAddress.fromHex("41" + "0".repeat(40))).isEqualTo(io.openchain.core.model.Address.TRON_ZERO);
+        var tron = io.openchain.core.model.Network.TRON;
+        assertThat(new io.openchain.core.model.Address(tron, io.openchain.core.model.Address.TRON_ZERO).isZero()).isTrue();
+        assertThat(new io.openchain.core.model.Address(tron, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").isZero()).isFalse();
+        var eth = io.openchain.core.model.Network.ETHEREUM;
+        assertThat(new io.openchain.core.model.Address(eth, "0x" + "0".repeat(40)).isZero()).isTrue();
+        assertThat(new io.openchain.core.model.Address(eth, "0x" + "0".repeat(39) + "1").isZero()).isFalse();
+    }
+
     @Test void topicDecoding() {
         assertThat(TronAddress.fromTopic("000000000000000000000000a614f803b6fd780986a42c78ec9c7f77e6ded13c"))
                 .isEqualTo("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");

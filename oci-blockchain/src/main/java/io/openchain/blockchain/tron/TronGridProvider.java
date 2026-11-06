@@ -4,8 +4,13 @@ import static io.openchain.blockchain.transport.Json.longValue;
 import static io.openchain.blockchain.transport.Json.present;
 import static io.openchain.blockchain.transport.Json.text;
 
+import io.openchain.blockchain.backfill.FreezeLogScanner;
+import io.openchain.blockchain.backfill.RangeTooLargeException;
 import io.openchain.blockchain.evm.EvmCodec;
+import io.openchain.blockchain.provider.ContractTypeCache;
+import io.openchain.blockchain.evm.LogDecoder;
 import io.openchain.blockchain.provider.PollingSubscription;
+import io.openchain.blockchain.token.StablecoinFreezeSources;
 import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.blockchain.transport.HttpJsonTransport;
 import io.openchain.blockchain.transport.Json;
@@ -21,20 +26,53 @@ import java.util.function.Consumer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
-/** TRON adapter for the TronGrid-compatible HTTP API (java-tron FullNode /wallet + TronGrid /v1). */
-public final class TronGridProvider implements BlockchainProvider {
+/**
+ * TRON adapter for the TronGrid-compatible HTTP API (java-tron FullNode /wallet + TronGrid /v1).
+ * <p>{@link #getBlockActivity} reads, per block, {@code /wallet/getblockbynum} (transactions with their
+ * {@code ret[0].contractRet}) and {@code /wallet/gettransactioninfobyblocknum} (fees + TVM logs). Native TRX value:
+ * {@code TransferContract.amount} and {@code TriggerSmartContract.call_value} of transactions whose
+ * {@code contractRet} is {@code SUCCESS}; TRC-10 assets and internal transactions are not covered.
+ * <p>{@link #isContract}: {@code POST /wallet/getcontract {value, visible:true}}, which "returns an empty object when no
+ * contract information is found for the address" (https://developers.tron.network/reference/wallet-getcontract);
+ * current state only (no historical block), cached ({@link ContractTypeCache}).
+ * <p>{@link #scanFreezes} (freeze backfill): TronGrid {@code GET /v1/contracts/{address}/events} with
+ * {@code event_name}, {@code only_confirmed=true}, {@code min_timestamp}/{@code max_timestamp} (ms) of the block range,
+ * {@code order_by=block_timestamp,asc}, {@code limit=200} and {@code fingerprint} paging
+ * (https://developers.tron.network/reference/get-events-by-contract-address). The API has no block-range filter: the
+ * range is converted to block timestamps (two {@code getblockbynum} calls) and results are re-filtered by block number.
+ */
+public final class TronGridProvider implements BlockchainProvider, FreezeLogScanner {
+    /** Pages of 200 events per (contract, event name, chunk) before the chunk is reported as too large. */
+    static final int MAX_EVENT_PAGES = 25;
     private static final Token TRX = Token.nativeOf(Network.TRON, "TRX", 6);
 
     private final String id;
     private final HttpJsonTransport http;
     private final TokenRegistry tokens;
     private final TronConfig config;
+    private final LogDecoder decoder;
+    private final StablecoinFreezeSources freezeSources;
+    private final ContractTypeCache contractTypes;
 
     public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config) {
+        this(id, http, tokens, config, StablecoinFreezeSources.defaults());
+    }
+
+    public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config,
+                            StablecoinFreezeSources freezeSources) {
+        this(id, http, tokens, config, freezeSources, ContractTypeCache.defaults());
+    }
+
+    public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config,
+                            StablecoinFreezeSources freezeSources, ContractTypeCache contractTypes) {
+        this.freezeSources = freezeSources;
+        this.contractTypes = contractTypes;
         this.id = id;
         this.http = http;
         this.tokens = tokens;
         this.config = config;
+        this.decoder = new LogDecoder(Network.TRON, tokens, freezeSources, hex -> new Address(Network.TRON, TronAddress.fromHex(hex)),
+                TronAddress::fromHex);
     }
 
     @Override public String id() { return id; }
@@ -153,6 +191,146 @@ public final class TronGridProvider implements BlockchainProvider {
             for (JsonNode info : infos) out.addAll(decodeLogs(info, block.get().hash()));
         }
         return List.copyOf(out);
+    }
+
+    @Override public BlockActivity getBlockActivity(long fromBlock, long toBlock) {
+        LogDecoder.Decoded d = new LogDecoder.Decoded();
+        List<ChainTransaction> natives = new ArrayList<>();
+        for (long blockNo = fromBlock; blockNo <= toBlock; blockNo++) {
+            final long n = blockNo;
+            JsonNode b = post("/wallet/getblockbynum", "num", n);
+            BlockRef ref = blockRef(b).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available yet", true));
+            JsonNode infos = http.post("/wallet/gettransactioninfobyblocknum", Json.MAPPER.createObjectNode().put("num", n));
+            Map<String, Long> fees = new HashMap<>();
+            if (present(infos) && infos.isArray()) {
+                for (JsonNode info : infos) {
+                    String txId = text(info, "id");
+                    fees.put(txId, longValue(info, "fee", 0));
+                    JsonNode logs = info.path("log");
+                    for (int i = 0; i < logs.size(); i++) {
+                        JsonNode log = logs.get(i);
+                        List<String> topics = new ArrayList<>();
+                        for (JsonNode t : log.path("topics")) topics.add(text(t));
+                        decoder.decode(text(log, "address"), topics, text(log, "data"), txId, i, n, ref.hash(), ref.timestamp(), d);
+                    }
+                }
+            } else if (present(infos) && !(infos.isObject() && infos.isEmpty())) {
+                throw new ProviderException(id + ": unexpected gettransactioninfobyblocknum payload", false);
+            }
+            for (JsonNode tx : b.path("transactions")) {
+                if (!"SUCCESS".equals(text(tx.path("ret").path(0), "contractRet"))) continue; // failed: no value moved
+                JsonNode c = tx.path("raw_data").path("contract").path(0);
+                String type = text(c, "type");
+                JsonNode v = c.path("parameter").path("value");
+                long amount = "TransferContract".equals(type) ? longValue(v, "amount", 0)
+                        : "TriggerSmartContract".equals(type) ? longValue(v, "call_value", 0) : 0;
+                if (amount <= 0) continue;
+                ChainTransaction ct = toTransaction(tx, n, ref.hash(), ref.timestamp(),
+                        BigInteger.valueOf(fees.getOrDefault(text(tx, "txID"), 0L)), true);
+                if (ct.from() != null && ct.to() != null) natives.add(ct);
+            }
+        }
+        return new BlockActivity(d.transfers, natives, d.approvals, d.freezes, d.adminChanges);
+    }
+
+    /** Contract lookups (cache hits vs /wallet/getcontract calls). */
+    public ContractTypeCache.Stats contractLookupStats() { return contractTypes.stats(); }
+
+    @Override public Optional<Boolean> isContract(Address address, long atBlock) {
+        if (address.network() != Network.TRON || !TronAddress.isValid(address.value())) {
+            throw new ProviderException("invalid TRON address", false);
+        }
+        return Optional.of(contractTypes.get(address, atBlock, () -> {
+            JsonNode r = http.post("/wallet/getcontract", Json.MAPPER.createObjectNode().put("value", address.value()).put("visible", true));
+            if (present(r) && present(r.path("Error"))) throw new ProviderException(id + ": /wallet/getcontract error", false);
+            return present(r) && r.isObject() && (present(r.path("contract_address")) || present(r.path("bytecode"))
+                    || present(r.path("code_hash")));
+        }));
+    }
+
+    // ---- freeze backfill ----------------------------------------------------------------------------------------
+
+    @Override public long backfillSafeHead() {
+        NetworkStatus st = getNetworkStatus();
+        if (!st.healthy()) throw new ProviderException(id + " unhealthy: " + st.detail(), true);
+        return st.finalizedBlock();
+    }
+
+    @Override public List<TokenFreeze> scanFreezes(long fromBlock, long toBlock) {
+        var sources = freezeSources.forNetwork(Network.TRON);
+        if (sources.isEmpty() || toBlock < fromBlock) return List.of();
+        long minTs = blockTime(fromBlock) - 1;   // TRON blocks are >= 3 s apart: the ms windows of two blocks never overlap
+        long maxTs = blockTime(toBlock) + 999;
+        Map<Long, String> hashes = new HashMap<>();
+        List<TokenFreeze> out = new ArrayList<>();
+        for (StablecoinFreezeSources.Source s : sources) {
+            for (String event : List.of(s.freezeEvent(), s.unfreezeEvent())) {
+                TokenFreeze.Action action = event.equals(s.freezeEvent()) ? TokenFreeze.Action.FREEZE : TokenFreeze.Action.UNFREEZE;
+                String fingerprint = null;
+                int pages = 0;
+                do {
+                    if (++pages > MAX_EVENT_PAGES) {
+                        throw new RangeTooLargeException(id + ": more than " + MAX_EVENT_PAGES * 200 + " " + event + " events in blocks "
+                                + fromBlock + ".." + toBlock, null);
+                    }
+                    StringBuilder q = new StringBuilder("/v1/contracts/").append(s.contract()).append("/events?event_name=")
+                            .append(URLEncoder.encode(event, StandardCharsets.UTF_8))
+                            .append("&only_confirmed=true&order_by=block_timestamp,asc&limit=200&min_timestamp=").append(minTs)
+                            .append("&max_timestamp=").append(maxTs);
+                    if (fingerprint != null) q.append("&fingerprint=").append(URLEncoder.encode(fingerprint, StandardCharsets.UTF_8));
+                    JsonNode r = http.get(q.toString());
+                    if (present(r.path("success")) && !r.path("success").asBoolean(true)) {
+                        throw new ProviderException(id + ": contract events query failed", true);
+                    }
+                    for (JsonNode ev : r.path("data")) {
+                        long bn = longValue(ev, "block_number", -1);
+                        if (bn < fromBlock || bn > toBlock || !event.equals(text(ev, "event_name"))) continue;
+                        if (!sameContract(s.contract(), text(ev, "contract_address"))) continue;
+                        Optional<String> target = eventAddress(ev);
+                        if (target.isEmpty()) continue;
+                        String bh = hashes.computeIfAbsent(bn, b -> getBlock(b).map(BlockRef::hash).orElse(null));
+                        out.add(new TokenFreeze(Network.TRON, text(ev, "transaction_id"), (int) longValue(ev, "event_index", 0), bn, bh,
+                                Instant.ofEpochMilli(longValue(ev, "block_timestamp", 0)), new Address(Network.TRON, target.get()),
+                                tokens.resolve(Network.TRON, s.contract()), s.issuer(), action, event));
+                    }
+                    fingerprint = text(r.path("meta"), "fingerprint");
+                } while (fingerprint != null && !fingerprint.isBlank());
+            }
+        }
+        return out;
+    }
+
+    private long blockTime(long n) {
+        return getBlock(n).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available", true)).timestamp().toEpochMilli();
+    }
+
+    private static boolean sameContract(String base58, String reported) {
+        if (reported == null) return true; // field missing: the path already scoped the query to this contract
+        try {
+            return base58.equals(reported.startsWith("T") ? reported : TronAddress.fromHex(reported));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /** The single address parameter of a blacklist event ({@code result_type} = address), in base58. */
+    static Optional<String> eventAddress(JsonNode ev) {
+        JsonNode result = ev.path("result"), types = ev.path("result_type");
+        List<String> candidates = new ArrayList<>();
+        if (types.isObject() && !types.isEmpty()) {
+            for (Map.Entry<String, JsonNode> t : types.properties()) {
+                if ("address".equals(text(t.getValue()))) candidates.add(text(result, t.getKey()));
+            }
+        } else if (result.isObject()) {
+            for (Map.Entry<String, JsonNode> e : result.properties()) if (!e.getKey().matches("\\d+")) candidates.add(text(e.getValue()));
+        }
+        if (candidates.size() != 1 || candidates.getFirst() == null) return Optional.empty();
+        String v = candidates.getFirst();
+        try {
+            return Optional.of(v.startsWith("T") ? (TronAddress.isValid(v) ? v : null) : TronAddress.fromHex(v));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return Optional.empty();
+        }
     }
 
     @Override public Page<ChainTransaction> getAddressTransactions(Address address, String cursor, int limit) {

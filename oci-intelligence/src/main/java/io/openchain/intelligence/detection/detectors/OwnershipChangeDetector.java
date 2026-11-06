@@ -14,7 +14,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/** Contract owner/admin changed (CONTRACT_ADMIN_CHANGE). Renouncement (zero address) is INFO; listed new admin is HIGH. */
+/**
+ * Contract owner/admin changed (CONTRACT_ADMIN_CHANGE). Renouncement (new owner/admin = zero address, EVM
+ * {@code 0x000...0} or TRON {@code T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb}, see {@link Address#isZero()}) is INFO; listed
+ * new admin is HIGH. An implementation upgrade to the zero address is not a renouncement.
+ */
 public final class OwnershipChangeDetector extends AbstractDetector {
     public OwnershipChangeDetector() { super("ownership-change", 1); }
 
@@ -27,7 +31,7 @@ public final class OwnershipChangeDetector extends AbstractDetector {
         Optional<Address> neu = EventFields.address(e, EventFields.ADMIN_NEW);
         String role = EventFields.string(e, EventFields.ADMIN_ROLE).orElse("owner");
         String tx = EventFields.string(e, EventFields.TX_HASH).orElse(null);
-        boolean renounced = neu.map(a -> a.value().matches("0x0+")).orElse(false);
+        boolean renounced = !io.openchain.core.model.ContractAdminChange.ROLE_IMPLEMENTATION.equals(role) && neu.map(Address::isZero).orElse(false);
         List<AddressLabel> newLabels = neu.map(a -> ctx.labels().findRisky(a)).orElse(List.of());
         List<Evidence> ev = new ArrayList<>();
         ev.add(new Evidence("event", role + " of contract " + contract.get().value() + " changed from "

@@ -124,7 +124,28 @@ public class OciProperties {
         private String apiKey;
         /** First block to index when no checkpoint exists; negative = head - |value|. */
         private long startBlock = -100;
+        /**
+         * Also ingest APPROVAL events of tokens the token registry does not know (default false: only registry tokens,
+         * e.g. USDT/USDC; anyone can deploy a token emitting approvals).
+         */
+        private boolean approvalsOfUnknownTokens;
+        /**
+         * Contracts whose admin changes (OwnershipTransferred, EIP-1967 Upgraded / AdminChanged) are ingested as
+         * CONTRACT_ADMIN_CHANGE events, in addition to the token registry's contracts. Empty by default.
+         */
+        private List<String> watchedContracts = new ArrayList<>();
+        /** Ingest admin changes of every contract (default false: registry tokens + watched contracts only). */
+        private boolean adminChangesOfAllContracts;
+        private final FreezeBackfill freezeBackfill = new FreezeBackfill();
 
+        public List<String> getWatchedContracts() { return watchedContracts; }
+        public void setWatchedContracts(List<String> watchedContracts) { this.watchedContracts = watchedContracts; }
+        public boolean isAdminChangesOfAllContracts() { return adminChangesOfAllContracts; }
+        public void setAdminChangesOfAllContracts(boolean adminChangesOfAllContracts) { this.adminChangesOfAllContracts = adminChangesOfAllContracts; }
+        public FreezeBackfill getFreezeBackfill() { return freezeBackfill; }
+
+        public boolean isApprovalsOfUnknownTokens() { return approvalsOfUnknownTokens; }
+        public void setApprovalsOfUnknownTokens(boolean approvalsOfUnknownTokens) { this.approvalsOfUnknownTokens = approvalsOfUnknownTokens; }
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public String getProvider() { return provider; }
@@ -137,6 +158,39 @@ public class OciProperties {
         public void setApiKey(String apiKey) { this.apiKey = apiKey; }
         public long getStartBlock() { return startBlock; }
         public void setStartBlock(long startBlock) { this.startBlock = startBlock; }
+    }
+
+    /**
+     * Bounded historical scan of the issuer freeze events of {@code StablecoinFreezeSources} contracts
+     * ({@code oci.chains.<network>.freeze-backfill.*}). Disabled unless {@code from-block} is set.
+     */
+    public static class FreezeBackfill {
+        /** First block to scan; null (default) = backfill disabled for this network. */
+        private Long fromBlock;
+        /** Last block to scan; null = the provider's finalized head at run time. */
+        private Long toBlock;
+        /** Blocks per eth_getLogs / TronGrid events query at the start of a run (halved on "range too large"). */
+        private int chunkSize = 2_000;
+        /** Smallest chunk before a range error stops the run. */
+        private int minChunkSize = 10;
+        /** Pause between two chunks (rate-limit friendliness, on top of the transport rate limiter). */
+        private Duration pause = Duration.ofMillis(250);
+        /** Start (or resume) the backfill in the background at startup; otherwise only via POST /api/v1/admin/backfill/freezes. */
+        private boolean runOnStartup = true;
+
+        public boolean isEnabled() { return fromBlock != null; }
+        public Long getFromBlock() { return fromBlock; }
+        public void setFromBlock(Long fromBlock) { this.fromBlock = fromBlock; }
+        public Long getToBlock() { return toBlock; }
+        public void setToBlock(Long toBlock) { this.toBlock = toBlock; }
+        public int getChunkSize() { return chunkSize; }
+        public void setChunkSize(int chunkSize) { this.chunkSize = chunkSize; }
+        public int getMinChunkSize() { return minChunkSize; }
+        public void setMinChunkSize(int minChunkSize) { this.minChunkSize = minChunkSize; }
+        public Duration getPause() { return pause; }
+        public void setPause(Duration pause) { this.pause = pause; }
+        public boolean isRunOnStartup() { return runOnStartup; }
+        public void setRunOnStartup(boolean runOnStartup) { this.runOnStartup = runOnStartup; }
     }
 
     public static class Security {

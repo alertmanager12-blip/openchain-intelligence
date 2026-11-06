@@ -215,7 +215,7 @@ class PersistenceRestartTest {
             Res scen = call(ctx, "GET", "/api/v1/demo/scenarios", ApiTestSupport.ADMIN, null);
             assertThat(scen.status()).isEqualTo(200);
             List<JsonNode> items = scen.body().get("items").valueStream().toList();
-            assertThat(items).hasSize(5).allSatisfy(it -> assertThat(it.get("checks").toString()).doesNotContain("false"));
+            assertThat(items).hasSize(6).allSatisfy(it -> assertThat(it.get("checks").toString()).doesNotContain("false"));
 
             // idempotent bootstrap: no duplicated alerts (re-indexed demo chain), keys or rules
             assertThat(count(jdbc, "alerts")).isEqualTo(alertsBefore);

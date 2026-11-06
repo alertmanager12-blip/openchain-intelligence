@@ -7,7 +7,8 @@ import java.math.BigInteger;
 import java.util.Optional;
 
 /**
- * Field names this module reads from {@link ChainEvent#fields()} for APPROVAL and CONTRACT_ADMIN_CHANGE events.
+ * Field names this module reads from {@link ChainEvent#fields()} for APPROVAL, CONTRACT_ADMIN_CHANGE and
+ * STABLECOIN_FREEZE / STABLECOIN_UNFREEZE events.
  * Producers (indexer) should emit these keys. Values: addresses as String, amounts as String/Long/BigDecimal/BigInteger.
  */
 public final class EventFields {
@@ -24,6 +25,12 @@ public final class EventFields {
     public static final String ADMIN_PREVIOUS = "admin.previous";
     public static final String ADMIN_NEW = "admin.new";
     public static final String ADMIN_ROLE = "admin.role";
+    /** STABLECOIN_FREEZE / STABLECOIN_UNFREEZE. */
+    public static final String FREEZE_ADDRESS = "freeze.address";
+    public static final String FREEZE_TOKEN = "freeze.token";
+    public static final String FREEZE_ISSUER = "freeze.issuer";
+    public static final String FREEZE_EVENT = "freeze.event";
+    public static final String FREEZE_ACTION = "freeze.action";
 
     public static Optional<String> string(ChainEvent e, String key) {
         Object v = e.field(key);

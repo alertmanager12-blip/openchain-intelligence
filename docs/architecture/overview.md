@@ -109,8 +109,11 @@ flowchart LR
   AL --> PG
 ```
 
-1. **Indexer** polls (or subscribes to) new heads, fetches token transfers for a block range, persists them and advances an `index_checkpoint` atomically.
-2. **Normaliser** maps each `TokenTransfer` to a `ChainEvent` with a flat `fields` map (`transaction.amount`, `transaction.token.symbol`, `transaction.from`, …). `eventId = network:txHash:logIndex` is deterministic: it is the idempotency key everywhere downstream.
+1. **Indexer** polls (or subscribes to) new heads, reads the block's activity (`BlockchainProvider.getBlockActivity`: native transfers of successful transactions, ERC-20/TRC-20 `Transfer` and `Approval` logs, issuer blacklist events of the official USDT/USDC contracts), persists it and advances an `index_checkpoint` atomically. Every kind shares the same confirmation, window and reorg-retraction mechanics.
+2. **Normaliser** (`TransferEventMapper`) maps each item to a `ChainEvent` with a flat `fields` map: `TOKEN_TRANSFER` and `NATIVE_TRANSFER` (`transaction.amount`, `transaction.token.symbol`, `transaction.from`, …), `APPROVAL` (`approval.owner/spender/amount/unlimited`), `STABLECOIN_FREEZE` / `STABLECOIN_UNFREEZE` (`freeze.address/token/action/issuer/event`). Event ids are deterministic: `network:txHash:logIndex` for logs, `network:txHash:native` for the native value of a transaction; they are the idempotency key everywhere downstream.
+   - Native value: EVM transactions with `value > 0` and receipt `status = 0x1` (contract creations go to the created contract); TRON `TransferContract` / `TriggerSmartContract.call_value` with `ret[0].contractRet = SUCCESS`. **Internal transactions (traces) are not indexed.**
+   - Approvals: registry tokens only unless `approvals-of-unknown-tokens` is set; they feed `UnusualApprovalDetector`.
+   - Freezes: decoded only from the issuers' own contracts (`StablecoinFreezeSources`); the frozen address gets an `ISSUER_FROZEN` label (source `tether-onchain` / `circle-onchain`, CONFIRMED_BY_SOURCE, reference = tx hash), is rescored, and detection re-runs for its counterparties; an unfreeze removes the label and rescores. A freeze states what the issuer did, not why. Freezes before the start block are covered by the optional bounded freeze backfill (`FreezeBackfill`, `oci.chains.<network>.freeze-backfill.*`), which feeds the same label path without rule evaluation.
 3. **Detection** runs stateless and windowed detectors (e.g. fast forwarding, structuring, dormant reactivation, exposure) and emits `Signal`s with evidence. Exposure is protected against griefing: transfers of unverified token contracts and unsolicited inbound transfers below a per-token dust threshold (10 USDT / 10 USDC by default) create no exposure, direct or indirect; when they are the only link to a listed address a `DUSTING` anomaly (score weight 0) explains them. Outbound transfers always count.
 4. **Scoring** aggregates signals into a `RiskScore` (saturating aggregation with decay; see [ADR-0008](../adr/0008-explainable-risk-scoring.md)) and publishes `RISK_SCORE_CHANGED` when the band changes.
 5. **Rule engine** evaluates compiled rules against events, maintains window state, deduplicates and applies cooldowns, then opens or updates **alerts**.
@@ -122,7 +125,7 @@ Every stage is **idempotent on `eventId`** and **reorg-aware**: an event with `r
 
 ### 6.1 `BlockchainProvider` SPI
 
-Defined in `oci-core` (`io.openchain.core.provider.BlockchainProvider`): `getBlock`, `getTransaction`, `getTransactionReceipt`, `getAddressTransactions` (cursor paging), `getTokenTransfers(fromBlock, toBlock)`, `getAddressBalance`, `subscribeToEvents`, `getNetworkStatus`. Implementations are thread-safe, have bounded timeouts and throw `ProviderException(retryable)`.
+Defined in `oci-core` (`io.openchain.core.provider.BlockchainProvider`): `getBlock`, `getTransaction`, `getTransactionReceipt`, `getAddressTransactions` (cursor paging), `getTokenTransfers(fromBlock, toBlock)`, `getBlockActivity(fromBlock, toBlock)` (default: token transfers only), `getAddressBalance`, `subscribeToEvents`, `getNetworkStatus`. Implementations are thread-safe, have bounded timeouts and throw `ProviderException(retryable)`.
 
 ### 6.2 Failover and rate limits
 
@@ -147,8 +150,8 @@ The indexer keeps the last `Network.maxReorgDepth()` `BlockRef`s (number, hash, 
 
 | Chain | MVP source | Method | Notes |
 |---|---|---|---|
-| TRON | TronGrid-compatible HTTP API (TronGrid, or a self-hosted `java-tron` node exposing the same `/wallet/*` and `/v1/*` endpoints) | `/wallet/getnowblock`, `/wallet/getblockbylimitnext`, `/v1/contracts/{c}/events` or `gettransactioninfobyblocknum` for TRC20 `Transfer` logs | TronGrid API keys are rate-limited; for production volume run an own `java-tron` FullNode (event plugin optional). Addresses canonical in base58. |
-| Ethereum / BSC / Polygon | Any JSON-RPC endpoint (own node, or a commercial RPC) | `eth_blockNumber`, `eth_getBlockByNumber` (hash/parent), `eth_getLogs` with `topics[0] = Transfer(address,address,uint256)` over bounded ranges | Adaptive range sizing (halve on "too many results"/timeouts). Addresses canonical lowercase hex. Polygon needs deep confirmations. |
+| TRON | TronGrid-compatible HTTP API (TronGrid, or a self-hosted `java-tron` node exposing the same `/wallet/*` and `/v1/*` endpoints) | `/wallet/getnowblock`, `/wallet/getblockbynum` (transactions + `contractRet`), `gettransactioninfobyblocknum` (fees, TRC20 `Transfer`/`Approval`, USDT `AddedBlackList`/`RemovedBlackList`) | TronGrid API keys are rate-limited; for production volume run an own `java-tron` FullNode (event plugin optional). Addresses canonical in base58. |
+| Ethereum / BSC / Polygon | Any JSON-RPC endpoint (own node, or a commercial RPC) | `eth_blockNumber`, `eth_getBlockByNumber(n, true)`, `eth_getBlockReceipts(n)` (statuses + logs); fallback when unsupported: `eth_getLogs({blockHash})` + `eth_getTransactionReceipt` for value-carrying transactions | Adaptive range sizing (halve on "too many results"/timeouts). Addresses canonical lowercase hex. Polygon needs deep confirmations. |
 | Bitcoin | *planned* | Bitcoin Core RPC / Esplora; UTXO model maps to multi-input/multi-output `ChainTransaction` | Requires UTXO-aware graph edges. |
 | Solana | *planned* | JSON-RPC `getBlock` + SPL token balance deltas | Slot-based; "finalized" commitment instead of confirmations. |
 

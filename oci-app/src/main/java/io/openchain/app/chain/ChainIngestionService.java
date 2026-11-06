@@ -7,11 +7,14 @@ import io.openchain.app.persistence.TransactionRunner;
 import io.openchain.blockchain.indexer.BlockIndexer;
 import io.openchain.blockchain.indexer.InMemoryCheckpointStore;
 import io.openchain.blockchain.indexer.IndexerConfig;
+import io.openchain.blockchain.indexer.TransferEventMapper;
 import io.openchain.blockchain.simulated.SimulatedChainProvider;
 import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.event.ChainEvent;
 import io.openchain.core.model.Address;
+import io.openchain.core.model.BlockRef;
+import io.openchain.core.model.TokenFreeze;
 import io.openchain.core.model.Network;
 import io.openchain.core.model.NetworkStatus;
 import io.openchain.core.model.Token;
@@ -48,9 +51,15 @@ import org.springframework.stereotype.Service;
 /**
  * Runs the event pipeline of ADR-0001 in-process:
  * provider -> BlockIndexer -> IntelligencePipeline (profiles, detection, scoring) -> enrichment -> AlertingPipeline.
- * Each indexed transfer is enriched with the {@code wallet.*}/{@code counterparty.*} catalog fields computed by the
- * intelligence module before the rule engine sees it; every new detection signal is also forwarded to the rule
- * engine as a {@code DETECTION_SIGNAL} event. Ingestion is serialised (one poll at a time).
+ * Each indexed transfer (token or native) is enriched with the {@code wallet.*}/{@code counterparty.*} catalog fields
+ * computed by the intelligence module before the rule engine sees it; approvals get {@code wallet.*} (owner),
+ * {@code counterparty.*} (spender), {@code approval.spender_is_contract} (provider code lookup, when the provider can
+ * tell) and {@code approval.spender_age_days} (days since the platform first saw the spender in an indexed value flow;
+ * absent when never seen); issuer freezes get {@code wallet.*} (frozen address, after its rescore) and
+ * {@code freeze.known_counterparties}. Every new detection signal is also forwarded to the rule engine as a
+ * {@code DETECTION_SIGNAL} event. {@code CONTRACT_ADMIN_CHANGE} events go through detection (OwnershipChangeDetector)
+ * and the rule engine as indexed. Freezes found by the freeze backfill ({@link #applyBackfilledFreeze}) only update the
+ * label / risk state (same path as live freezes) without rule evaluation. Ingestion is serialised (one poll at a time).
  * TODO(outbox): publish events through the outbox / Kafka instead of direct calls (ADR-0006).
  */
 @Service
@@ -110,6 +119,9 @@ public class ChainIngestionService {
     private final AtomicLong eventsIndexed = new AtomicLong();
     private final AtomicLong transfersIndexed = new AtomicLong();
     private final AtomicLong eventsRetracted = new AtomicLong();
+    private final AtomicLong backfilledFreezesApplied = new AtomicLong();
+    private final AtomicLong spenderLookupFailures = new AtomicLong();
+    private final TransferEventMapper backfillMapper;
     private final Set<Address> trackedWallets = ConcurrentHashMap.newKeySet();
 
     public ChainIngestionService(IntelligencePipeline intelligence, AlertingPipeline alerting, EventHistory history,
@@ -123,6 +135,7 @@ public class ChainIngestionService {
         this.labels = labels;
         this.tokens = tokens;
         this.clock = clock;
+        this.backfillMapper = new TransferEventMapper(tokens);
     }
 
     // ---- registration -----------------------------------------------------------------------------------------
@@ -188,6 +201,7 @@ public class ChainIngestionService {
     void onEvent(ChainEvent e) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (e.removed()) {
+            if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
             history.record(e);
             evaluate(e);
             return;
@@ -206,6 +220,15 @@ public class ChainIngestionService {
                 fresh.addAll(r.newSignals());
                 enriched = enrich(e, f, senderBefore);
             }
+        } else if (isFreeze(e)) {
+            Optional<Address> target = address(e, "freeze.address");
+            long known = target.map(this::distinctCounterparties).orElse(0L);
+            fresh.addAll(intelligence.onEvent(e).newSignals());
+            if (target.isPresent()) enriched = enrichFreeze(e, target.get(), known);
+        } else if (e.type() == ChainEvent.EventType.APPROVAL) {
+            fresh.addAll(intelligence.onEvent(e).newSignals());
+            Optional<Address> owner = address(e, "approval.owner"), spender = address(e, "approval.spender");
+            if (owner.isPresent() && spender.isPresent()) enriched = enrichApproval(e, owner.get(), spender.get());
         } else {
             fresh.addAll(intelligence.onEvent(e).newSignals());
         }
@@ -249,6 +272,25 @@ public class ChainIngestionService {
         }
     }
 
+    /**
+     * Freeze backfill sink: a historical issuer freeze/unfreeze (finalized block, never reorged) is applied to the label
+     * and risk state exactly like a live one (ISSUER_FROZEN label, rescore, counterparty exposure). Idempotent: an event
+     * id already applied, live or backfilled, is ignored, and so is a freeze older than the last one applied for that
+     * address (IntelligencePipeline). Historical events are NOT evaluated by the rule engine (no alert flood for past
+     * freezes); new signals are kept in {@link #recentSignals()}. Serialised with ingestion.
+     */
+    public synchronized void applyBackfilledFreeze(TokenFreeze z) {
+        BlockRef ref = new BlockRef(z.network(), z.blockNumber(), z.blockHash(), null, z.timestamp());
+        IntelligencePipeline.Result r = intelligence.onEvent(backfillMapper.mapFreeze(z, ref, clock.instant()));
+        if (r.duplicate()) return;
+        backfilledFreezesApplied.incrementAndGet();
+        r.newSignals().forEach(this::remember);
+    }
+
+    public long backfilledFreezesApplied() { return backfilledFreezesApplied.get(); }
+    /** Approval spender code lookups that failed (the field is then absent from the event). */
+    public long spenderLookupFailures() { return spenderLookupFailures.get(); }
+
     public long eventsIndexed() { return eventsIndexed.get(); }
     public long transfersIndexed() { return transfersIndexed.get(); }
     public long eventsRetracted() { return eventsRetracted.get(); }
@@ -280,6 +322,59 @@ public class ChainIngestionService {
             log.debug("event {} is not a value flow: {}", e.eventId(), ex.getMessage());
             return Optional.empty();
         }
+    }
+
+    private static boolean isFreeze(ChainEvent e) {
+        return e.type() == ChainEvent.EventType.STABLECOIN_FREEZE || e.type() == ChainEvent.EventType.STABLECOIN_UNFREEZE;
+    }
+
+    private static Optional<Address> address(ChainEvent e, String field) {
+        try {
+            String v = str(e.field(field));
+            return v == null || v.isBlank() ? Optional.empty() : Optional.of(new Address(e.network(), v));
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private long distinctCounterparties(Address a) {
+        return intelligence.flows().involving(a).stream().filter(f -> !f.from().equals(f.to())).map(f -> f.counterparty(a))
+                .distinct().count();
+    }
+
+    /** Frozen address as {@code wallet.*} (risk after the freeze was applied) + number of known counterparties. */
+    private ChainEvent enrichFreeze(ChainEvent e, Address target, long knownCounterparties) {
+        Map<String, Object> fields = new LinkedHashMap<>(e.fields());
+        fields.put("freeze.known_counterparties", knownCounterparties);
+        fields.put("wallet.address", target.value());
+        putRisk(fields, "wallet", target);
+        putLabels(fields, "wallet", target);
+        return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
+                e.ingestedAt(), e.removed(), fields);
+    }
+
+    /** Owner as {@code wallet.*}, spender as {@code counterparty.*}. */
+    private ChainEvent enrichApproval(ChainEvent e, Address owner, Address spender) {
+        Map<String, Object> fields = new LinkedHashMap<>(e.fields());
+        fields.put("wallet.address", owner.value());
+        putRisk(fields, "wallet", owner);
+        putLabels(fields, "wallet", owner);
+        fields.put("counterparty.address", spender.value());
+        putRisk(fields, "counterparty", spender);
+        putLabels(fields, "counterparty", spender);
+        NetworkRuntime rt = runtimes.get(e.network());
+        if (rt != null) {
+            try {
+                rt.provider().isContract(spender, e.blockNumber()).ifPresent(c -> fields.put("approval.spender_is_contract", c));
+            } catch (RuntimeException ex) { // provider down: the field stays absent, indexing goes on
+                spenderLookupFailures.incrementAndGet();
+                log.debug("contract lookup of spender {} failed: {}", spender, ex.getMessage());
+            }
+        }
+        Instant firstSeen = intelligence.profiles().profileOrEmpty(spender).firstActivity();
+        if (firstSeen != null) fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
+        return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
+                e.ingestedAt(), e.removed(), fields);
     }
 
     /** Adds the wallet (sender) and counterparty (recipient) catalog fields. */

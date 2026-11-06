@@ -12,6 +12,13 @@ public interface LabelRepository {
 
     List<AddressLabel> findByAddress(Address address);
 
+    /**
+     * Removes the assertion of {@code source} about {@code address} in {@code category} (e.g. an issuer unfreeze).
+     *
+     * @return true if a label was removed
+     */
+    boolean remove(Address address, LabelCategory category, String source);
+
     /** Labels of risky categories only. */
     default List<AddressLabel> findRisky(Address address) {
         return findByAddress(address).stream().filter(l -> l.category().risky()).toList();

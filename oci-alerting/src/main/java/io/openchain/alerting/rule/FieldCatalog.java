@@ -81,6 +81,15 @@ public final class FieldCatalog {
             new FieldDef("approval.spender_is_contract", FieldType.BOOLEAN, "Spender is a contract"),
             new FieldDef("approval.spender_age_days", FieldType.INTEGER, "Spender age in days"),
             new FieldDef("approval.spender_verified", FieldType.BOOLEAN, "Spender contract source verified"),
+            // stablecoin issuer freezes (STABLECOIN_FREEZE / STABLECOIN_UNFREEZE), decoded from the issuer's own contract
+            new FieldDef("freeze.address", FieldType.STRING, "Address the issuer froze / unfroze"),
+            new FieldDef("freeze.token", FieldType.STRING, "Symbol of the stablecoin (USDT, USDC)"),
+            new FieldDef("freeze.token_contract", FieldType.STRING, "Official contract that emitted the freeze event"),
+            new FieldDef("freeze.action", FieldType.STRING, "FREEZE|UNFREEZE, emitted by the issuer's own contract", true),
+            new FieldDef("freeze.issuer", FieldType.STRING, "Issuer id (tether, circle)"),
+            new FieldDef("freeze.event", FieldType.STRING, "Contract event (AddedBlackList, Blacklisted, BlockPlaced...)"),
+            new FieldDef("freeze.known_counterparties", FieldType.INTEGER,
+                    "Distinct addresses that exchanged indexed value with the frozen address before the freeze"),
             // detection signals forwarded by the intelligence module
             new FieldDef("signal.type", FieldType.STRING, "SignalType name"),
             new FieldDef("signal.severity", FieldType.STRING, "INFO|LOW|MEDIUM|HIGH|CRITICAL"),

@@ -1,0 +1,91 @@
+apiVersion: openchain.io/rule/v1
+id: issuer-freeze-counterparty
+version: 1.0.0
+name: Stablecoin issuer froze a known counterparty
+description: The issuer of a stablecoin (Tether, Circle) froze an address that already exchanged value with wallets indexed by this deployment.
+author: openchain-community
+enabled: true
+tags: [generic, stablecoin, freeze, issuer, exposure]
+scope:
+  eventTypes: [STABLECOIN_FREEZE]
+conditions:
+  logic: AND
+  rules:
+    - field: freeze.action
+      operator: EQUALS
+      value: FREEZE
+    - field: freeze.known_counterparties
+      operator: GREATER_THAN
+      value: 0
+severity: HIGH
+evidenceLevel: CONFIRMED_BY_SOURCE
+cooldown: 24h
+dedupKey: "{{rule.id}}:{{network}}:{{event.freeze.address}}"
+expectedConfidence: 0.9
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+documentation: |
+  Fires on a STABLECOIN_FREEZE event: the official USDT/USDC contract (AddedBlackList, Blacklisted, BlockPlaced)
+  added an address to the issuer's blacklist, and at least one indexed wallet had already sent value to, or
+  received value from, that address (freeze.known_counterparties is computed from the indexed value flows).
+  The freeze itself is CONFIRMED_BY_SOURCE: it was emitted by the issuer's own contract (logs of look-alike
+  contracts are never decoded as freezes). It states what the issuer did, not why: issuers freeze on
+  law-enforcement requests, for sanctions, after hacks, and sometimes by precaution or mistake, and freezes can be
+  lifted (STABLECOIN_UNFREEZE removes the ISSUER_FROZEN label). Review the counterparties' exposure signals
+  (FLAGGED_EXPOSURE) before acting. Freezes older than the indexer start block are not seen.
+examples:
+  - name: freeze of an address with indexed counterparties matches
+    expect: MATCH
+    event:
+      type: STABLECOIN_FREEZE
+      network: tron
+      fields:
+        freeze.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+        freeze.token: USDT
+        freeze.action: FREEZE
+        freeze.issuer: tether
+        freeze.known_counterparties: 3
+  - name: freeze of an address nobody indexed interacted with does not match
+    expect: NO_MATCH
+    event:
+      type: STABLECOIN_FREEZE
+      network: tron
+      fields:
+        freeze.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+        freeze.action: FREEZE
+        freeze.known_counterparties: 0
+  - name: unfreeze does not match
+    expect: NO_MATCH
+    event:
+      type: STABLECOIN_UNFREEZE
+      network: tron
+      fields:
+        freeze.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+        freeze.action: UNFREEZE
+        freeze.known_counterparties: 3
+tests:
+  - name: the same address frozen twice within the cooldown is one alert
+    events:
+      - offset: 0s
+        type: STABLECOIN_FREEZE
+        network: ethereum
+        fields: { freeze.address: "0xf0f0000000000000000000000000000000000001", freeze.action: FREEZE, freeze.known_counterparties: 2 }
+      - offset: 1h
+        type: STABLECOIN_FREEZE
+        network: ethereum
+        fields: { freeze.address: "0xf0f0000000000000000000000000000000000001", freeze.action: FREEZE, freeze.known_counterparties: 2 }
+    expectTriggers: 2
+    expectAlerts: 1
+  - name: freezes of two different addresses are two alerts
+    events:
+      - offset: 0s
+        type: STABLECOIN_FREEZE
+        network: ethereum
+        fields: { freeze.address: "0xf0f0000000000000000000000000000000000001", freeze.action: FREEZE, freeze.known_counterparties: 1 }
+      - offset: 1m
+        type: STABLECOIN_FREEZE
+        network: ethereum
+        fields: { freeze.address: "0xf0f0000000000000000000000000000000000002", freeze.action: FREEZE, freeze.known_counterparties: 1 }
+    expectTriggers: 2
+    expectAlerts: 2

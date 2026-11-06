@@ -48,4 +48,25 @@ class SimulatedChainProviderTest {
         assertThat(p.getBlock(8).orElseThrow().hash()).isNotEqualTo(b8.hash());
         assertThat(p.getBlock(8).orElseThrow().parentHash()).isEqualTo(b7.hash());
     }
+
+    @Test void activityIsDeterministicAndIncludesNativeApprovalAndScheduledFreeze() {
+        SimulatedChainProvider a = new SimulatedChainProvider(Network.ETHEREUM, 11), b = new SimulatedChainProvider(Network.ETHEREUM, 11);
+        for (SimulatedChainProvider p : List.of(a, b)) {
+            p.scheduleFreeze(5, p.addressPool().get(1),
+                    new io.openchain.core.model.Token(Network.ETHEREUM, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT", 6), "tether", io.openchain.core.model.TokenFreeze.Action.FREEZE, "AddedBlackList");
+            p.mine(40);
+        }
+        var x = a.getBlockActivity(0, 40);
+        assertThat(x).isEqualTo(b.getBlockActivity(0, 40));
+        assertThat(x.tokenTransfers()).isEqualTo(a.getTokenTransfers(0, 40));
+        assertThat(x.nativeTransfers()).isNotEmpty().allSatisfy(t -> {
+            assertThat(t.success()).isTrue();
+            assertThat(t.value()).isPositive();
+            assertThat(a.getTransactionReceipt(t.hash())).isPresent();
+        });
+        assertThat(x.approvals()).isNotEmpty().anyMatch(io.openchain.core.model.TokenApproval::isUnlimited);
+        assertThat(x.freezes()).singleElement().satisfies(z -> assertThat(z.blockNumber()).isEqualTo(5));
+        assertThatThrownBy(() -> a.scheduleNative(3, a.addressPool().get(0), a.addressPool().get(1), java.math.BigInteger.ONE))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

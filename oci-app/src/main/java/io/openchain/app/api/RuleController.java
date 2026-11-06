@@ -64,7 +64,8 @@ public class RuleController {
             "signal.type", java.util.Arrays.stream(io.openchain.core.detection.SignalType.values()).map(Enum::name).toList(),
             "signal.severity", SEVERITIES,
             "alert.severity", SEVERITIES,
-            "signal.evidence_level", List.of("ANOMALY", "RISK_SIGNAL", "CONFIRMED_BY_SOURCE"));
+            "signal.evidence_level", List.of("ANOMALY", "RISK_SIGNAL", "CONFIRMED_BY_SOURCE"),
+            "freeze.action", List.of("FREEZE", "UNFREEZE"));
 
     private final RuleRegistry registry;
     private final RuleTester tester;

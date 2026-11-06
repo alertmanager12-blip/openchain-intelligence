@@ -2,6 +2,9 @@ package io.openchain.app.chain;
 
 import io.openchain.core.model.Address;
 import io.openchain.core.model.Balance;
+import io.openchain.core.model.BlockActivity;
+import io.openchain.core.model.TokenApproval;
+import io.openchain.core.model.TokenFreeze;
 import io.openchain.core.model.BlockRef;
 import io.openchain.core.model.ChainTransaction;
 import io.openchain.core.model.Network;
@@ -63,6 +66,20 @@ public final class TimeShiftedProvider implements BlockchainProvider {
     @Override public List<TokenTransfer> getTokenTransfers(long fromBlock, long toBlock) {
         return delegate.getTokenTransfers(fromBlock, toBlock).stream().map(this::s).toList();
     }
+
+    @Override public BlockActivity getBlockActivity(long fromBlock, long toBlock) {
+        BlockActivity a = delegate.getBlockActivity(fromBlock, toBlock);
+        return new BlockActivity(a.tokenTransfers().stream().map(this::s).toList(), a.nativeTransfers().stream().map(this::s).toList(),
+                a.approvals().stream().map(x -> new TokenApproval(x.network(), x.txHash(), x.logIndex(), x.blockNumber(), x.blockHash(),
+                        s(x.timestamp()), x.owner(), x.spender(), x.token(), x.rawAmount())).toList(),
+                a.freezes().stream().map(x -> new TokenFreeze(x.network(), x.txHash(), x.logIndex(), x.blockNumber(), x.blockHash(),
+                        s(x.timestamp()), x.target(), x.token(), x.issuer(), x.action(), x.eventName())).toList(),
+                a.adminChanges().stream().map(x -> new io.openchain.core.model.ContractAdminChange(x.network(), x.txHash(), x.logIndex(),
+                        x.blockNumber(), x.blockHash(), s(x.timestamp()), x.contract(), x.role(), x.previous(), x.newValue(),
+                        x.eventName())).toList());
+    }
+
+    @Override public Optional<Boolean> isContract(Address address, long atBlock) { return delegate.isContract(address, atBlock); }
 
     @Override public List<Balance> getAddressBalance(Address address) {
         return delegate.getAddressBalance(address).stream()

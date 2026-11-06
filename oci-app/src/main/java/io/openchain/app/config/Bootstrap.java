@@ -5,6 +5,10 @@ import io.openchain.alerting.notify.ConnectorRegistry;
 import io.openchain.alerting.pipeline.AlertingPipeline;
 import io.openchain.app.chain.ChainIngestionService;
 import io.openchain.app.chain.DemoLedgerProvider;
+import io.openchain.app.chain.FreezeBackfillService;
+import io.openchain.blockchain.backfill.FreezeBackfill;
+import io.openchain.blockchain.backfill.FreezeLogScanner;
+import io.openchain.blockchain.token.StablecoinFreezeSources;
 import io.openchain.app.chain.TimeShiftedProvider;
 import io.openchain.app.demo.DemoNotificationSink;
 import io.openchain.app.demo.DemoScenarios;
@@ -76,6 +80,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final Clock clock;
     private final DemoNotificationSink demoSink;
     private final DemoScenarios demoScenarios;
+    private final FreezeBackfillService backfills;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
         Thread t = new Thread(r, "oci-background");
         t.setDaemon(true);
@@ -85,7 +90,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     public Bootstrap(OciProperties props, LabelCatalog labels, RuleRegistry rules, ChainIngestionService chains,
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
                      UserDirectory users, TokenRegistry tokens, Clock clock, ObjectProvider<DemoNotificationSink> demoSink,
-                     ObjectProvider<DemoScenarios> demoScenarios) {
+                     ObjectProvider<DemoScenarios> demoScenarios, FreezeBackfillService backfills) {
+        this.backfills = backfills;
         this.demoSink = demoSink.getIfAvailable();
         this.demoScenarios = demoScenarios.getIfAvailable();
         this.props = props;
@@ -278,11 +284,31 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
             };
             long start = c.getStartBlock() >= 0 ? c.getStartBlock() : Math.max(0, p.getNetworkStatus().headBlock() + c.getStartBlock());
-            ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, IndexerConfig.of(n.id() + "-indexer", n, start), null);
+            IndexerConfig cfg = IndexerConfig.of(n.id() + "-indexer", n, start).withApprovalsOfUnknownTokens(c.isApprovalsOfUnknownTokens())
+                    .withWatchedContracts(n, java.util.Set.copyOf(c.getWatchedContracts()))
+                    .withAdminChangesOfAllContracts(c.isAdminChangesOfAllContracts());
+            ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, cfg, null);
+            startFreezeBackfill(n, p, c.getFreezeBackfill());
             long every = props.getIngestion().getPollInterval().toMillis();
             scheduler.scheduleWithFixedDelay(guard("poll " + n.id(), () -> chains.poll(rt)), 0, every, TimeUnit.MILLISECONDS);
         } catch (RuntimeException e) {
             log.error("chain {} not started: {}", id, e.getMessage());
+        }
+    }
+
+    /** Registers (re-applying stored freezes) and, if configured, starts the freeze backfill of a real network. */
+    private void startFreezeBackfill(Network n, BlockchainProvider p, OciProperties.FreezeBackfill fb) {
+        if (!fb.isEnabled()) return;
+        if (!(p instanceof FreezeLogScanner scanner) || StablecoinFreezeSources.defaults().forNetwork(n).isEmpty()) {
+            log.warn("freeze backfill of {} ignored: no official freeze source / log scan for this network", n.id());
+            return;
+        }
+        try {
+            backfills.register(scanner, new FreezeBackfill.Config(fb.getFromBlock(), fb.getToBlock(), fb.getChunkSize(),
+                    fb.getMinChunkSize(), fb.getPause()));
+            if (fb.isRunOnStartup()) backfills.trigger(n);
+        } catch (RuntimeException e) {
+            log.error("freeze backfill of {} not started: {}", n.id(), e.getMessage());
         }
     }
 

@@ -3,6 +3,9 @@ package io.openchain.app.chain;
 import io.openchain.blockchain.simulated.SimulatedChainProvider;
 import io.openchain.core.model.Address;
 import io.openchain.core.model.Balance;
+import io.openchain.core.model.BlockActivity;
+import io.openchain.core.model.TokenApproval;
+import io.openchain.core.model.TokenFreeze;
 import io.openchain.core.model.BlockRef;
 import io.openchain.core.model.ChainTransaction;
 import io.openchain.core.model.Network;
@@ -32,8 +35,12 @@ import java.util.function.Consumer;
  * {@code wallet-draining} alerts). This wrapper makes the demo chain balance-consistent without touching
  * oci-blockchain:
  * <ul>
- *   <li>block 1 carries a funding transfer from a fictional faucet to every pool address, for every token;</li>
- *   <li>a simulated transfer that would overdraw its sender is dropped (deterministic, processed in block order);</li>
+ *   <li>block 1 carries a funding transfer from a fictional faucet to every pool address, for every token and for the
+ *       native coin;</li>
+ *   <li>a simulated token or native transfer that would overdraw its sender is dropped (deterministic, processed in
+ *       block order);</li>
+ *   <li>simulated approvals, scheduled freezes and scheduled contract admin changes are passed through; scenario approvals and issuer freezes can be
+ *       injected like scenario transfers;</li>
  *   <li>scenario transfers can be injected into a future (not yet processed) block; they carry the block hash so the
  *       indexer accepts them, and may be backdated (historical activity) for dormancy scenarios.</li>
  * </ul>
@@ -46,11 +53,27 @@ public final class DemoLedgerProvider implements BlockchainProvider {
 
     private record Entry(ChainTransaction tx, TokenTransfer transfer) {}
 
+    /** An approval to add to a block. */
+    public record ApprovalInjection(String txHash, Address owner, Address spender, Token token, BigInteger rawAmount) {}
+
+    /** An issuer freeze/unfreeze to add to a block (as the real adapters decode it from the official contract). */
+    public record FreezeInjection(String txHash, Address target, Token token, String issuer, TokenFreeze.Action action, String eventName) {}
+
+    /** Whole native units given to each pool address at block 1. */
+    public static final long NATIVE_FUNDING_UNITS = 1_000;
+
     private final SimulatedChainProvider sim;
     private final Address faucet;
     private final BigInteger fundingUnits;
     private final Map<Long, List<Injection>> injections = new HashMap<>();
     private final Map<Long, List<Entry>> blocks = new HashMap<>();
+    private final Map<Long, List<ApprovalInjection>> approvalInjections = new HashMap<>();
+    private final Map<Long, List<FreezeInjection>> freezeInjections = new HashMap<>();
+    private final Map<Long, List<ChainTransaction>> nativeBlocks = new HashMap<>();
+    private final Map<Long, List<TokenApproval>> approvalBlocks = new HashMap<>();
+    private final Map<Long, List<TokenFreeze>> freezeBlocks = new HashMap<>();
+    private final Map<Long, List<io.openchain.core.model.ContractAdminChange>> adminBlocks = new HashMap<>();
+    private final Map<String, ChainTransaction> nativeByTx = new HashMap<>();
     private final Map<String, List<Entry>> byTx = new HashMap<>();
     private final Map<Address, List<Entry>> byAddress = new HashMap<>();
     private final Map<Address, Map<Token, BigInteger>> balances = new HashMap<>();
@@ -78,6 +101,24 @@ public final class DemoLedgerProvider implements BlockchainProvider {
         injections.computeIfAbsent(blockNumber, k -> new ArrayList<>()).add(i);
     }
 
+    /** Adds an approval to block {@code blockNumber}, which must not have been processed yet. */
+    public synchronized void injectApproval(long blockNumber, ApprovalInjection i) {
+        if (blockNumber <= processedUpTo) throw new IllegalStateException("block " + blockNumber + " already processed");
+        approvalInjections.computeIfAbsent(blockNumber, k -> new ArrayList<>()).add(i);
+    }
+
+    /** Adds an issuer freeze/unfreeze to block {@code blockNumber}, which must not have been processed yet. */
+    public synchronized void injectFreeze(long blockNumber, FreezeInjection i) {
+        if (blockNumber <= processedUpTo) throw new IllegalStateException("block " + blockNumber + " already processed");
+        freezeInjections.computeIfAbsent(blockNumber, k -> new ArrayList<>()).add(i);
+    }
+
+    /** Freezes/unfreezes indexed for a transaction (scenario evidence). */
+    public synchronized List<TokenFreeze> freezesOf(String txHash) {
+        ensure(sim.head());
+        return freezeBlocks.values().stream().flatMap(List::stream).filter(z -> z.txHash().equals(txHash)).toList();
+    }
+
     /** Deterministic fictional transaction hash for scenario transfers. */
     public String hashOf(String seed) {
         String hex = sha256(seed);
@@ -102,7 +143,27 @@ public final class DemoLedgerProvider implements BlockchainProvider {
                     }
                 }
             }
-            for (TokenTransfer t : sim.getTokenTransfers(n, n)) {
+            BlockActivity simActivity = sim.getBlockActivity(n, n);
+            Token nat = sim.nativeToken();
+            List<ChainTransaction> natives = new ArrayList<>();
+            if (n == 1) {
+                for (Address a : sim.addressPool()) {
+                    BigInteger raw = BigInteger.valueOf(NATIVE_FUNDING_UNITS).multiply(BigInteger.TEN.pow(nat.decimals()));
+                    natives.add(applyNative(new ChainTransaction(sim.network(), hashOf("fund-native:" + a.value()), n, ref.hash(),
+                            ref.timestamp(), faucet, a, raw, BigInteger.valueOf(1_000), true, null, false)));
+                }
+            }
+            for (ChainTransaction t : simActivity.nativeTransfers()) {
+                if (!t.from().equals(faucet) && balance(t.from(), nat).compareTo(t.value()) < 0) {
+                    dropped++;
+                    continue;
+                }
+                natives.add(applyNative(t));
+            }
+            nativeBlocks.put(n, natives);
+            List<TokenApproval> approvals = new ArrayList<>(simActivity.approvals());
+            List<TokenFreeze> freezes = new ArrayList<>(simActivity.freezes());
+            for (TokenTransfer t : simActivity.tokenTransfers()) {
                 if (!t.from().equals(faucet) && balance(t.from(), t.token()).compareTo(t.rawAmount()) < 0) {
                     dropped++;
                     continue;
@@ -113,6 +174,17 @@ public final class DemoLedgerProvider implements BlockchainProvider {
                 Instant ts = i.backdate() == null ? ref.timestamp() : ref.timestamp().minus(i.backdate());
                 out.add(apply(entry(ref, i.txHash(), logIndex++, i.from(), i.to(), i.token(), i.rawAmount(), ts)));
             }
+            for (ApprovalInjection i : approvalInjections.getOrDefault(n, List.of())) {
+                approvals.add(new TokenApproval(sim.network(), i.txHash(), logIndex++, n, ref.hash(), ref.timestamp(), i.owner(),
+                        i.spender(), i.token(), i.rawAmount()));
+            }
+            for (FreezeInjection i : freezeInjections.getOrDefault(n, List.of())) {
+                freezes.add(new TokenFreeze(sim.network(), i.txHash(), logIndex++, n, ref.hash(), ref.timestamp(), i.target(),
+                        i.token(), i.issuer(), i.action(), i.eventName()));
+            }
+            approvalBlocks.put(n, approvals);
+            freezeBlocks.put(n, freezes);
+            adminBlocks.put(n, simActivity.adminChanges());
             blocks.put(n, out);
             processedUpTo = n;
         }
@@ -135,6 +207,14 @@ public final class DemoLedgerProvider implements BlockchainProvider {
         return e;
     }
 
+    private ChainTransaction applyNative(ChainTransaction t) {
+        Token nat = sim.nativeToken();
+        if (!t.from().equals(faucet)) balances.computeIfAbsent(t.from(), k -> new LinkedHashMap<>()).merge(nat, t.value().negate(), BigInteger::add);
+        balances.computeIfAbsent(t.to(), k -> new LinkedHashMap<>()).merge(nat, t.value(), BigInteger::add);
+        nativeByTx.put(t.hash(), t);
+        return t;
+    }
+
     private BigInteger balance(Address a, Token t) {
         return balances.getOrDefault(a, Map.of()).getOrDefault(t, BigInteger.ZERO);
     }
@@ -152,7 +232,10 @@ public final class DemoLedgerProvider implements BlockchainProvider {
     @Override public synchronized Optional<TransactionReceipt> getTransactionReceipt(String hash) {
         ensure(sim.head());
         List<Entry> es = byTx.get(hash);
-        if (es == null || es.isEmpty()) return Optional.empty();
+        if (es == null || es.isEmpty()) {
+            ChainTransaction nat = nativeByTx.get(hash);
+            return nat == null ? Optional.empty() : Optional.of(new TransactionReceipt(nat, List.of(), true));
+        }
         return Optional.of(new TransactionReceipt(es.getFirst().tx(), es.stream().map(Entry::transfer).toList(), true));
     }
 
@@ -174,6 +257,23 @@ public final class DemoLedgerProvider implements BlockchainProvider {
         List<TokenTransfer> out = new ArrayList<>();
         for (long n = Math.max(1, fromBlock); n <= toBlock; n++) for (Entry e : blocks.getOrDefault(n, List.of())) out.add(e.transfer());
         return out;
+    }
+
+    @Override public synchronized BlockActivity getBlockActivity(long fromBlock, long toBlock) {
+        ensure(toBlock);
+        List<TokenTransfer> transfers = new ArrayList<>();
+        List<ChainTransaction> natives = new ArrayList<>();
+        List<TokenApproval> approvals = new ArrayList<>();
+        List<TokenFreeze> freezes = new ArrayList<>();
+        List<io.openchain.core.model.ContractAdminChange> admins = new ArrayList<>();
+        for (long n = Math.max(1, fromBlock); n <= toBlock; n++) {
+            for (Entry e : blocks.getOrDefault(n, List.of())) transfers.add(e.transfer());
+            natives.addAll(nativeBlocks.getOrDefault(n, List.of()));
+            approvals.addAll(approvalBlocks.getOrDefault(n, List.of()));
+            freezes.addAll(freezeBlocks.getOrDefault(n, List.of()));
+            admins.addAll(adminBlocks.getOrDefault(n, List.of()));
+        }
+        return new BlockActivity(transfers, natives, approvals, freezes, admins);
     }
 
     @Override public synchronized List<Balance> getAddressBalance(Address address) {

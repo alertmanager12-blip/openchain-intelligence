@@ -17,9 +17,21 @@ public final class PopulatedFields {
     public static final Set<String> FIELDS = Set.of(
             // envelope (virtual)
             "network", "event.type", "event.block_number", "event.time",
-            // TransferEventMapper
+            // TransferEventMapper: token and native transfers (fee/success/method/contract_interaction: native only)
             "transaction.hash", "transaction.from", "transaction.to", "transaction.amount", "transaction.token.symbol",
-            "transaction.token.contract", "transaction.token.decimals",
+            "transaction.token.contract", "transaction.token.decimals", "transaction.fee", "transaction.success",
+            "transaction.method", "transaction.contract_interaction",
+            // TransferEventMapper: approvals; + spender_is_contract (provider code lookup: EVM eth_getCode, TRON
+            // /wallet/getcontract; absent with simulated providers or on lookup failure) and spender_age_days (first seen
+            // by the platform in an indexed flow; absent when never seen) from enrichment. spender_verified is NOT populated.
+            "approval.owner", "approval.spender", "approval.amount", "approval.unlimited", "approval.spender_is_contract",
+            "approval.spender_age_days",
+            // TransferEventMapper: CONTRACT_ADMIN_CHANGE (OwnershipTransferred, EIP-1967 Upgraded / AdminChanged) of the
+            // token registry's contracts and oci.chains.<network>.watched-contracts
+            "contract.address", "contract.event", "contract.new_owner",
+            // TransferEventMapper: issuer freezes, + freeze.known_counterparties from enrichment
+            "freeze.address", "freeze.token", "freeze.token_contract", "freeze.action", "freeze.issuer", "freeze.event",
+            "freeze.known_counterparties",
             // enrichment
             "wallet.address", "wallet.balance", "wallet.risk_score", "wallet.risk_level", "wallet.age_days", "wallet.tx_count",
             "wallet.labels", "wallet.sanctioned", "counterparty.address", "counterparty.risk_score", "counterparty.labels",
@@ -29,5 +41,6 @@ public final class PopulatedFields {
             // INTERNAL_EVENT connector
             "internal.hop", "internal.origin_chain", "alert.id", "alert.rule_id", "alert.severity", "alert.group_key");
 
-    public static final Set<EventType> EVENT_TYPES = EnumSet.of(EventType.TOKEN_TRANSFER, EventType.DETECTION_SIGNAL);
+    public static final Set<EventType> EVENT_TYPES = EnumSet.of(EventType.TOKEN_TRANSFER, EventType.NATIVE_TRANSFER,
+            EventType.APPROVAL, EventType.CONTRACT_ADMIN_CHANGE, EventType.STABLECOIN_FREEZE, EventType.STABLECOIN_UNFREEZE, EventType.DETECTION_SIGNAL);
 }

@@ -3,8 +3,13 @@ package io.openchain.blockchain.indexer;
 import io.openchain.blockchain.token.DefaultTokenRegistry;
 import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.core.event.ChainEvent;
+import io.openchain.core.model.BlockActivity;
 import io.openchain.core.model.BlockRef;
+import io.openchain.core.model.ChainTransaction;
+import io.openchain.core.model.ContractAdminChange;
 import io.openchain.core.model.NetworkStatus;
+import io.openchain.core.model.TokenApproval;
+import io.openchain.core.model.TokenFreeze;
 import io.openchain.core.model.TokenTransfer;
 import io.openchain.core.provider.BlockchainProvider;
 import io.openchain.core.provider.ProviderException;
@@ -12,7 +17,11 @@ import java.time.Clock;
 import java.util.*;
 
 /**
- * Network-agnostic, cursor-based token transfer indexer over {@link BlockchainProvider}.
+ * Network-agnostic, cursor-based indexer over {@link BlockchainProvider#getBlockActivity}: native transfers,
+ * token transfers, token approvals (registry-known tokens unless {@link IndexerConfig#approvalsOfUnknownTokens()})
+ * stablecoin freezes and contract admin changes (contracts of the token registry or of
+ * {@link IndexerConfig#watchedContracts()}, unless {@link IndexerConfig#adminChangesOfAllContracts()}), in that order
+ * within a block. All event kinds share the window/retraction mechanics.
  * <ul>
  *   <li>indexes blocks up to {@code head - confirmations}, at most {@code maxBlocksPerPoll} per {@link #poll()};</li>
  *   <li>detects reorgs when a new block's parentHash differs from the last indexed hash, walks back the window to the
@@ -29,6 +38,7 @@ public final class BlockIndexer {
     private final IndexerConfig config;
     private final TransferEventMapper mapper;
     private final Clock clock;
+    private final TokenRegistry tokens;
 
     public record PollResult(long head, long lastBlock, int blocksIndexed, int eventsEmitted, int eventsRetracted, int reorgs) {}
 
@@ -43,6 +53,7 @@ public final class BlockIndexer {
         this.sink = sink;
         this.config = config;
         this.mapper = new TransferEventMapper(tokens);
+        this.tokens = tokens;
         this.clock = clock;
     }
 
@@ -88,17 +99,26 @@ public final class BlockIndexer {
                 save(last, window);
                 continue;
             }
-            List<TokenTransfer> transfers = provider.getTokenTransfers(n, n);
-            if (transfers.stream().anyMatch(t -> t.blockHash() != null && !t.blockHash().equals(block.hash()))) {
+            BlockActivity activity = provider.getBlockActivity(n, n);
+            if (activity.blockHashes().anyMatch(h -> !h.equals(block.hash()))) {
                 break; // chain moved between the two calls: retry on next poll, the parent check will sort it out
             }
             Set<String> seen = seenIds(window);
             List<ChainEvent> events = new ArrayList<>();
-            for (TokenTransfer t : transfers) {
-                if (!seen.add(t.eventId())) continue;
-                ChainEvent e = mapper.map(t, block, clock.instant());
-                sink.emit(e);
-                events.add(e);
+            for (ChainTransaction tx : activity.nativeTransfers()) {
+                // providers only return successful non-zero transfers; re-checked so a lax provider cannot fake value
+                if (!tx.success() || tx.value() == null || tx.value().signum() <= 0 || tx.from() == null || tx.to() == null) continue;
+                emit(TransferEventMapper.nativeEventId(tx), () -> mapper.mapNative(tx, block, clock.instant()), seen, events);
+            }
+            for (TokenTransfer t : activity.tokenTransfers()) emit(t.eventId(), () -> mapper.map(t, block, clock.instant()), seen, events);
+            for (TokenApproval a : activity.approvals()) {
+                if (!config.approvalsOfUnknownTokens() && !tokens.isKnown(a.token())) continue;
+                emit(a.eventId(), () -> mapper.mapApproval(a, block, clock.instant()), seen, events);
+            }
+            for (TokenFreeze z : activity.freezes()) emit(z.eventId(), () -> mapper.mapFreeze(z, block, clock.instant()), seen, events);
+            for (ContractAdminChange c : activity.adminChanges()) {
+                if (!watched(c)) continue;
+                emit(c.eventId(), () -> mapper.mapAdminChange(c, block, clock.instant()), seen, events);
             }
             emitted += events.size();
             window.addLast(new IndexedBlock(block, events));
@@ -148,6 +168,20 @@ public final class BlockIndexer {
             window.removeLast();
         }
         return ancestor;
+    }
+
+    /** Admin changes are kept for registry tokens, the watch list, or every contract when configured. */
+    private boolean watched(ContractAdminChange c) {
+        if (config.adminChangesOfAllContracts()) return true;
+        String contract = TokenRegistry.canonical(c.network(), c.contract().value());
+        return config.watchedContracts().contains(contract) || tokens.find(c.network(), contract).isPresent();
+    }
+
+    private void emit(String eventId, java.util.function.Supplier<ChainEvent> event, Set<String> seen, List<ChainEvent> events) {
+        if (!seen.add(eventId)) return;
+        ChainEvent e = event.get();
+        sink.emit(e);
+        events.add(e);
     }
 
     private static Set<String> seenIds(Deque<IndexedBlock> window) {

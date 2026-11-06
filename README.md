@@ -22,8 +22,9 @@ Licence: [Apache-2.0](LICENSE).
 
 | Area | Capabilities |
 |---|---|
+| Ingestion | TRON and EVM (Ethereum, BSC, Polygon) indexers with confirmations and reorg retraction: USDT/USDC and other token transfers, native transfers (ETH/BNB/POL/TRX of successful transactions; internal transactions *not yet*), ERC-20/TRC-20 approvals, stablecoin issuer freezes (Tether `AddedBlackList`/`BlockPlaced`, Circle `Blacklisted`, decoded only from the official contracts) |
 | Investigation | Wallet analysis (profile, counterparties, signals, labels), transaction analysis, counterparty graph explorer (depth ≤ 3) |
-| Risk intelligence | Detectors for transaction patterns (structuring, fast forwarding, unusual amounts…), wallet patterns (dormant reactivation, rapid drain…), exposure (sanctioned/flagged, direct and indirect); explainable 0–100 score |
+| Risk intelligence | Detectors for transaction patterns (structuring, fast forwarding, unusual amounts…), wallet patterns (dormant reactivation, rapid drain…), exposure (sanctioned/flagged, direct and indirect, token and native value), unlimited approvals to listed spenders, issuer freezes (`ISSUER_FROZEN` label: what the issuer did, never why); explainable 0–100 score |
 | Monitoring | YAML/JSON rules, DRY_RUN on history, versioning, alert lifecycle (acknowledge, assign, comment, resolve, false positive) |
 | Notifications | Webhooks (HMAC-SHA256, SSRF-guarded, retries, dead letter), Slack, Discord, Telegram. Email/push: *planned* (no transport yet) |
 | Platform | REST API v1 (problem+json, cursor pagination), API keys (hashed, scoped, expiring, revocable) and optional OIDC, per-endpoint permissions, audit log stream (`oci.audit`), PostgreSQL persistence of operator state (API keys, connectors with encrypted secrets, rules and versions, alerts, delivery outbox, label reports, users; Flyway migrations). *Planned*: persistence of chain-derived state (transfers, profiles, signals, scores, checkpoints), idempotency keys, rate limiting, tenant isolation, Prometheus metrics, OpenTelemetry traces |

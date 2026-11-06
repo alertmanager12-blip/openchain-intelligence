@@ -12,6 +12,8 @@ import io.openchain.core.detection.Signal;
 import io.openchain.core.model.Address;
 import io.openchain.core.model.Network;
 import io.openchain.core.model.Token;
+import io.openchain.core.model.TokenApproval;
+import io.openchain.core.model.TokenFreeze;
 import io.openchain.core.model.TokenTransfer;
 import io.openchain.core.provider.BlockchainProvider;
 import io.openchain.intelligence.IntelligencePipeline;
@@ -34,7 +36,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Demo scenarios A-E: FICTITIOUS on-chain stories injected into the simulated TRON ledger and processed by the
+ * Demo scenarios A-F: FICTITIOUS on-chain stories injected into the simulated TRON ledger and processed by the
  * real pipeline (indexer -> detection -> risk -> rule engine -> alert -> notification sink). Every address involved
  * is labelled {@code demo-scenarios} / "fictional"; nothing here designates a real person or wallet.
  */
@@ -54,6 +56,7 @@ public final class DemoScenarios {
     private final DeliveryStore deliveries;
     private final List<Scenario> scenarios = new CopyOnWriteArrayList<>();
     private volatile BlockchainProvider provider;
+    private volatile DemoLedgerProvider ledger;
 
     public DemoScenarios(IntelligencePipeline intelligence, AlertService alerts, EventHistory history, DemoNotificationSink sink,
                          DeliveryStore deliveries) {
@@ -69,7 +72,7 @@ public final class DemoScenarios {
     // ---- planning -----------------------------------------------------------------------------------------------
 
     /**
-     * Injects the five scenarios into already-mined but not yet processed blocks (between head-160 and head-80), so
+     * Injects the six scenarios into already-mined but not yet processed blocks (between head-160 and head-80), so
      * they are indexed with the seed history. {@code sanctioned} is the dedicated demo-sanctioned address.
      */
     public void plan(DemoLedgerProvider ledger, long head, List<Address> pool, Address sanctioned, LabelCatalog labels) {
@@ -128,6 +131,29 @@ public final class DemoScenarios {
         add("E", "Dormant wallet reactivation", "A wallet funded 400 days ago (historical activity) and silent since moves 30k USDT.",
                 roles("wallet", e, "destination", ex), List.of(e), te, "dormant-wallet-reactivation", "DORMANT_REACTIVATION");
 
+        // F - issuer freeze: a wallet pays an address that the stablecoin issuer later freezes, then releases
+        Address fw = fresh("F-wallet"), fz = fresh("F-frozen");
+        String freezeTx = ledger.hashOf("scenario:F-freeze"), unfreezeTx = ledger.hashOf("scenario:F-unfreeze");
+        List<String> tf = List.of(
+                inject(ledger, b + 84, "F-funding", faucet, fw, units(20_000), Duration.ofHours(3)),
+                inject(ledger, b + 86, "F-payment", fw, fz, units(5_000), null),
+                freezeTx, unfreezeTx);
+        ledger.injectFreeze(b + 88, new DemoLedgerProvider.FreezeInjection(freezeTx, fz, TRON_USDT, "tether", TokenFreeze.Action.FREEZE, "AddedBlackList"));
+        ledger.injectFreeze(b + 100, new DemoLedgerProvider.FreezeInjection(unfreezeTx, fz, TRON_USDT, "tether", TokenFreeze.Action.UNFREEZE, "RemovedBlackList"));
+        add("F", "Issuer freeze of a counterparty",
+                "A wallet pays 5k USDT to an address; the (simulated) USDT contract then emits AddedBlackList for that address: it is labelled "
+                        + "'frozen by the issuer' (tether-onchain), rescored, the paying wallet gets a direct exposure signal and a rule alerts. "
+                        + "Later RemovedBlackList delists the address and it is rescored. A freeze states what the issuer did, not why.",
+                roles("wallet", fw, "frozenCounterparty", fz), List.of(fw, fz), tf, "issuer-freeze-counterparty", "FLAGGED_EXPOSURE");
+
+        // supplementary (not a scenario): an unlimited USDT approval to the demo-scam-listed pool address
+        Address approver = fresh("approval-owner"), scamSpender = pool.get(pool.size() - 2);
+        inject(ledger, b + 92, "approval-owner-funding", faucet, approver, units(1_000), null);
+        ledger.injectApproval(b + 94, new DemoLedgerProvider.ApprovalInjection(ledger.hashOf("scenario:unlimited-approval"), approver,
+                scamSpender, TRON_USDT, TokenApproval.MAX_UINT256));
+        labels.save(new AddressLabel(approver, LabelCategory.OTHER, "DEMO approval owner (fictional address)", LABEL_SOURCE, 1.0, at,
+                Signal.EvidenceLevel.ANOMALY, "demo://approval"));
+
         for (Scenario s : scenarios) {
             for (Map.Entry<String, String> r : s.roles().entrySet()) {
                 Address addr = new Address(Network.TRON, r.getValue());
@@ -137,6 +163,13 @@ public final class DemoScenarios {
             }
         }
         this.provider = ledger;
+        this.ledger = ledger;
+    }
+
+    /** Hash of the fictional unlimited-approval transaction (demo data only). */
+    public String unlimitedApprovalTx() {
+        DemoLedgerProvider l = ledger;
+        return l == null ? null : l.hashOf("scenario:unlimited-approval");
     }
 
     private static String inject(DemoLedgerProvider l, long block, String seed, Address from, Address to, BigInteger raw, Duration backdate) {
@@ -194,6 +227,19 @@ public final class DemoScenarios {
             BlockchainProvider p = provider;
             for (String h : s.txHashes()) {
                 if (p == null) break;
+                if (ledger != null) {
+                    for (TokenFreeze z : ledger.freezesOf(h)) {
+                        eventIds.add(z.eventId());
+                        Map<String, Object> ev = new LinkedHashMap<>();
+                        ev.put("eventId", z.eventId());
+                        ev.put("indexed", history.find(z.eventId()).isPresent());
+                        ev.put("block", z.blockNumber());
+                        ev.put("type", z.action() == TokenFreeze.Action.FREEZE ? "STABLECOIN_FREEZE" : "STABLECOIN_UNFREEZE");
+                        ev.put("address", z.target().value());
+                        ev.put("token", z.token().symbol() + " (" + z.issuer() + " " + z.eventName() + ")");
+                        events.add(ev);
+                    }
+                }
                 p.getTransactionReceipt(h).ifPresent(r -> {
                     for (TokenTransfer t : r.transfers()) {
                         eventIds.add(t.eventId());

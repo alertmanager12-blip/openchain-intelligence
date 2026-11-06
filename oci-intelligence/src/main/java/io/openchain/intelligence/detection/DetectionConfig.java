@@ -77,7 +77,11 @@ public record DetectionConfig(
                 new FanOut(20, Duration.ofHours(1)),
                 new CircularFlow(4, Duration.ofDays(7), true, 10_000),
                 new Exposure(3, 0.5, 0.05, 20, 5_000, Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE),
-                        Map.of("USDT", new BigDecimal("10"), "USDC", new BigDecimal("10"))),
+                        // stablecoins ~10 USD; native coins: order-of-magnitude ~10 USD equivalents (static, no price
+                        // feed): ETH 0.005, BNB 0.02, POL 20, TRX 50. Tune with prices; amounts are human units.
+                        Map.of("USDT", new BigDecimal("10"), "USDC", new BigDecimal("10"), "USDC.e", new BigDecimal("10"),
+                                "ETH", new BigDecimal("0.005"), "BNB", new BigDecimal("0.02"), "POL", new BigDecimal("20"),
+                                "TRX", new BigDecimal("50"))),
                 new Approval(BigInteger.TWO.pow(96).subtract(BigInteger.ONE)),
                 20);
     }

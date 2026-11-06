@@ -367,6 +367,28 @@ class DetectorsTest {
             assertThat(d.detect(fx.ctx(contract, renounce))).singleElement().satisfies(s -> assertThat(s.severity()).isEqualTo(Severity.INFO));
         }
 
+        @Test void tronRenouncementToTheBase58ZeroAddressIsInfoNotMedium() {
+            // TRON adapters decode address(0) of a TVM log as base58 T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb (0x41 + 20 zero bytes):
+            // the former EVM-only "0x0+" check reported a TRON renounceOwnership as a MEDIUM ownership change
+            Address tronContract = new Address(io.openchain.core.model.Network.TRON, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+            var renounce = new io.openchain.core.event.ChainEvent("t1", EventType.CONTRACT_ADMIN_CHANGE, io.openchain.core.model.Network.TRON,
+                    1, "b", T0, T0, false, Map.of(EventFields.ADMIN_CONTRACT, tronContract.value(), EventFields.ADMIN_ROLE, "owner",
+                    EventFields.ADMIN_PREVIOUS, "TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe",
+                    EventFields.ADMIN_NEW, io.openchain.core.model.Address.TRON_ZERO, EventFields.TX_HASH, "ab"));
+            assertThat(d.detect(fx.ctx(tronContract, renounce))).singleElement().satisfies(s -> {
+                assertThat(s.severity()).isEqualTo(Severity.INFO);
+                assertThat(s.evidence().getFirst().description()).contains("(renounced)");
+            });
+            var transfer = new io.openchain.core.event.ChainEvent("t2", EventType.CONTRACT_ADMIN_CHANGE, io.openchain.core.model.Network.TRON,
+                    2, "b", T0, T0, false, Map.of(EventFields.ADMIN_CONTRACT, tronContract.value(),
+                    EventFields.ADMIN_NEW, "TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe", EventFields.TX_HASH, "ac"));
+            assertThat(d.detect(fx.ctx(tronContract, transfer))).singleElement().satisfies(s -> assertThat(s.severity()).isEqualTo(Severity.MEDIUM));
+            // an EIP-1967 upgrade to address(0) is not a renouncement
+            var upgrade = event("e3", EventType.CONTRACT_ADMIN_CHANGE, Map.of(EventFields.ADMIN_CONTRACT, contract.value(),
+                    EventFields.ADMIN_ROLE, "implementation", EventFields.ADMIN_NEW, "0x0000000000000000000000000000000000000000"));
+            assertThat(d.detect(fx.ctx(contract, upgrade))).singleElement().satisfies(s -> assertThat(s.severity()).isEqualTo(Severity.MEDIUM));
+        }
+
         @Test void ignoresOtherEventsAndRetracted() {
             assertThat(d.detect(fx.ctx(contract, event("e1", EventType.APPROVAL, Map.of(EventFields.ADMIN_CONTRACT, contract.value()))))).isEmpty();
             assertThat(d.detect(fx.ctx(contract, fx.flow(src, contract, "1", min(0))))).isEmpty();

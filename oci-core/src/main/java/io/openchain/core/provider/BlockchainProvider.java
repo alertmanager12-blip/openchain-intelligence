@@ -29,6 +29,21 @@ public interface BlockchainProvider {
     /** All fungible token transfers in the inclusive block range. */
     List<TokenTransfer> getTokenTransfers(long fromBlock, long toBlock);
 
+    /**
+     * Token transfers, successful non-zero native transfers, token approvals and stablecoin freezes in the inclusive
+     * block range. The default covers token transfers only (providers without the richer decoding).
+     */
+    default BlockActivity getBlockActivity(long fromBlock, long toBlock) {
+        return BlockActivity.ofTransfers(getTokenTransfers(fromBlock, toBlock));
+    }
+
+    /**
+     * Whether {@code address} holds contract code, as of block {@code atBlock} when the source can answer for a past
+     * block (EVM {@code eth_getCode}) or as of now otherwise (TRON). Empty when this provider cannot tell (default).
+     * Implementations cache answers; a failed lookup throws {@link ProviderException}.
+     */
+    default Optional<Boolean> isContract(Address address, long atBlock) { return Optional.empty(); }
+
     List<Balance> getAddressBalance(Address address);
 
     /** Push subscription when supported; otherwise implementations poll. Returns a handle to cancel. */

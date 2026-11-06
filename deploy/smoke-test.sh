@@ -41,11 +41,11 @@ assert t["eventsIndexed"] > 0, f"nothing indexed: {t}"
 print("   totals:", t)
 PY
 
-echo "== demo scenarios A-E: event -> signal -> risk -> rule -> alert -> notification"
+echo "== demo scenarios A-F: event -> signal -> risk -> rule -> alert -> notification"
 scen=""
 for _ in $(seq 1 20); do
   scen=$(curl -sf -H "X-API-Key: $key" "$API/api/v1/demo/scenarios") && \
-    python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d=d.get("items",d); sys.exit(0 if len(d)==5 and all(all(s["checks"].values()) for s in d) else 1)' "$scen" && break
+    python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d=d.get("items",d); sys.exit(0 if len(d)==6 and all(all(s["checks"].values()) for s in d) else 1)' "$scen" && break
   sleep 3
 done
 python3 - "$scen" <<'PY' || fail "demo scenario checks failed"
@@ -54,11 +54,16 @@ d = json.loads(sys.argv[1]); d = d.get("items", d)
 bad = [(s["id"], {k: v for k, v in s["checks"].items() if not v}) for s in d if not all(s["checks"].values())]
 for s in d:
     print(f"   {s['id']} {s['title']}: alerts={len(s['alerts'])}")
-assert len(d) == 5 and not bad, f"failing scenarios: {bad}"
+assert len(d) == 6 and not bad, f"failing scenarios: {bad}"
+f = next(s for s in d if s["id"] == "F")
+types = {e.get("type") for e in f["events"]}
+assert {"STABLECOIN_FREEZE", "STABLECOIN_UNFREEZE"} <= types, f"scenario F freeze/unfreeze not indexed: {f['events']}"
+assert any(a["ruleId"] == "issuer-freeze-counterparty" for a in f["alerts"]), f"scenario F alert missing: {f['alerts']}"
+print("   F issuer freeze: freeze + unfreeze indexed, issuer-freeze-counterparty alert raised")
 PY
 
 scenarios_ok() {
-  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d=d.get("items",d); sys.exit(0 if len(d)==5 and all(all(s["checks"].values()) for s in d) else 1)' "$1"
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d=d.get("items",d); sys.exit(0 if len(d)==6 and all(all(s["checks"].values()) for s in d) else 1)' "$1"
 }
 api() { curl -s -H "X-API-Key: $1" -H 'Content-Type: application/json' -X "$2" "$API$3" ${4:+--data "$4"}; }
 # jget JSON dotted.path  (numeric segments index lists)
@@ -136,7 +141,7 @@ for _ in $(seq 1 20); do
   sleep 3
 done
 scenarios_ok "$scen" || fail "demo scenarios failing after restart: $scen"
-echo "   demo scenarios A-E still pass after the restart"
+echo "   demo scenarios A-F still pass after the restart"
 
 echo "== cleanup of the smoke objects (the pgdata volume is kept)"
 api "$key" POST "/api/v1/api-keys/$pkey_id/revoke" >/dev/null

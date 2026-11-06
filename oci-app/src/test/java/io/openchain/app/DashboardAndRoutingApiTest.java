@@ -61,9 +61,9 @@ class DashboardAndRoutingApiTest extends ApiTestSupport {
         var r = mvc.perform(get("/api/v1/demo/scenarios").header("X-API-Key", READER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fictitious").value(true))
-                .andExpect(jsonPath("$.items.length()").value(5))
+                .andExpect(jsonPath("$.items.length()").value(6))
                 .andReturn().getResponse().getContentAsString();
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             String p = "$.items[" + i + "].checks.";
             for (String c : new String[]{"eventsIndexed", "expectedSignalDetected", "riskScored", "expectedRuleTriggered", "notificationSimulated"}) {
                 Object v = com.jayway.jsonpath.JsonPath.read(r, p + c);

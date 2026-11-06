@@ -15,6 +15,12 @@ public enum LabelCategory {
     STOLEN_FUNDS(true, SignalType.FLAGGED_EXPOSURE),
     DARKNET_MARKET(true, SignalType.FLAGGED_EXPOSURE),
     FLAGGED_COMMUNITY(true, SignalType.FLAGGED_EXPOSURE),
+    /**
+     * The stablecoin issuer froze (blacklisted) this address in its own token contract, observed on-chain
+     * (source e.g. {@code tether-onchain}). States what the issuer did, for reasons it does not publish; not a finding
+     * about the owner. Delisted when the issuer unfreezes the address.
+     */
+    ISSUER_FROZEN(true, SignalType.FLAGGED_EXPOSURE),
     EXCHANGE(false, null),
     BRIDGE(false, null),
     DEFI_PROTOCOL(false, null),

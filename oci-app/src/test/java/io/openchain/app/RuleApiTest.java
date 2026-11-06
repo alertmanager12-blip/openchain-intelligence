@@ -61,7 +61,9 @@ class RuleApiTest extends ApiTestSupport {
         mvc.perform(get("/api/v1/rules/event-types").header("X-API-Key", READER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.type == 'TOKEN_TRANSFER')].available", hasItem(true)))
-                .andExpect(jsonPath("$[?(@.type == 'APPROVAL')].available", hasItem(false)));
+                .andExpect(jsonPath("$[?(@.type == 'APPROVAL')].available", hasItem(true)))
+                .andExpect(jsonPath("$[?(@.type == 'CONTRACT_ADMIN_CHANGE')].available", hasItem(true)))
+                .andExpect(jsonPath("$[?(@.type == 'CONTRACT_CALL')].available", hasItem(false)));
     }
 
     @Test

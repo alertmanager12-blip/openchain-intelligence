@@ -24,7 +24,12 @@ public record ChainEvent(
         boolean removed,
         Map<String, Object> fields) {
 
-    public enum EventType { TOKEN_TRANSFER, NATIVE_TRANSFER, CONTRACT_CALL, CONTRACT_ADMIN_CHANGE, APPROVAL, RISK_SCORE_CHANGED, DETECTION_SIGNAL }
+    /**
+     * {@code STABLECOIN_FREEZE} / {@code STABLECOIN_UNFREEZE}: the issuer's own token contract (USDT, USDC...) added an
+     * address to / removed it from its blacklist. A statement of what the issuer did, never a qualification of the owner.
+     */
+    public enum EventType { TOKEN_TRANSFER, NATIVE_TRANSFER, CONTRACT_CALL, CONTRACT_ADMIN_CHANGE, APPROVAL, RISK_SCORE_CHANGED,
+        DETECTION_SIGNAL, STABLECOIN_FREEZE, STABLECOIN_UNFREEZE }
 
     public ChainEvent { fields = Map.copyOf(fields); }
 

@@ -9,9 +9,9 @@ Conventions:
 - Tenant-owned tables carry `tenant_id uuid not null` and have Row-Level Security (`USING (tenant_id = current_setting('app.tenant_id')::uuid)`).
 - Migrations: Flyway (`oci-app/src/main/resources/db/migration`). The DDL below is the reference design; migrations are authoritative.
 
-## Implemented schema (V1, operator state)
+## Implemented schema (V1 operator state, V2 freeze backfill)
 
-`V1__operator_state.sql` implements the **operator state** only. It differs from the reference design below:
+`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables. It differs from the reference design below:
 
 | Area | Implemented (V1) | Reference design |
 |---|---|---|
@@ -25,10 +25,26 @@ Conventions:
 | History / comments | `alert_history` (status changes and annotations, append-only) and `alert_comments` (`author text`), keyed `(alert_id, seq)` | `alert_events` (kind + jsonb), `alert_comments.author_id` FK |
 | `deliveries` | outbox with `notification jsonb` snapshot, statuses PENDING/DELIVERED/DEAD_LETTER, `next_attempt_at`, claim lease (`claimed_by`, `claimed_until`, `FOR UPDATE SKIP LOCKED`); the delivery `id` is the receivers' idempotency key; no FK to `connectors` (built-in connectors are not rows) | `idempotency_key`, `payload`, RETRY/FAILED/DEAD |
 | `label_reports` | community reports in moderation (added) | not in the design |
+| `backfill_progress` / `backfill_freeze_events` (V2) | freeze backfill progress (`id` = `freezes:<network>`, `from_block`, `last_scanned_block`, `freezes_found`) and the issuer freeze/unfreeze events it found (PK `(backfill_id, event_id)`, `event_id` = `network:txHash:logIndex`; `target`, `token_contract`, `issuer`, `action` FREEZE/UNFREEZE, `event_name`, `block_number`, `block_time`); re-applied at startup without RPC | not in the design |
 | Not implemented yet | `tenants`, `audit_log` (audit is the `oci.audit` log stream), all chain-data and intelligence tables (`networks`, `index_checkpoints`, `blocks`, `token_transfers`, `address_edges`, `wallet_profiles`, `address_labels`, `signals`, `risk_scores`) | |
 
 Chain-derived state stays in memory and is rebuilt by re-indexing from the configured start block at restart; alert
 creation is idempotent on replayed events. TODO(persistence): chain-data tables, `audit_log`, tenancy.
+
+### Chain events (in memory, `ChainEvent`)
+
+| Type | Event id | Main fields |
+|---|---|---|
+| `TOKEN_TRANSFER` | `network:txHash:logIndex` | `transaction.{hash,log_index,from,to,amount,amount_raw,token.*}` |
+| `NATIVE_TRANSFER` | `network:txHash:native` | same `transaction.*` (no `token.contract`) + `transaction.{fee,success,method,contract_interaction}` |
+| `APPROVAL` | `network:txHash:logIndex` | `approval.{owner,spender,amount,amount_raw,unlimited}`, `token.{symbol,contract}` (+ `approval.{spender_is_contract,spender_age_days}` from enrichment) |
+| `CONTRACT_ADMIN_CHANGE` | `network:txHash:logIndex` | `admin.{contract,previous,new,role,renounced}` (role `owner` / `implementation` / `proxy-admin`; no `previous` for `Upgraded`), `contract.{address,event,new_owner}`, `token.*` for registry tokens |
+| `STABLECOIN_FREEZE` / `STABLECOIN_UNFREEZE` | `network:txHash:logIndex` | `freeze.{address,token,token_contract,action,issuer,event}` (+ `freeze.known_counterparties` from enrichment) |
+| `DETECTION_SIGNAL` | `signal:<id>` | `signal.{type,severity,confidence,evidence_level}` |
+
+All carry `network`, `block.{number,hash,timestamp}`. Label category `ISSUER_FROZEN` (source `tether-onchain` /
+`circle-onchain`, reliability 1.0, CONFIRMED_BY_SOURCE, reference = freeze tx hash, observedAt = block time) is
+created by a freeze and removed by the matching unfreeze; scoring weight 0.60, non-decaying while active.
 
 ## ER diagram
 
@@ -313,6 +329,31 @@ create table address_edges (
 create index on address_edges (network, to_address);
 ```
 
+### Freeze backfill (implemented, V2)
+
+```sql
+create table backfill_progress (
+  id                  text primary key,           -- freezes:<network>
+  network             text not null,
+  from_block          bigint not null check (from_block >= 0),
+  last_scanned_block  bigint not null,            -- [from_block, last_scanned_block] fully scanned
+  freezes_found       bigint not null default 0,
+  updated_at          timestamptz not null
+);
+create table backfill_freeze_events (
+  backfill_id text not null references backfill_progress (id),
+  event_id text not null,                         -- network:txHash:logIndex (same id as live indexing)
+  network text not null, tx_hash text not null, log_index int not null,
+  block_number bigint not null, block_hash text, block_time timestamptz not null,
+  target text not null, token_contract text not null, issuer text not null,
+  action text not null check (action in ('FREEZE', 'UNFREEZE')), event_name text not null,
+  primary key (backfill_id, event_id)
+);
+```
+
+A chunk's events and the new progress are written in one transaction before the events are applied; inserts are
+`on conflict do nothing`, so rescans are idempotent.
+
 ### Intelligence
 
 ```sql
@@ -332,7 +373,7 @@ create table address_labels (
   id              uuid primary key,
   network         text not null,
   address         text not null,
-  category        text not null,              -- EXCHANGE, SANCTIONED, MIXER, SCAM_REPORTED, ...
+  category        text not null,              -- EXCHANGE, SANCTIONED, MIXER, ISSUER_FROZEN, ...
   name            text,
   source          text not null,              -- 'ofac-sdn', 'community-report', ...
   source_ref      text,                       -- URL / list entry id
