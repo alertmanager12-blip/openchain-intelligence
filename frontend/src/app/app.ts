@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { SettingsService } from './core/settings.service';
+import { environment } from '../environments/environment';
 import { ThemeService } from './core/theme.service';
 import { GlobalSearch } from './layout/global-search';
 
@@ -34,7 +35,7 @@ interface NavItem { path: string; label: string; icon: string; exact?: boolean }
         <header class="topbar">
           <button class="btn btn--ghost menu" type="button" aria-label="Toggle navigation" [attr.aria-expanded]="navOpen()" (click)="navOpen.set(!navOpen())">☰</button>
           <oci-global-search class="search" />
-          @if (settings.connection().mock) {
+          @if (allowMock && settings.connection().mock) {
             <a class="mock" routerLink="/settings" title="All data is fictitious. Disable mock mode in Settings to use the backend.">Mock data</a>
           }
           <button class="btn btn--ghost" type="button" (click)="theme.toggle()" [attr.aria-label]="'Switch to ' + (theme.effective() === 'dark' ? 'light' : 'dark') + ' theme'">
@@ -49,6 +50,8 @@ interface NavItem { path: string; label: string; icon: string; exact?: boolean }
 export class App {
   protected readonly theme = inject(ThemeService);
   protected readonly settings = inject(SettingsService);
+  /** False in production builds: fake data can never be served there. */
+  protected readonly allowMock = environment.allowMock;
   protected readonly navOpen = signal(false);
   protected readonly nav: { title: string; items: NavItem[] }[] = [
     { title: 'Monitor', items: [

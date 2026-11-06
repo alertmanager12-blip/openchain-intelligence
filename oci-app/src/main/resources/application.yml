@@ -80,6 +80,10 @@ oci:
   # chains:
   #   tron:     { enabled: true, provider: trongrid, url: https://api.trongrid.io, api-key-header: TRON-PRO-API-KEY, api-key: ${TRONGRID_API_KEY} }
   #   ethereum: { enabled: true, provider: json-rpc, url: https://your-rpc.example, start-block: -100 }
+  notifications:
+    telegram:
+      # Bot token used by TELEGRAM connectors (destination chat id is given per connector). Unset = channel disabled.
+      bot-token: ${OCI_TELEGRAM_BOT_TOKEN:}
   chains: {}
 
 logging:

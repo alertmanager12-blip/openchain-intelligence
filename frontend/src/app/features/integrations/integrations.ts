@@ -7,12 +7,12 @@ import { timeAgo } from '../../shared/format';
 import { query } from '../../shared/query';
 import { UI } from '../../shared/ui';
 
-const TYPES: { type: ConnectorType; label: string; target: string; placeholder: string; help: string }[] = [
+const TYPES: { type: ConnectorType; label: string; target: string; placeholder: string; help: string; available?: false }[] = [
   { type: 'WEBHOOK', label: 'Webhook', target: 'HTTPS endpoint', placeholder: 'https://soc.example.com/hooks/oci', help: 'Signed JSON POST (HMAC-SHA256 in X-OCI-Signature). The signing secret is shown once.' },
   { type: 'SLACK', label: 'Slack', target: 'Incoming webhook URL', placeholder: 'https://hooks.slack.com/services/…', help: 'Posts a compact alert card to the channel bound to the webhook.' },
   { type: 'DISCORD', label: 'Discord', target: 'Channel webhook URL', placeholder: 'https://discord.com/api/webhooks/…', help: 'Posts an embed per alert.' },
-  { type: 'TELEGRAM', label: 'Telegram', target: 'Chat id', placeholder: '-1001234567890', help: 'Requires the server-side bot token; enter the destination chat id.' },
-  { type: 'EMAIL', label: 'Email', target: 'Recipient address', placeholder: 'soc@example.com', help: 'Sent through the server SMTP relay.' },
+  { type: 'TELEGRAM', label: 'Telegram', target: 'Chat id', placeholder: '-1001234567890', help: 'Requires OCI_TELEGRAM_BOT_TOKEN on the server; enter the destination chat id.' },
+  { type: 'EMAIL', label: 'Email', target: 'Recipient address', placeholder: 'soc@example.com', help: 'Not available in this version: the server has no mail transport yet.', available: false },
 ];
 
 @Component({
@@ -53,13 +53,13 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
           <h2>Add a connector</h2>
           <form class="stack" (submit)="$event.preventDefault(); create()">
             <div class="seg" role="radiogroup" aria-label="Connector type">
-              @for (t of types; track t.type) { <button type="button" role="radio" [attr.aria-checked]="type() === t.type" [attr.aria-pressed]="type() === t.type" (click)="type.set(t.type)">{{ t.label }}</button> }
+              @for (t of types; track t.type) { <button type="button" role="radio" [attr.aria-checked]="type() === t.type" [attr.aria-pressed]="type() === t.type" [disabled]="t.available === false" [attr.title]="t.available === false ? t.help : null" (click)="type.set(t.type)">{{ t.label }}</button> }
             </div>
             <p class="small muted">{{ meta().help }}</p>
             <label>Name<input name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="SOC on-call" required /></label>
             <label>{{ meta().target }}<input name="target" class="mono" [ngModel]="target()" (ngModelChange)="target.set($event)" [placeholder]="meta().placeholder" required /></label>
             @if (createError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-            <div><button class="btn btn--primary" type="submit" [disabled]="busy() || !name().trim() || !target().trim()">Create</button></div>
+            <div><button class="btn btn--primary" type="submit" [disabled]="busy() || meta().available === false || !name().trim() || !target().trim()">Create</button></div>
           </form>
           @if (secret(); as s) {
             <div class="note note--warn secret" role="alert">

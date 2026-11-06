@@ -11,12 +11,6 @@ export function formatUnits(raw: string | null | undefined, decimals: number, ma
   return `${neg ? '-' : ''}${grouped}${frac ? '.' + frac : ''}`;
 }
 
-/** Compare two raw integer amounts without precision loss. */
-export function compareRaw(a: string, b: string): number {
-  const x = BigInt(a || '0');
-  const y = BigInt(b || '0');
-  return x === y ? 0 : x < y ? -1 : 1;
-}
 
 export function shortHash(v: string | null | undefined, head = 6, tail = 4): string {
   if (!v) return '—';

@@ -16,6 +16,7 @@ public class OciProperties {
     private final Labels labels = new Labels();
     private final Security security = new Security();
     private final Ingestion ingestion = new Ingestion();
+    private final Notifications notifications = new Notifications();
     /** Real chain providers, keyed by network id (tron, ethereum, bsc, polygon). Off unless enabled. */
     private Map<String, Chain> chains = new LinkedHashMap<>();
 
@@ -24,6 +25,7 @@ public class OciProperties {
     public Labels getLabels() { return labels; }
     public Security getSecurity() { return security; }
     public Ingestion getIngestion() { return ingestion; }
+    public Notifications getNotifications() { return notifications; }
     public Map<String, Chain> getChains() { return chains; }
     public void setChains(Map<String, Chain> chains) { this.chains = chains; }
 
@@ -190,5 +192,20 @@ public class OciProperties {
         public void setAudience(String audience) { this.audience = audience; }
         public String getRolesClaim() { return rolesClaim; }
         public void setRolesClaim(String rolesClaim) { this.rolesClaim = rolesClaim; }
+    }
+
+    /** Server-side credentials of notification channels (never returned by the API). */
+    public static class Notifications {
+        private final Telegram telegram = new Telegram();
+
+        public Telegram getTelegram() { return telegram; }
+    }
+
+    public static class Telegram {
+        /** OCI_TELEGRAM_BOT_TOKEN; TELEGRAM connectors can be created only when set. */
+        private String botToken;
+
+        public String getBotToken() { return botToken; }
+        public void setBotToken(String botToken) { this.botToken = botToken; }
     }
 }

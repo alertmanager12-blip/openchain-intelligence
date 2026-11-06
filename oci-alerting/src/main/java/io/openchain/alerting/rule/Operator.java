@@ -29,6 +29,4 @@ public enum Operator {
     }
 
     public boolean ordered() { return ORDERED.contains(this); }
-
-    public boolean takesList() { return this == IN || this == NOT_IN; }
 }

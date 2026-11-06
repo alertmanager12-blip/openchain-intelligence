@@ -20,13 +20,6 @@ public final class EmailConnector implements NotificationConnector {
         public EmailMessage { to = List.copyOf(to); }
     }
 
-    /** Stub sender that records messages in memory (dev/tests: no SMTP). */
-    public static final class InMemoryEmailSender implements EmailSender {
-        private final java.util.List<EmailMessage> sent = new java.util.concurrent.CopyOnWriteArrayList<>();
-        @Override public void send(EmailMessage m) { sent.add(m); }
-        public List<EmailMessage> sent() { return List.copyOf(sent); }
-    }
-
     private static final Pattern ADDRESS = Pattern.compile("^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\\.[A-Za-z]{2,63}$");
 
     private final String id;

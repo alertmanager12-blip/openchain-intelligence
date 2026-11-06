@@ -109,4 +109,49 @@ class AlertAndWebhookApiTest extends ApiTestSupport {
         mvc.perform(delete("/api/v1/webhooks/" + id).header("X-API-Key", ADMIN)).andExpect(status().isNoContent());
         mvc.perform(post("/api/v1/webhooks/" + id + "/test").header("X-API-Key", ADMIN)).andExpect(status().isNotFound());
     }
+
+    @Test
+    void slackDiscordConnectorsDeliverAndTargetsAreMasked() throws Exception {
+        String slack = mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"SLACK\",\"name\":\"soc slack\",\"target\":\"https://hooks.slack.com/services/T000/B000/SECRETTOKEN\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("SLACK"))
+                .andExpect(jsonPath("$.secret").doesNotExist())
+                .andExpect(jsonPath("$.target").value("https://hooks.slack.com/…"))
+                .andReturn().getResponse().getContentAsString();
+        String slackId = JsonPath.read(slack, "$.id");
+        assertThat(slackId).matches("^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$");
+        // the token-bearing path never appears in listings
+        String list = mvc.perform(get("/api/v1/webhooks").header("X-API-Key", ADMIN)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(list).doesNotContain("SECRETTOKEN");
+        // delivery goes through the real SlackConnector to the full URL
+        int before = http.calls.size();
+        mvc.perform(post("/api/v1/webhooks/" + slackId + "/test").header("X-API-Key", ADMIN))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.delivered").value(true));
+        assertThat(http.calls).hasSize(before + 1);
+        assertThat(http.calls.getLast().toString()).isEqualTo("https://hooks.slack.com/services/T000/B000/SECRETTOKEN");
+
+        mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"DISCORD\",\"name\":\"soc discord\",\"target\":\"https://discord.com/api/webhooks/1/abc\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.type").value("DISCORD"));
+        // a Slack connector refuses a non-Slack host
+        mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"SLACK\",\"name\":\"x\",\"target\":\"https://evil.example/services/x\"}"))
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.errors[0].code").value("invalid_target"));
+    }
+
+    @Test
+    void unavailableChannelsAreRefusedExplicitly() throws Exception {
+        mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"EMAIL\",\"name\":\"mail\",\"target\":\"soc@example.com\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].pointer").value("/type"))
+                .andExpect(jsonPath("$.errors[0].code").value("unsupported"));
+        // no OCI_TELEGRAM_BOT_TOKEN in the test profile
+        mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"TELEGRAM\",\"name\":\"tg\",\"target\":\"-1001234567890\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].code").value("not_configured"));
+    }
 }

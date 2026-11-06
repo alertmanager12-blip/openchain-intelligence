@@ -8,6 +8,7 @@ import { ThemeService, ThemePref } from '../../core/theme.service';
 import { timeAgo } from '../../shared/format';
 import { query } from '../../shared/query';
 import { UI } from '../../shared/ui';
+import { environment } from '../../../environments/environment';
 
 const SCOPES = ['rules:read', 'rules:write', 'alerts:read', 'alerts:write', 'wallets:read', 'labels:write'];
 
@@ -22,7 +23,9 @@ const SCOPES = ['rules:read', 'rules:write', 'alerts:read', 'alerts:write', 'wal
       <div class="grid grid-2">
         <section class="card stack">
           <h2>Connection</h2>
-          <label class="check"><input type="checkbox" [checked]="conn().mock" (change)="settings.update({ mock: !conn().mock }); reloadAll()" />Mock mode (in-memory fictitious data, no backend)</label>
+          @if (allowMock) {
+            <label class="check"><input type="checkbox" [checked]="conn().mock" (change)="settings.update({ mock: !conn().mock }); reloadAll()" />Mock mode (in-memory fictitious data, no backend; development builds only)</label>
+          }
           <label>Authentication<select [ngModel]="conn().authMode" (ngModelChange)="setMode($event)">
             <option value="none">None (dev)</option><option value="bearer">Bearer token (OIDC)</option><option value="apiKey">API key</option>
           </select></label>
@@ -89,6 +92,8 @@ export class SettingsPage {
   readonly settings = inject(SettingsService);
   readonly theme = inject(ThemeService);
   readonly conn = this.settings.connection;
+  /** Mock mode exists only in development builds. */
+  readonly allowMock = environment.allowMock;
   readonly themes: ThemePref[] = ['system', 'light', 'dark'];
   readonly roles: Role[] = ['ADMIN', 'ANALYST', 'VIEWER'];
   readonly scopes = SCOPES;

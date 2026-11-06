@@ -16,8 +16,6 @@ public final class EvmCodec {
         return hex != null && (hex.startsWith("0x") || hex.startsWith("0X")) ? hex.substring(2) : hex;
     }
 
-    public static String with0x(String hex) { return hex.startsWith("0x") ? hex.toLowerCase(Locale.ROOT) : "0x" + hex.toLowerCase(Locale.ROOT); }
-
     public static BigInteger quantity(String hex) {
         String h = strip0x(hex);
         if (h == null || h.isEmpty()) return BigInteger.ZERO;

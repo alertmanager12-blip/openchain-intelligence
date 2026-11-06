@@ -24,10 +24,6 @@ public record RpcEndpoint(String name, URI baseUri, Map<String, String> headers,
         return new RpcEndpoint(name, URI.create(url), Map.of(), null, null, null);
     }
 
-    public RpcEndpoint withResilience(ResilienceConfig r) {
-        return new RpcEndpoint(name, baseUri, headers, connectTimeout, requestTimeout, r);
-    }
-
     public RpcEndpoint withRequestTimeout(Duration t) {
         return new RpcEndpoint(name, baseUri, headers, connectTimeout, t, resilience);
     }

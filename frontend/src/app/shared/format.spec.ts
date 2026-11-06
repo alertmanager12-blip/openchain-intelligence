@@ -1,4 +1,4 @@
-import { compareRaw, formatUnits, shortHash } from './format';
+import { formatUnits, shortHash } from './format';
 
 describe('formatUnits', () => {
   it('formats exactly with grouping and trimmed fractions', () => {
@@ -13,9 +13,6 @@ describe('formatUnits', () => {
     expect(formatUnits('0', 6)).toBe('0');
     expect(formatUnits('-1500000', 6)).toBe('-1.5');
     expect(formatUnits('1.5', 6)).toBe('—');
-  });
-  it('compares raw amounts beyond 2^53', () => {
-    expect(compareRaw('9007199254740993', '9007199254740992')).toBe(1);
   });
   it('shortens hashes', () => {
     expect(shortHash('0x1234567890abcdef')).toBe('0x1234…cdef');

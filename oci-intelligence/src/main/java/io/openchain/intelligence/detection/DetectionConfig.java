@@ -72,8 +72,5 @@ public record DetectionConfig(
                 20);
     }
 
-    public DetectionConfig withStructuring(Structuring s) { return new DetectionConfig(unusualAmount, s, fastForwarding, dormancy, rapidDrain, fanOut, circularFlow, exposure, approval, maxEvidenceItems); }
     public DetectionConfig withFanOut(FanOut f) { return new DetectionConfig(unusualAmount, structuring, fastForwarding, dormancy, rapidDrain, f, circularFlow, exposure, approval, maxEvidenceItems); }
-    public DetectionConfig withExposure(Exposure e) { return new DetectionConfig(unusualAmount, structuring, fastForwarding, dormancy, rapidDrain, fanOut, circularFlow, e, approval, maxEvidenceItems); }
-    public DetectionConfig withUnusualAmount(UnusualAmount u) { return new DetectionConfig(u, structuring, fastForwarding, dormancy, rapidDrain, fanOut, circularFlow, exposure, approval, maxEvidenceItems); }
 }

@@ -143,11 +143,6 @@ public class ChainIngestionService {
 
     // ---- polling ----------------------------------------------------------------------------------------------
 
-    /** Indexes everything available on every network. */
-    public void pollAll() {
-        for (NetworkRuntime rt : runtimes()) poll(rt);
-    }
-
     /** Indexes everything currently available on one network (bounded), recording errors instead of throwing. */
     public synchronized void poll(NetworkRuntime rt) {
         rt.lastPollAt = clock.instant();

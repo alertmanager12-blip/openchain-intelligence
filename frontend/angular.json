@@ -50,7 +50,13 @@
                   "maximumError": "10kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/app/core/mock/mock-backend.interceptor.ts",
+                  "with": "src/app/core/mock/mock-backend.interceptor.prod.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,

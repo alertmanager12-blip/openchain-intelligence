@@ -18,7 +18,4 @@ public record IndexerConfig(String indexerId, long startBlock, int confirmations
     public static IndexerConfig of(String indexerId, Network network, long startBlock) {
         return new IndexerConfig(indexerId, startBlock, network.defaultConfirmations(), network.maxReorgDepth(), 100);
     }
-
-    public IndexerConfig withConfirmations(int c) { return new IndexerConfig(indexerId, startBlock, c, windowSize, maxBlocksPerPoll); }
-    public IndexerConfig withWindowSize(int w) { return new IndexerConfig(indexerId, startBlock, confirmations, w, maxBlocksPerPoll); }
 }

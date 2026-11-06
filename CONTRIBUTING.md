@@ -18,7 +18,7 @@ Thanks for your interest! OCI is an Apache-2.0 project and welcomes code, rules,
 ```bash
 git clone https://github.com/openchain-intelligence/openchain-intelligence.git
 cd openchain-intelligence
-mvn -B verify                         # JDK 21, Docker for Testcontainers
+mvn -B verify                         # JDK 21+, no Docker needed
 cd frontend && npm ci && npm test
 docker compose up -d --build          # full stack in demo mode
 ```

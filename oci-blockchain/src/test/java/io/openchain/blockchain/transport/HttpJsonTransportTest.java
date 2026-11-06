@@ -80,6 +80,9 @@ class HttpJsonTransportTest {
         server.route("/x", r -> Response.ok("{}"));
         ResilienceConfig r = new ResilienceConfig(1, Duration.ofMillis(100), Duration.ofSeconds(1), 0, 5, 2, 10, Duration.ofSeconds(1));
         java.util.List<Duration> waits = new java.util.concurrent.CopyOnWriteArrayList<>();
+        // Warm up the local server and the HTTP stack with a throwaway transport: otherwise a slow first request
+        // (JIT, server start) lets the bucket refill and the measured transport never has to wait (flaky test).
+        new HttpJsonTransport(endpoint("warmup", server.url(), r), Clock.systemUTC(), Sleeper.SYSTEM).get("/x");
         HttpJsonTransport t = new HttpJsonTransport(endpoint("stub", server.url(), r), Clock.systemUTC(),
                 d -> { waits.add(d); Sleeper.SYSTEM.sleep(d); });
         long t0 = System.nanoTime();

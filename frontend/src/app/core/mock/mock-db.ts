@@ -415,4 +415,3 @@ export function durationSeconds(d: string): number {
   return Number(m[1]) * { s: 1, m: 60, h: 3600, d: 86400 }[m[2] as 's' | 'm' | 'h' | 'd'];
 }
 
-export const SEVERITY_ORDER = SEVERITIES;

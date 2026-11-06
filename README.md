@@ -13,10 +13,10 @@ Licence: [Apache-2.0](LICENSE).
 - **Explainable by design** — every risk point and every alert links to evidence: transactions, rule version, source, timestamp.
 - **Honest about evidence** — signals are tagged `ANOMALY`, `RISK_SIGNAL` or `CONFIRMED_BY_SOURCE`. OCI never labels an address as criminal.
 - **Programmable, safely** — rules are declarative data (`openchain.io/rule/v1`): filters, sliding windows, group-by, dedup, cooldown. No scripting, no code execution.
-- **Reorg-aware** — confirmations are first-class; alerts depending on orphaned blocks are retracted.
+- **Reorg-aware** — confirmations are first-class; alerts depending on orphaned blocks are retracted (risk signals are not rolled back yet).
 - **Exact amounts** — `BigInteger`/`BigDecimal` end to end.
-- **Multi-chain** — one provider SPI, failover and rate limiting; TRON and EVM first.
-- **Open and portable** — Apache-2.0, PostgreSQL, OpenTelemetry, any OIDC provider.
+- **Multi-chain** — one provider SPI with retries, circuit breaker and client-side rate limiting; TRON and EVM (Ethereum, BSC, Polygon) first.
+- **Open and portable** — Apache-2.0, any OIDC provider, a single Docker Compose stack.
 
 ## Features
 
@@ -25,10 +25,12 @@ Licence: [Apache-2.0](LICENSE).
 | Investigation | Wallet analysis (profile, counterparties, signals, labels), transaction analysis, counterparty graph explorer (depth ≤ 3) |
 | Risk intelligence | Detectors for transaction patterns (structuring, fast forwarding, unusual amounts…), wallet patterns (dormant reactivation, rapid drain…), exposure (sanctioned/flagged, direct and indirect); explainable 0–100 score |
 | Monitoring | YAML/JSON rules, DRY_RUN on history, versioning, alert lifecycle (acknowledge, assign, comment, resolve, false positive) |
-| Notifications | Webhooks (HMAC-SHA256, SSRF-guarded, retries), email, Slack, Telegram |
-| Platform | REST API v1 (problem+json, cursor pagination, idempotency keys, rate-limit headers), OIDC + API keys, RBAC, tenant isolation, audit log, Prometheus metrics, OpenTelemetry traces |
+| Notifications | Webhooks (HMAC-SHA256, SSRF-guarded, retries, dead letter), Slack, Discord, Telegram. Email/push: *planned* (no transport yet) |
+| Platform | REST API v1 (problem+json, cursor pagination), API keys (hashed, scoped, expiring, revocable) and optional OIDC, per-endpoint permissions, audit log stream (`oci.audit`). *Planned*: persistence (PostgreSQL), idempotency keys, rate limiting, tenant isolation, Prometheus metrics, OpenTelemetry traces |
 
 ## Architecture
+
+Target architecture (PostgreSQL persistence is not implemented yet: the MVP keeps state in memory):
 
 ```mermaid
 flowchart LR
@@ -47,7 +49,7 @@ flowchart LR
   end
   PG[(PostgreSQL)]
   FE[Angular UI<br/>Cytoscape.js]
-  EXT[Webhooks / Email / Slack / Telegram]
+  EXT[Webhooks / Slack / Discord / Telegram]
 
   TG & RPC --> IDX -->|ChainEvent| DET -->|signals| SC
   IDX -->|ChainEvent| RE
@@ -110,7 +112,7 @@ actions:
 | `oci-blockchain` | TRON (TronGrid-compatible) and EVM JSON-RPC providers, failover, indexer, reorg handling | **MVP** — in progress |
 | `oci-intelligence` | Detectors, explainable risk scoring, graph exposure | **MVP** — in progress |
 | `oci-alerting` | Rule DSL v1, evaluator (windows, dedup, cooldown), alert lifecycle, connectors | **MVP** — in progress |
-| `oci-app` | Spring Boot app: REST API v1, security, persistence, demo mode | **MVP** — in progress |
+| `oci-app` | Spring Boot app: REST API v1, API-key/OIDC security, demo mode (persistence *planned*) | **MVP** — in progress |
 | `frontend` | Angular UI: analysis, graph explorer, rules, alerts | **MVP** — in progress |
 | Bitcoin / Solana providers | UTXO and slot-based chains | *planned* |
 | Kafka transport, ClickHouse analytics, Apache AGE graph | Scale-out options | *planned* ([ADR-0004](docs/adr/0004-postgresql-first-clickhouse-later.md), [0005](docs/adr/0005-graph-store.md), [0006](docs/adr/0006-event-bus-outbox-kafka-later.md)) |
@@ -126,8 +128,9 @@ actions:
 ## Build from source
 
 ```bash
-mvn -B verify                                     # JDK 21 (Docker needed for integration tests)
-cd frontend && npm ci && npm run build && npm test
+mvn -B verify                                     # JDK 21+, no Docker needed
+cd frontend && npm ci && npm test && npm run build # Node version from frontend/.nvmrc
+bash deploy/smoke-test.sh                         # optional: Docker Compose end-to-end smoke test
 ```
 
 ## Contributing

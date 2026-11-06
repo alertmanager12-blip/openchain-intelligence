@@ -2,6 +2,8 @@
 
 Principle: a feature is done when its tests run green in CI. Pyramid: many fast unit tests on the framework-free domain, focused integration tests on real infrastructure, a few end-to-end scenarios on the demo chain.
 
+> **Status (0.1.0).** Implemented and run on every build: unit tests in every module, adapter tests against a local HTTP server with hand-written JSON fixtures (not yet recorded from real nodes), API tests with Spring MockMvc (security, problem+json, rules, alerts, connectors), an in-process end-to-end test (`EndToEndPipelineTest`: rule → simulated transfer → detection → alert → signed webhook), a frontend/backend rule contract test, Vitest frontend tests, CodeQL, and the Docker Compose smoke test (`deploy/smoke-test.sh`). **Planned** (rows below that need them): property-based tests (jqwik), WireMock, database integration tests (there is no persistence yet), tenant isolation, OpenAPI diff, load tests.
+
 | Level | Scope | Tools | Where | Runs |
 |---|---|---|---|---|
 | Unit | Domain model, scoring maths, rule compiler/evaluator, window structures, SSRF guard, HMAC | JUnit 5, AssertJ | each module `src/test` | every build |

@@ -10,8 +10,12 @@ their own licences, including:
     https://spring.io
   - Jackson (Apache License 2.0)
     https://github.com/FasterXML/jackson
-  - PostgreSQL JDBC Driver (BSD-2-Clause)
-    https://jdbc.postgresql.org
+  - SnakeYAML and SnakeYAML Engine (Apache License 2.0)
+    https://bitbucket.org/snakeyaml
+  - springdoc-openapi and Swagger UI (Apache License 2.0)
+    https://springdoc.org
+  - RxJS (Apache License 2.0)
+    https://rxjs.dev
   - Angular (MIT)
     https://angular.dev
   - Cytoscape.js (MIT)

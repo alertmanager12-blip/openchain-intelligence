@@ -73,13 +73,4 @@ public record ScoringConfig(Map<String, Double> weights, double defaultSignalWei
         sev.put(Severity.HIGH, 0.9); sev.put(Severity.CRITICAL, 1.0);
         return new ScoringConfig(w, 0.15, Duration.ofDays(180), Set.of(labelFactor(LabelCategory.SANCTIONED)), sev, "oci-risk-1");
     }
-
-    public ScoringConfig withWeight(String factor, double weight) {
-        Map<String, Double> w = new HashMap<>(weights); w.put(factor, weight);
-        return new ScoringConfig(w, defaultSignalWeight, halfLife, nonDecayingFactors, severityMultipliers, modelVersion);
-    }
-
-    public ScoringConfig withHalfLife(Duration hl) {
-        return new ScoringConfig(weights, defaultSignalWeight, hl, nonDecayingFactors, severityMultipliers, modelVersion);
-    }
 }

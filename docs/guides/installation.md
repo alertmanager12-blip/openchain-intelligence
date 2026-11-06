@@ -25,52 +25,62 @@ Services:
 | Service | URL | Notes |
 |---|---|---|
 | frontend | http://localhost:4200 | nginx serving the Angular build, proxies `/api` to the app |
-| app | http://localhost:8080 | API v1, `/actuator/health`, `/actuator/prometheus` |
-| postgres | localhost:5432 | data volume `pgdata` |
+| app | http://localhost:8080 | API v1 and `/actuator/health` (other actuator endpoints require `keys:admin`) |
+| postgres | localhost:5432 | started with a `pgdata` volume, **not used yet**: the application keeps all state in memory (see "Current limitations") |
 
-With observability:
+In demo mode (`OCI_DEMO_MODE=true`, the compose default) the app indexes two simulated chains (TRON, Ethereum), loads the community rule pack from `rules/` and prints a generated admin API key **once** in its logs:
+
+```bash
+docker compose logs app | grep "demo admin API key"
+```
+
+Paste it in the console (Settings, authentication "API key"). `deploy/smoke-test.sh` starts the stack and checks authentication, rules, demo scenarios A–E and the frontend proxy end to end.
+
+### Observability profile (not instrumented yet)
 
 ```bash
 docker compose --profile observability up -d
 ```
 
-adds Prometheus (http://localhost:9090), Grafana (http://localhost:3000, admin password from `GRAFANA_ADMIN_PASSWORD`) and the OpenTelemetry Collector (OTLP gRPC 4317 / HTTP 4318).
+starts Prometheus (http://localhost:9090), Grafana (http://localhost:3000, admin password from `GRAFANA_ADMIN_PASSWORD`) and an OpenTelemetry Collector. **The application does not export metrics or traces yet** (no Prometheus registry, no OpenTelemetry SDK): Prometheus finds no target and the Grafana dashboard stays empty. Instrumentation is planned; until then this profile only provisions the tooling.
 
 ## Configuration
 
-All settings are environment variables (Spring relaxed binding).
+Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml`, the authoritative list), settable as environment variables through Spring relaxed binding.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/oci` | JDBC URL |
-| `SPRING_DATASOURCE_USERNAME` / `_PASSWORD` | `oci` / from `.env` | DB credentials |
-| `OCI_DEMO_MODE` | `true` in compose | Simulated chain + demo tenant/key. **Set `false` in production.** |
-| `OCI_ROLES` | `api,worker` | Process roles |
-| `OCI_NETWORKS_TRON_ENABLED` | `false` | Enable TRON live indexing |
-| `OCI_NETWORKS_TRON_PROVIDERS_0_URL` | — | TronGrid-compatible base URL (e.g. `https://api.trongrid.io` or own node) |
-| `OCI_NETWORKS_TRON_PROVIDERS_0_API_KEY` | — | TronGrid API key |
-| `OCI_NETWORKS_ETHEREUM_ENABLED` | `false` | Enable Ethereum |
-| `OCI_NETWORKS_ETHEREUM_PROVIDERS_0_URL` | — | JSON-RPC URL |
-| `OCI_SECURITY_OIDC_ISSUER_URI` | — | OIDC issuer (enables JWT auth) |
-| `OCI_SECURITY_API_KEY_PEPPER` | — | Secret pepper for API key hashing (≥ 32 bytes) |
-| `OCI_CRYPTO_MASTER_KEY` | — | Base64 256-bit key for connector secret encryption |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | e.g. `http://otel-collector:4318` |
+| `OCI_DEMO_MODE` | `true` in compose, `false` otherwise | Simulated chains, fictitious labels, generated admin key. **Set `false` in production.** |
+| `OCI_SECURITY_API_KEY_PEPPER` | — | Secret pepper for API key hashing (≥ 32 bytes). If unset a random one is used and keys are invalidated at every restart. |
+| `OCI_SECURITY_OIDC_ISSUER_URI` / `OCI_SECURITY_OIDC_AUDIENCE` | — | OIDC issuer (enables JWT bearer authentication) and optional audience |
+| `OCI_CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Allowed browser origins |
+| `OCI_RULES_DIRS` | `rules,../rules` | Rule pack directories (first existing wins); the image ships `/app/rules` |
+| `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector) |
+| `OCI_CHAINS_TRON_ENABLED`, `OCI_CHAINS_TRON_PROVIDER=trongrid`, `OCI_CHAINS_TRON_URL`, `OCI_CHAINS_TRON_API_KEY_HEADER`, `OCI_CHAINS_TRON_API_KEY` | off | Live TRON indexing through a TronGrid-compatible API |
+| `OCI_CHAINS_ETHEREUM_ENABLED`, `OCI_CHAINS_ETHEREUM_PROVIDER=json-rpc`, `OCI_CHAINS_ETHEREUM_URL`, `OCI_CHAINS_ETHEREUM_START_BLOCK` | off | Live EVM indexing through JSON-RPC (also `bsc`, `polygon`) |
 
-> Variable names for networks and security are the reference contract; check `oci-app/src/main/resources/application.yml` of your release for the authoritative list.
+Live providers are implemented but have not been validated against production nodes yet.
+
+### Current limitations
+
+- **No persistence**: rules, alerts, API keys, connectors, profiles and scores live in memory and are lost on restart. PostgreSQL is provisioned for the upcoming persistence layer.
+- No rate limiting, idempotency keys or `If-Match` concurrency control yet.
+- Notification channels: WEBHOOK, SLACK, DISCORD, TELEGRAM. EMAIL and PUSH need a transport that is not available yet.
 
 ## Option B — from source
 
 ```bash
-mvn -B verify                         # backend build + tests (needs Docker for Testcontainers)
-cd frontend && npm ci && npm run build
-java -jar oci-app/target/oci-app-*.jar --spring.profiles.active=local
+mvn -B verify                                        # backend build + tests (JDK 21+, no Docker needed)
+cd frontend && npm ci && npm test && npm run build   # Node version from frontend/.nvmrc
+cd .. && mvn -pl oci-app spring-boot:run             # demo profile: simulated chains + documented UI key
+cd frontend && npm run start:api                     # console on http://localhost:4200 against the local app
 ```
 
 ## Upgrades
 
-- Database migrations run automatically at start-up (Flyway). Back up PostgreSQL first (`pg_dump -Fc`).
+- There is no persistent state yet, so upgrading means restarting the containers (state is rebuilt from the chains and the rule pack).
 - Read `CHANGELOG.md` for breaking changes; API v1 is additive within the major version.
 
 ## Production checklist
 
-See [security-hardening.md](security-hardening.md). Minimum: `OCI_DEMO_MODE=false`, TLS reverse proxy, OIDC configured, strong DB password, `OCI_CRYPTO_MASTER_KEY` and `OCI_SECURITY_API_KEY_PEPPER` from a secret store, backups, monitoring enabled.
+See [security-hardening.md](security-hardening.md). Minimum: `OCI_DEMO_MODE=false`, TLS reverse proxy, OIDC configured, `OCI_SECURITY_API_KEY_PEPPER` from a secret store, port 8080 bound to a private interface only.

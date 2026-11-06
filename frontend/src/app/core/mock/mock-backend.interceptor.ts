@@ -5,10 +5,10 @@ import { environment } from '../../../environments/environment';
 import { SettingsService } from '../settings.service';
 
 /**
- * Mock mode: answers /api/v1 from in-memory fake data. The mock store is code-split and only downloaded
- * when mock mode is on, so production bundles do not carry it.
+ * Mock mode (development builds only): answers /api/v1 from in-memory fake data. Production builds replace this
+ * file with mock-backend.interceptor.prod.ts (angular.json fileReplacements), so they contain no fake data at all.
  */
 export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
-  if (!inject(SettingsService).connection().mock || !req.url.startsWith(environment.apiBaseUrl)) return next(req);
+  if (!environment.allowMock || !inject(SettingsService).connection().mock || !req.url.startsWith(environment.apiBaseUrl)) return next(req);
   return from(import('./mock-routes')).pipe(switchMap((m) => m.handleMock(req)));
 };

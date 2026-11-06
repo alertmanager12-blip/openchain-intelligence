@@ -136,11 +136,12 @@ class ConnectorsTest {
     }
 
     @Test void emailAndPushStubs() {
-        EmailConnector.InMemoryEmailSender mail = new EmailConnector.InMemoryEmailSender();
+        List<EmailConnector.EmailMessage> mails = new java.util.concurrent.CopyOnWriteArrayList<>();
+        EmailConnector.EmailSender mail = mails::add;
         EmailConnector email = new EmailConnector("mail", mail, "alerts@openchain.example", List.of("soc@corp.example"));
         Notification n = notification(ActionType.EMAIL, "mail");
         assertThat(email.send(n).success()).isTrue();
-        assertThat(mail.sent()).singleElement().satisfies(m -> {
+        assertThat(mails).singleElement().satisfies(m -> {
             assertThat(m.subject()).startsWith("[OpenChain HIGH]").doesNotContain("\n");
             assertThat(m.idempotencyId()).isEqualTo("delivery-42");
             assertThat(m.textBody()).contains(NotificationFormatter.DISCLAIMER);
@@ -149,9 +150,10 @@ class ConnectorsTest {
         EmailConnector failing = new EmailConnector("m", m -> { throw new IllegalStateException("smtp down"); }, "a@b.example", List.of("c@d.example"));
         assertThat(failing.send(n).retryable()).isTrue();
 
-        PushConnector.InMemoryPushSender push = new PushConnector.InMemoryPushSender();
+        List<PushConnector.PushMessage> pushes = new java.util.concurrent.CopyOnWriteArrayList<>();
+        PushConnector.PushSender push = pushes::add;
         assertThat(new PushConnector("push", push, "soc-oncall").send(notification(ActionType.PUSH, "push")).success()).isTrue();
-        assertThat(push.sent().getFirst().data()).containsEntry("alertId", "alert-1");
+        assertThat(pushes.getFirst().data()).containsEntry("alertId", "alert-1");
     }
 
     @Test void internalEventCarriesLoopProtection() {

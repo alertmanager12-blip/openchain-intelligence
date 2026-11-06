@@ -32,6 +32,6 @@ C4Container
 
 ## Notes
 
-- `api` and `worker` are the **same image**, selected by `OCI_ROLES` (`api`, `worker`, or `api,worker` in the MVP).
+- `api` and `worker` are the **same image**; the MVP runs both in one process. Role selection by `OCI_ROLES` (`api`, `worker`, `api,worker`) is planned and not implemented yet.
 - Workers coordinate only through PostgreSQL (checkpoints, `FOR UPDATE SKIP LOCKED` leases, outbox). Any number of worker replicas can run; one indexer lease per network is held at a time.
 - Optional containers (not shown): OpenTelemetry Collector, Prometheus, Grafana (`observability` profile); later Kafka, ClickHouse, Valkey.

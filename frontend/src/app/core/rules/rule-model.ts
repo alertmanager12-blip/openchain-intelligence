@@ -223,6 +223,3 @@ export function emptyRule(): RuleDraft {
   };
 }
 
-export function fieldType(path: string, catalog: FieldDef[]): FieldType | undefined {
-  return catalog.find((f) => f.path === path)?.type;
-}

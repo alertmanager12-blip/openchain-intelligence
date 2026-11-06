@@ -26,25 +26,34 @@ public class WebhookController {
 
     public WebhookController(WebhookRegistry webhooks) { this.webhooks = webhooks; }
 
-    /** {@code url} (doc) or {@code target} (SPA). Only type WEBHOOK is supported in this version. */
+    /**
+     * {@code url} (doc) or {@code target} (SPA). Types: WEBHOOK (default), SLACK, DISCORD (https incoming-webhook URL),
+     * TELEGRAM (chat id; the bot token is server configuration). EMAIL is not available: no mail transport yet.
+     */
     public record CreateRequest(String type, String name, String url, String target, List<String> events) {}
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Dto.WebhookDto create(@RequestBody CreateRequest req, Authentication auth) {
         List<ApiException.FieldError> errors = new ArrayList<>();
-        String type = req.type() == null || req.type().isBlank() ? "WEBHOOK" : req.type().trim().toUpperCase();
-        if (!type.equals("WEBHOOK")) errors.add(new ApiException.FieldError("/type", "unsupported", "only WEBHOOK connectors are supported"));
+        String type = req.type() == null || req.type().isBlank() ? "WEBHOOK" : req.type().trim().toUpperCase(java.util.Locale.ROOT);
+        if (!WebhookRegistry.TYPES.contains(type)) {
+            errors.add(new ApiException.FieldError("/type", "unsupported",
+                    "EMAIL".equals(type) ? "EMAIL connectors are not available: no mail transport is configured in this version"
+                            : "supported types: " + String.join(", ", WebhookRegistry.TYPES)));
+        } else if (type.equals("TELEGRAM") && !webhooks.telegramConfigured()) {
+            errors.add(new ApiException.FieldError("/type", "not_configured", "TELEGRAM requires OCI_TELEGRAM_BOT_TOKEN on the server"));
+        }
         String name = req.name() == null ? "" : req.name().strip();
         if (name.isEmpty() || name.length() > 100) errors.add(new ApiException.FieldError("/name", "required", "name is required (max 100 chars)"));
         String raw = req.url() != null ? req.url() : req.target();
-        URI uri = null;
         String ptr = req.url() != null ? "/url" : "/target";
-        if (raw == null || raw.isBlank()) {
-            errors.add(new ApiException.FieldError(ptr, "required", "url is required"));
-        } else {
+        String target = raw == null ? "" : raw.strip();
+        if (target.isEmpty()) {
+            errors.add(new ApiException.FieldError(ptr, "required", type.equals("TELEGRAM") ? "chat id is required" : "url is required"));
+        } else if (!type.equals("TELEGRAM")) {
             try {
-                uri = new URI(raw.trim());
+                URI uri = new URI(target);
                 if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null)
                     errors.add(new ApiException.FieldError(ptr, "invalid_url", "must be an https URL without credentials"));
             } catch (URISyntaxException e) {
@@ -56,8 +65,14 @@ public class WebhookController {
             if (!WebhookRegistry.EVENTS.contains(events.get(i)))
                 errors.add(new ApiException.FieldError("/events/" + i, "unknown_event", "unknown event " + events.get(i)));
         }
-        if (!errors.isEmpty()) throw ApiException.validation("webhook is invalid", errors);
-        WebhookRegistry.Created c = webhooks.create(name, uri, events, auth.getName());
+        if (!errors.isEmpty()) throw ApiException.validation("connector is invalid", errors);
+        WebhookRegistry.Created c;
+        try {
+            c = webhooks.create(type, name, target, events, auth.getName());
+        } catch (IllegalArgumentException e) {
+            // the connector's own target validation (e.g. Slack host, Telegram chat id format)
+            throw ApiException.validation("connector is invalid", List.of(new ApiException.FieldError(ptr, "invalid_target", e.getMessage())));
+        }
         return dto(c.webhook(), c.secret());
     }
 
@@ -78,7 +93,9 @@ public class WebhookController {
     }
 
     private static Dto.WebhookDto dto(WebhookRegistry.Webhook w, String secret) {
-        return new Dto.WebhookDto(w.id(), w.type(), w.name(), w.url(), w.url(), w.events(), w.enabled(), w.createdAt(),
+        // targets are masked everywhere (Slack/Discord URL paths and Telegram chat ids are credentials-like)
+        String shown = WebhookRegistry.masked(w);
+        return new Dto.WebhookDto(w.id(), w.type(), w.name(), shown, shown, w.events(), w.enabled(), w.createdAt(),
                 w.lastDeliveryAt(), w.lastDeliveryStatus(), secret);
     }
 }

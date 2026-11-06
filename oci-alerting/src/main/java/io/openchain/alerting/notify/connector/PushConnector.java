@@ -18,13 +18,6 @@ public final class PushConnector implements NotificationConnector {
         public PushMessage { data = Map.copyOf(data); }
     }
 
-    /** Stub sender recording messages in memory. */
-    public static final class InMemoryPushSender implements PushSender {
-        private final List<PushMessage> sent = new java.util.concurrent.CopyOnWriteArrayList<>();
-        @Override public void send(PushMessage m) { sent.add(m); }
-        public List<PushMessage> sent() { return List.copyOf(sent); }
-    }
-
     private final String id;
     private final PushSender sender;
     private final String topic;
