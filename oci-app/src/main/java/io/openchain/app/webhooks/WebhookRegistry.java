@@ -29,16 +29,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * Operator-managed notification connectors: WEBHOOK (signed JSON), SLACK, DISCORD (incoming-webhook URLs) and
  * TELEGRAM (chat id; the bot token is server configuration). The WEBHOOK signing secret (32 bytes from SecureRandom)
- * is generated here, returned once, and only kept inside the connector instance. Outbound calls go through the
+ * is generated here and returned once; it is stored through {@link ConnectorRepository} (in memory, or encrypted
+ * with AES-256-GCM in PostgreSQL together with the target) so that connectors survive a restart. Outbound calls go through the
  * {@link OutboundHttp} bean (SafeHttpClient + SsrfGuard in production). {@link ConnectorRegistry} has no removal, so
  * each connector is registered through a switchable wrapper; a deleted connector fails every delivery permanently.
  * Targets often embed credentials (Slack/Discord URL paths), so only {@link #masked} forms ever leave this class.
- * TODO(persistence): encrypted secret storage, secret rotation. EMAIL/PUSH need a transport (SMTP, FCM) first.
+ * TODO: secret rotation (two active secrets, ADR-0009), master key rotation. EMAIL/PUSH need a transport (SMTP, FCM) first.
  */
 @Service
 public class WebhookRegistry {
@@ -48,7 +51,7 @@ public class WebhookRegistry {
     public record Webhook(String id, String type, String name, String url, List<String> events, boolean enabled, Instant createdAt,
                           Instant lastDeliveryAt, String lastDeliveryStatus) {
         public Webhook { events = List.copyOf(events); }
-        Webhook withDelivery(Instant at, boolean ok) { return new Webhook(id, type, name, url, events, enabled, createdAt, at, ok ? "OK" : "FAILED"); }
+        public Webhook withDelivery(Instant at, boolean ok) { return new Webhook(id, type, name, url, events, enabled, createdAt, at, ok ? "OK" : "FAILED"); }
     }
 
     public record Created(Webhook webhook, String secret) {}
@@ -70,20 +73,41 @@ public class WebhookRegistry {
         }
     }
 
+    private static final Logger log = LoggerFactory.getLogger(WebhookRegistry.class);
+
     private final ConnectorRegistry connectors;
     private final OutboundHttp http;
     private final Clock clock;
     private final String telegramBotToken;
+    private final ConnectorRepository repository;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Webhook> webhooks = new ConcurrentHashMap<>();
     private final Map<String, Switchable> live = new ConcurrentHashMap<>();
 
-    public WebhookRegistry(ConnectorRegistry connectors, OutboundHttp http, Clock clock, OciProperties props) {
+    public WebhookRegistry(ConnectorRegistry connectors, OutboundHttp http, Clock clock, OciProperties props,
+                           ConnectorRepository repository) {
         this.connectors = connectors;
         this.http = http;
         this.clock = clock;
+        this.repository = repository;
         String token = props.getNotifications().getTelegram().getBotToken();
         this.telegramBotToken = token == null || token.isBlank() ? null : token.strip();
+        for (ConnectorRepository.Stored s : repository.findAll()) {
+            Webhook w = s.webhook();
+            NotificationConnector c;
+            try {
+                c = connector(w.type(), w.id(), w.url(), s.secret());
+            } catch (IllegalArgumentException e) {
+                // e.g. TELEGRAM stored but OCI_TELEGRAM_BOT_TOKEN no longer configured: listed, deliveries fail permanently
+                log.warn("connector {} ({}) cannot be activated: {}", w.id(), w.type(), e.getMessage());
+                c = unavailable(w.id(), w.type(), e.getMessage());
+            }
+            Switchable sw = new Switchable(c);
+            connectors.register(sw);
+            live.put(w.id(), sw);
+            webhooks.put(w.id(), w);
+        }
+        if (!webhooks.isEmpty()) log.info("{} persisted connector(s) activated", webhooks.size());
     }
 
     public boolean telegramConfigured() { return telegramBotToken != null; }
@@ -99,14 +123,27 @@ public class WebhookRegistry {
         // a lowercase slug, so rules can reference it as actions[].connectorId (RuleValidator SLUG)
         String id = "wh-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         String secret = null;
-        NotificationConnector connector = switch (type) {
-            case "WEBHOOK" -> {
-                byte[] raw = new byte[32];
-                random.nextBytes(raw);
-                secret = "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-                // Receivers verify with the secret string as HMAC key (see docs/api "Webhook payload and signature").
-                yield new WebhookConnector(id, URI.create(target), secret.getBytes(StandardCharsets.UTF_8), http, clock);
-            }
+        if ("WEBHOOK".equals(type)) {
+            byte[] raw = new byte[32];
+            random.nextBytes(raw);
+            secret = "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        }
+        NotificationConnector connector = connector(type, id, target, secret);
+        Webhook w = new Webhook(id, type, name, target, events.isEmpty() ? List.of("alert.opened") : events, true,
+                clock.instant(), null, null);
+        repository.insert(w, secret, actor); // persisted before activation: a connector is never live but unsaved
+        Switchable c = new Switchable(connector);
+        connectors.register(c);
+        live.put(id, c);
+        webhooks.put(id, w);
+        ApiKeyService.AUDIT.info("webhook.create id={} type={} name={} target={} actor={}", id, type, name, masked(w), actor);
+        return new Created(w, secret);
+    }
+
+    private NotificationConnector connector(String type, String id, String target, String secret) {
+        return switch (type) {
+            // Receivers verify with the secret string as HMAC key (see docs/api "Webhook payload and signature").
+            case "WEBHOOK" -> new WebhookConnector(id, URI.create(target), secret.getBytes(StandardCharsets.UTF_8), http, clock);
             case "SLACK" -> new SlackConnector(id, target, http);
             case "DISCORD" -> new DiscordConnector(id, target, http);
             case "TELEGRAM" -> {
@@ -115,14 +152,21 @@ public class WebhookRegistry {
             }
             default -> throw new IllegalArgumentException("unsupported connector type " + type);
         };
-        Switchable c = new Switchable(connector);
-        connectors.register(c);
-        live.put(id, c);
-        Webhook w = new Webhook(id, type, name, target, events.isEmpty() ? List.of("alert.opened") : events, true,
-                clock.instant(), null, null);
-        webhooks.put(id, w);
-        ApiKeyService.AUDIT.info("webhook.create id={} type={} name={} target={} actor={}", id, type, name, masked(w), actor);
-        return new Created(w, secret);
+    }
+
+    private static NotificationConnector unavailable(String id, String type, String reason) {
+        ActionType t;
+        try {
+            t = ActionType.valueOf(type);
+        } catch (IllegalArgumentException e) {
+            t = ActionType.WEBHOOK;
+        }
+        ActionType actionType = t;
+        return new NotificationConnector() {
+            @Override public String id() { return id; }
+            @Override public ActionType type() { return actionType; }
+            @Override public DeliveryResult send(Notification n) { return DeliveryResult.permanent(0, "connector unavailable: " + reason); }
+        };
     }
 
     /**
@@ -147,6 +191,8 @@ public class WebhookRegistry {
     public Optional<Webhook> find(String id) { return Optional.ofNullable(webhooks.get(id)); }
 
     public boolean delete(String id, String actor) {
+        if (!webhooks.containsKey(id)) return false;
+        repository.delete(id);
         Webhook w = webhooks.remove(id);
         if (w == null) return false;
         Switchable c = live.remove(id);
@@ -174,6 +220,7 @@ public class WebhookRegistry {
         }
         boolean ok = r.success();
         webhooks.computeIfPresent(id, (k, v) -> v.withDelivery(now, ok));
+        repository.updateDelivery(id, now, ok ? "OK" : "FAILED");
         ApiKeyService.AUDIT.info("webhook.test id={} delivered={} status={} actor={}", id, ok, r.statusCode(), actor);
         return new TestResult(ok, r.statusCode() == 0 ? null : r.statusCode(),
                 ok ? "test notification delivered" : "delivery failed: " + r.detail());

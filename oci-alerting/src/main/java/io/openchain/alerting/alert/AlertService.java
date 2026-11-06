@@ -47,6 +47,14 @@ public final class AlertService {
 
     public synchronized MatchOutcome onMatch(RuleMatch m, Duration cooldown) {
         Instant now = clock.instant();
+        // Replay of an already-alerted event (re-indexing after a restart with a persistent repository): the alert
+        // that holds this triggering event is returned unchanged, so no duplicate alert or notification is produced.
+        if (m.triggeringEventId() != null) {
+            Optional<Alert> replay = repository.findByMatchedEventId(m.triggeringEventId()).stream()
+                    .filter(a -> a.ruleId().equals(m.ruleId()) && Objects.equals(a.dedupKey(), m.dedupKey()))
+                    .findFirst();
+            if (replay.isPresent()) return new MatchOutcome(Outcome.GROUPED, replay.get());
+        }
         Optional<Alert> open = repository.findOpenByDedupKey(m.ruleId(), m.dedupKey());
         if (open.isPresent() && withinCooldown(open.get(), m.eventTime(), cooldown)) {
             Alert a = open.get();

@@ -19,5 +19,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 - Docker Compose reference deployment (PostgreSQL 17, app, frontend, optional observability profile with OpenTelemetry Collector, Prometheus, Grafana).
 - CI workflow (Maven, frontend, Docker build, licence check placeholder, CodeQL), Dependabot, issue and PR templates.
 - OSS governance files: LICENSE (Apache-2.0), NOTICE, CONTRIBUTING (DCO), SECURITY, CODE_OF_CONDUCT (Contributor Covenant 2.1).
+- PostgreSQL persistence of operator state (when `SPRING_DATASOURCE_URL` is set; in memory otherwise): API keys, connectors (targets and WEBHOOK secrets AES-256-GCM encrypted with `OCI_CRYPTO_MASTER_KEY`), rules and immutable versions, alerts with history and comments, delivery outbox (retries and dead letters survive a restart, `FOR UPDATE SKIP LOCKED` claiming), label reports, users. Flyway migration `V1__operator_state`; Spring JDBC; optimistic locking on rules and alerts; Testcontainers PostgreSQL 17 tests. Chain-derived state stays in memory and is rebuilt by re-indexing; replayed events do not duplicate alerts.
+- `OCI_CRYPTO_MASTER_KEY` (required with PostgreSQL) and `OCI_SECURITY_API_KEY_PEPPER` (required with PostgreSQL outside demo mode): the application fails fast when they are missing or when the dev-only compose defaults are used outside demo mode.
 
 [Unreleased]: https://github.com/openchain-intelligence/openchain-intelligence/commits/main

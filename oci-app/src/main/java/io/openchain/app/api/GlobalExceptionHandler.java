@@ -1,6 +1,8 @@
 package io.openchain.app.api;
 
+import io.openchain.alerting.alert.ConcurrentAlertModificationException;
 import io.openchain.alerting.alert.IllegalAlertTransitionException;
+import io.openchain.app.persistence.OptimisticLockException;
 import io.openchain.app.rules.RuleRegistry;
 import io.openchain.core.provider.ProviderException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -52,6 +54,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(RuleRegistry.RuleConflictException.class)
     ResponseEntity<ProblemDetail> ruleConflict(RuleRegistry.RuleConflictException e, HttpServletRequest req) {
+        return of(req, 409, "conflict", "Conflict", e.getMessage(), null);
+    }
+
+    @ExceptionHandler({OptimisticLockException.class, ConcurrentAlertModificationException.class})
+    ResponseEntity<ProblemDetail> concurrentModification(RuntimeException e, HttpServletRequest req) {
         return of(req, 409, "conflict", "Conflict", e.getMessage(), null);
     }
 

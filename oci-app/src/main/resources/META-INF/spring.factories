@@ -1,0 +1,6 @@
+# In-memory mode: exclude DataSource/Flyway auto-configuration when spring.datasource.url is not set
+org.springframework.boot.EnvironmentPostProcessor=\
+io.openchain.app.persistence.PersistenceEnvironmentPostProcessor
+
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+io.openchain.app.persistence.PersistenceStartupFailureAnalyzer

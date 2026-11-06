@@ -30,8 +30,9 @@ public abstract class ApiTestSupport {
 
     @Autowired protected MockMvc mvc;
 
-    /** Local webhook sink at the OutboundHttp port: records URL, headers and raw body of every delivery; answers 204. */
+    /** Local webhook sink at the OutboundHttp port: records URL, headers and raw body of every delivery; answers {@code status} (204). */
     public static final class StubHttp implements OutboundHttp {
+        public volatile int status = 204;
         public final List<URI> calls = new CopyOnWriteArrayList<>();
         public final List<Map<String, String>> headers = new CopyOnWriteArrayList<>();
         public final List<byte[]> bodies = new CopyOnWriteArrayList<>();
@@ -39,7 +40,7 @@ public abstract class ApiTestSupport {
             calls.add(uri);
             headers.add(h);
             bodies.add(body);
-            return new HttpResult(204, Map.of(), new byte[0], false);
+            return new HttpResult(status, Map.of(), new byte[0], false);
         }
     }
 
@@ -51,7 +52,7 @@ public abstract class ApiTestSupport {
     }
 
     @TestConfiguration
-    static class TestBeans {
+    public static class TestBeans {
         @Bean @Primary StubHttp stubHttp() { return new StubHttp(); }
     }
 }

@@ -1,6 +1,7 @@
 package io.openchain.app.demo;
 
 import io.openchain.alerting.alert.AlertService;
+import io.openchain.alerting.notify.delivery.DeliveryStore;
 import io.openchain.app.chain.EventHistory;
 import io.openchain.intelligence.IntelligencePipeline;
 import java.time.Clock;
@@ -15,7 +16,8 @@ public class DemoConfiguration {
 
     @Bean DemoNotificationSink demoNotificationSink(Clock clock) { return new DemoNotificationSink(clock); }
 
-    @Bean DemoScenarios demoScenarios(IntelligencePipeline intelligence, AlertService alerts, EventHistory history, DemoNotificationSink sink) {
-        return new DemoScenarios(intelligence, alerts, history, sink);
+    @Bean DemoScenarios demoScenarios(IntelligencePipeline intelligence, AlertService alerts, EventHistory history, DemoNotificationSink sink,
+                                      DeliveryStore deliveries) {
+        return new DemoScenarios(intelligence, alerts, history, sink, deliveries);
     }
 }

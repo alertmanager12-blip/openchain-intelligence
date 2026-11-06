@@ -3,7 +3,11 @@ package io.openchain.alerting.alert;
 import java.util.List;
 import java.util.Optional;
 
-/** Persistence port for alerts. oci-app may provide a JPA/JDBC implementation; {@link InMemoryAlertRepository} is the default. */
+/**
+ * Persistence port for alerts. oci-app provides a JDBC implementation (PostgreSQL); {@link InMemoryAlertRepository} is
+ * the default. Implementations supporting optimistic locking check {@link Alert#version()} on save and throw
+ * {@link ConcurrentAlertModificationException} when it is stale; {@link #save} returns the stored snapshot.
+ */
 public interface AlertRepository {
 
     Alert save(Alert alert);

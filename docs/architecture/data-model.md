@@ -9,6 +9,27 @@ Conventions:
 - Tenant-owned tables carry `tenant_id uuid not null` and have Row-Level Security (`USING (tenant_id = current_setting('app.tenant_id')::uuid)`).
 - Migrations: Flyway (`oci-app/src/main/resources/db/migration`). The DDL below is the reference design; migrations are authoritative.
 
+## Implemented schema (V1, operator state)
+
+`V1__operator_state.sql` implements the **operator state** only. It differs from the reference design below:
+
+| Area | Implemented (V1) | Reference design |
+|---|---|---|
+| Tenancy | single tenant: no `tenants` table, no `tenant_id`, no RLS | `tenant_id` + RLS everywhere |
+| Identifiers | `text` (application UUIDs, rule slugs, `wh-…` connector ids) | `uuid` (UUIDv7) |
+| `users` | `id`, `email`, `name`, one `role` (check: VIEWER/ANALYST/RULE_AUTHOR/ADMIN), `last_login_at` | OIDC `issuer`/`subject`, `roles text[]` |
+| `api_keys` | as designed (prefix + `secret_hash`, expiry, revocation, `last_used_at`) with `env`, `scopes jsonb`, `created_by text` | `scopes text[]`, `created_by` FK |
+| `connectors` | `type`, `name`, `events jsonb`, `target_masked`; target and WEBHOOK secret AES-256-GCM encrypted in separate columns (`enc_key_id`, `target_nonce`/`target_ciphertext`, `secret_nonce`/`secret_ciphertext`) | `config jsonb` + one `secret_ciphertext` |
+| `rules` / `rule_versions` | rule id = rule slug; `origin` (repository/api), soft delete `deleted_at`, `row_version`; versions keep the source as submitted (`source` + `format` YAML/JSON), `compiled_hash` (sha256 of the source), `rule_semver` | `name` unique per tenant, `source_yaml`, `schema_version` |
+| `alerts` | full alert snapshot: engine lifecycle statuses (DETECTED…FALSE_POSITIVE), priority, escalation, `matched_event_ids jsonb` (GIN index), `evidence jsonb` (typed JSON keeping exact decimals), `origin_chain`, `hop`, `row_version` (optimistic locking) | `OPEN/…/RETRACTED`, `explanation`, `event_ids text[]`, `subject_address` |
+| History / comments | `alert_history` (status changes and annotations, append-only) and `alert_comments` (`author text`), keyed `(alert_id, seq)` | `alert_events` (kind + jsonb), `alert_comments.author_id` FK |
+| `deliveries` | outbox with `notification jsonb` snapshot, statuses PENDING/DELIVERED/DEAD_LETTER, `next_attempt_at`, claim lease (`claimed_by`, `claimed_until`, `FOR UPDATE SKIP LOCKED`); the delivery `id` is the receivers' idempotency key; no FK to `connectors` (built-in connectors are not rows) | `idempotency_key`, `payload`, RETRY/FAILED/DEAD |
+| `label_reports` | community reports in moderation (added) | not in the design |
+| Not implemented yet | `tenants`, `audit_log` (audit is the `oci.audit` log stream), all chain-data and intelligence tables (`networks`, `index_checkpoints`, `blocks`, `token_transfers`, `address_edges`, `wallet_profiles`, `address_labels`, `signals`, `risk_scores`) | |
+
+Chain-derived state stays in memory and is rebuilt by re-indexing from the configured start block at restart; alert
+creation is idempotent on replayed events. TODO(persistence): chain-data tables, `audit_log`, tenancy.
+
 ## ER diagram
 
 ```mermaid

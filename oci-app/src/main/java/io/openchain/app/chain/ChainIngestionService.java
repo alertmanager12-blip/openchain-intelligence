@@ -1,7 +1,9 @@
 package io.openchain.app.chain;
 
+import io.openchain.alerting.alert.AlertService;
 import io.openchain.alerting.pipeline.AlertingPipeline;
 import io.openchain.app.labels.LabelCatalog;
+import io.openchain.app.persistence.TransactionRunner;
 import io.openchain.blockchain.indexer.BlockIndexer;
 import io.openchain.blockchain.indexer.InMemoryCheckpointStore;
 import io.openchain.blockchain.indexer.IndexerConfig;
@@ -101,6 +103,8 @@ public class ChainIngestionService {
     private final LabelCatalog labels;
     private final TokenRegistry tokens;
     private final Clock clock;
+    private final TransactionRunner tx;
+    private final AlertService alertService;
     private final Map<Network, NetworkRuntime> runtimes = new ConcurrentHashMap<>();
     private final Deque<Signal> recentSignals = new ArrayDeque<>();
     private final AtomicLong eventsIndexed = new AtomicLong();
@@ -109,7 +113,10 @@ public class ChainIngestionService {
     private final Set<Address> trackedWallets = ConcurrentHashMap.newKeySet();
 
     public ChainIngestionService(IntelligencePipeline intelligence, AlertingPipeline alerting, EventHistory history,
-                                 LabelCatalog labels, TokenRegistry tokens, Clock clock) {
+                                 LabelCatalog labels, TokenRegistry tokens, Clock clock, TransactionRunner tx,
+                                 AlertService alertService) {
+        this.tx = tx;
+        this.alertService = alertService;
         this.intelligence = intelligence;
         this.alerting = alerting;
         this.history = history;
@@ -124,6 +131,8 @@ public class ChainIngestionService {
                                                 DemoLedgerProvider ledger, IndexerConfig config, Duration blockTime) {
         Network n = provider.network();
         if (runtimes.containsKey(n)) throw new IllegalStateException("network already registered: " + n.id());
+        // TODO(persistence): PostgreSQL checkpoint store; in memory, indexing restarts from the configured start block
+        // (alert creation is idempotent on replayed events, see AlertService#onMatch)
         BlockIndexer indexer = new BlockIndexer(provider, new InMemoryCheckpointStore(), this::onEvent, config, tokens, clock);
         NetworkRuntime rt = new NetworkRuntime(n, provider, simulator, ledger, indexer, blockTime);
         rt.indexerConfig = config;
@@ -180,7 +189,7 @@ public class ChainIngestionService {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (e.removed()) {
             history.record(e);
-            alerting.onEvent(e);
+            evaluate(e);
             return;
         }
         List<Signal> fresh = new ArrayList<>();
@@ -201,12 +210,12 @@ public class ChainIngestionService {
             fresh.addAll(intelligence.onEvent(e).newSignals());
         }
         history.record(enriched);
-        alerting.onEvent(enriched);
+        evaluate(enriched);
         for (Signal s : fresh) {
             remember(s);
             ChainEvent se = signalEvent(s, e);
             history.record(se);
-            alerting.onEvent(se);
+            evaluate(se);
         }
     }
 
@@ -223,7 +232,21 @@ public class ChainIngestionService {
      */
     public synchronized void publishInternal(ChainEvent e) {
         history.record(e);
-        alerting.onEvent(e);
+        evaluate(e);
+    }
+
+    /**
+     * Rule evaluation of one event: the alerts it creates or groups, their status changes and the outbox deliveries
+     * are written atomically (one transaction in PostgreSQL mode, ADR-0006).
+     * <p>Lock order: the {@link AlertService} monitor (its methods are {@code synchronized}) is taken BEFORE the
+     * transaction opens. The transaction keeps alert row locks until commit while re-entering AlertService several
+     * times; API calls and escalation take the monitor first and then row locks, so taking it here first keeps one
+     * global order (monitor, then rows) and rules out a monitor/row-lock deadlock.
+     */
+    private void evaluate(ChainEvent e) {
+        synchronized (alertService) {
+            tx.run(() -> alerting.onEvent(e));
+        }
     }
 
     public long eventsIndexed() { return eventsIndexed.get(); }

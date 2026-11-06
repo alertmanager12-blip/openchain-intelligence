@@ -51,6 +51,7 @@ public final class Alert {
     private final Instant lastEscalatedAt;
     private final List<String> originChain;
     private final int hop;
+    private final long version;
 
     private Alert(Builder b) {
         this.id = Objects.requireNonNull(b.id);
@@ -78,6 +79,7 @@ public final class Alert {
         this.lastEscalatedAt = b.lastEscalatedAt;
         this.originChain = List.copyOf(b.originChain);
         this.hop = b.hop;
+        this.version = b.version;
     }
 
     public String id() { return id; }
@@ -105,6 +107,12 @@ public final class Alert {
     public Instant lastEscalatedAt() { return lastEscalatedAt; }
     public List<String> originChain() { return originChain; }
     public int hop() { return hop; }
+    /**
+     * Persistence concurrency token (optimistic locking): the row version this snapshot was read with, 0 for an
+     * alert never saved. Repositories that support it reject a save whose version is stale
+     * ({@link ConcurrentAlertModificationException}) and return the saved snapshot with the new version.
+     */
+    public long version() { return version; }
 
     public Builder toBuilder() { return new Builder(this); }
 
@@ -130,6 +138,7 @@ public final class Alert {
         private int escalationLevel;
         private List<String> originChain = new ArrayList<>();
         private int hop;
+        private long version;
 
         private Builder() {}
 
@@ -141,6 +150,7 @@ public final class Alert {
             createdAt = a.createdAt; updatedAt = a.updatedAt; lastEscalatedAt = a.lastEscalatedAt;
             occurrenceCount = a.occurrenceCount; comments = new ArrayList<>(a.comments); history = new ArrayList<>(a.history);
             escalationLevel = a.escalationLevel; originChain = new ArrayList<>(a.originChain); hop = a.hop;
+            version = a.version;
         }
 
         public Builder id(String v) { id = v; return this; }
@@ -165,6 +175,13 @@ public final class Alert {
         public Builder lastEscalatedAt(Instant v) { lastEscalatedAt = v; return this; }
         public Builder originChain(List<String> v) { originChain = new ArrayList<>(v); return this; }
         public Builder hop(int v) { hop = v; return this; }
+        public Builder version(long v) { version = v; return this; }
+        /** Replaces the comments (persistence adapters rebuilding a snapshot). */
+        public Builder comments(List<Comment> v) { comments = new ArrayList<>(v); return this; }
+        /** Replaces the history (persistence adapters rebuilding a snapshot). */
+        public Builder history(List<HistoryEntry> v) { history = new ArrayList<>(v); return this; }
+        /** Replaces the matched event ids as-is (persistence adapters); use {@link #addEventIds} for new matches. */
+        public Builder matchedEventIds(List<String> v) { matchedEventIds = new ArrayList<>(v); return this; }
         public Builder addComment(Comment c) { comments.add(c); return this; }
         public Builder addHistory(HistoryEntry h) { history.add(h); return this; }
 

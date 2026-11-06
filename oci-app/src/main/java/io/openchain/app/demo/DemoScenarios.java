@@ -2,6 +2,8 @@ package io.openchain.app.demo;
 
 import io.openchain.alerting.alert.Alert;
 import io.openchain.alerting.alert.AlertService;
+import io.openchain.alerting.notify.delivery.DeliveryStatus;
+import io.openchain.alerting.notify.delivery.DeliveryStore;
 import io.openchain.app.chain.DemoLedgerProvider;
 import io.openchain.app.chain.EventHistory;
 import io.openchain.app.labels.LabelCatalog;
@@ -49,10 +51,13 @@ public final class DemoScenarios {
     private final AlertService alerts;
     private final EventHistory history;
     private final DemoNotificationSink sink;
+    private final DeliveryStore deliveries;
     private final List<Scenario> scenarios = new CopyOnWriteArrayList<>();
     private volatile BlockchainProvider provider;
 
-    public DemoScenarios(IntelligencePipeline intelligence, AlertService alerts, EventHistory history, DemoNotificationSink sink) {
+    public DemoScenarios(IntelligencePipeline intelligence, AlertService alerts, EventHistory history, DemoNotificationSink sink,
+                         DeliveryStore deliveries) {
+        this.deliveries = deliveries;
         this.intelligence = intelligence;
         this.alerts = alerts;
         this.history = history;
@@ -225,6 +230,10 @@ public final class DemoScenarios {
                 if (!mine) continue;
                 var notes = sink.forAlert(al.id());
                 notified += notes.size();
+                // with a persistent store, an alert raised before a restart was notified by the previous process: its
+                // delivered outbox rows are the evidence (the sink only remembers this process)
+                if (notes.isEmpty()) notified += (int) deliveries.findByAlert(al.id()).stream()
+                        .filter(d -> d.status() == DeliveryStatus.DELIVERED && DemoNotificationSink.CONNECTOR_ID.equals(d.connectorId())).count();
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("id", al.id());
                 m.put("ruleId", al.ruleId());

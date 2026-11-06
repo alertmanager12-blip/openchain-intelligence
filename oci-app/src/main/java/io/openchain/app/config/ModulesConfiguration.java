@@ -2,7 +2,7 @@ package io.openchain.app.config;
 
 import io.openchain.alerting.alert.AlertService;
 import io.openchain.alerting.alert.EscalationPolicy;
-import io.openchain.alerting.alert.InMemoryAlertRepository;
+import io.openchain.alerting.alert.AlertRepository;
 import io.openchain.alerting.engine.EngineConfig;
 import io.openchain.alerting.engine.RuleEngine;
 import io.openchain.alerting.notify.ConnectorRegistry;
@@ -11,7 +11,7 @@ import io.openchain.alerting.notify.http.SafeHttpClient;
 import io.openchain.alerting.notify.http.SsrfGuard;
 import io.openchain.alerting.notify.delivery.BackoffPolicy;
 import io.openchain.alerting.notify.delivery.DeliveryService;
-import io.openchain.alerting.notify.delivery.InMemoryDeliveryStore;
+import io.openchain.alerting.notify.delivery.DeliveryStore;
 import io.openchain.alerting.pipeline.AlertingPipeline;
 import io.openchain.alerting.rule.FieldCatalog;
 import io.openchain.alerting.rule.RuleLimits;
@@ -38,8 +38,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Assembles the domain modules (they are plain Java, no Spring inside, ADR-0001). Everything is in memory for now.
- * TODO(persistence): swap the InMemory* stores for PostgreSQL adapters (Flyway migrations, outbox table).
+ * Assembles the domain modules (they are plain Java, no Spring inside, ADR-0001). Operator state (alerts, outbox) uses
+ * the repositories of {@link io.openchain.app.persistence.PersistenceConfiguration} (PostgreSQL or in memory).
+ * Chain-derived state (flows, profiles, signals, risk scores) is in memory and rebuilt by re-indexing on restart.
+ * TODO(persistence): PostgreSQL adapters for chain-derived state (token_transfers, signals, risk_scores, checkpoints).
  */
 @Configuration(proxyBeanMethods = false)
 public class ModulesConfiguration {
@@ -78,8 +80,8 @@ public class ModulesConfiguration {
         return new RuleEngine(EngineConfig.defaults().withClock(clock), catalog);
     }
 
-    @Bean AlertService alertService(Clock clock) {
-        return new AlertService(new InMemoryAlertRepository(), clock, EscalationPolicy.defaults(), () -> UUID.randomUUID().toString());
+    @Bean AlertService alertService(AlertRepository alerts, Clock clock) {
+        return new AlertService(alerts, clock, EscalationPolicy.defaults(), () -> UUID.randomUUID().toString());
     }
 
     @Bean ConnectorRegistry connectorRegistry() { return new ConnectorRegistry(); }
@@ -87,8 +89,8 @@ public class ModulesConfiguration {
     /** Outbound HTTP for webhooks: SSRF-guarded (https only, public addresses only, no redirects). */
     @Bean OutboundHttp outboundHttp() { return new SafeHttpClient(new SsrfGuard()); }
 
-    @Bean DeliveryService deliveryService(ConnectorRegistry connectors, Clock clock) {
-        return new DeliveryService(new InMemoryDeliveryStore(), connectors, BackoffPolicy.defaults(), clock);
+    @Bean DeliveryService deliveryService(DeliveryStore store, ConnectorRegistry connectors, Clock clock) {
+        return new DeliveryService(store, connectors, BackoffPolicy.defaults(), clock);
     }
 
     @Bean AlertingPipeline alertingPipeline(RuleEngine engine, AlertService alerts, DeliveryService delivery) {

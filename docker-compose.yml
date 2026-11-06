@@ -2,6 +2,9 @@
 #   docker compose up -d --build                         # postgres + app + frontend (demo mode)
 #   docker compose --profile observability up -d         # + otel-collector, prometheus, grafana
 # Secrets: copy deploy/.env.example to .env and change them. Demo mode MUST be disabled in production.
+# Persistence: operator state (API keys, connectors, rules, alerts, deliveries) lives in the `pgdata` volume and
+# survives `docker compose restart` / `down` + `up`. `docker compose down -v` DELETES it (back up first, see
+# docs/guides/installation.md).
 name: openchain-intelligence
 
 x-restart: &restart
@@ -36,11 +39,16 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # PostgreSQL persistence of operator state (schema migrated by Flyway at startup); unset = in-memory mode
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oci}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-oci}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-oci-dev-only}
       OCI_DEMO_MODE: ${OCI_DEMO_MODE:-true}
+      # Required when OCI_DEMO_MODE=false (the app refuses to start without it); demo mode uses a dev-only pepper.
       OCI_SECURITY_API_KEY_PEPPER: ${OCI_SECURITY_API_KEY_PEPPER:-}
+      # AES-256-GCM key for connector secrets at rest. The default below is a PUBLICLY KNOWN, DEV-ONLY key so the demo
+      # runs out of the box: the app REFUSES it when OCI_DEMO_MODE=false. Production: openssl rand -base64 32 in .env.
+      OCI_CRYPTO_MASTER_KEY: ${OCI_CRYPTO_MASTER_KEY:-b2NpLWRldi1vbmx5LW1hc3Rlci1rZXktMDAwMDAwMDA=}
       OCI_SECURITY_OIDC_ISSUER_URI: ${OCI_SECURITY_OIDC_ISSUER_URI:-}
       OCI_TELEGRAM_BOT_TOKEN: ${OCI_TELEGRAM_BOT_TOKEN:-}
       SERVER_PORT: "8080"

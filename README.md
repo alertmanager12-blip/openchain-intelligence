@@ -26,11 +26,11 @@ Licence: [Apache-2.0](LICENSE).
 | Risk intelligence | Detectors for transaction patterns (structuring, fast forwarding, unusual amounts…), wallet patterns (dormant reactivation, rapid drain…), exposure (sanctioned/flagged, direct and indirect); explainable 0–100 score |
 | Monitoring | YAML/JSON rules, DRY_RUN on history, versioning, alert lifecycle (acknowledge, assign, comment, resolve, false positive) |
 | Notifications | Webhooks (HMAC-SHA256, SSRF-guarded, retries, dead letter), Slack, Discord, Telegram. Email/push: *planned* (no transport yet) |
-| Platform | REST API v1 (problem+json, cursor pagination), API keys (hashed, scoped, expiring, revocable) and optional OIDC, per-endpoint permissions, audit log stream (`oci.audit`). *Planned*: persistence (PostgreSQL), idempotency keys, rate limiting, tenant isolation, Prometheus metrics, OpenTelemetry traces |
+| Platform | REST API v1 (problem+json, cursor pagination), API keys (hashed, scoped, expiring, revocable) and optional OIDC, per-endpoint permissions, audit log stream (`oci.audit`), PostgreSQL persistence of operator state (API keys, connectors with encrypted secrets, rules and versions, alerts, delivery outbox, label reports, users; Flyway migrations). *Planned*: persistence of chain-derived state (transfers, profiles, signals, scores, checkpoints), idempotency keys, rate limiting, tenant isolation, Prometheus metrics, OpenTelemetry traces |
 
 ## Architecture
 
-Target architecture (PostgreSQL persistence is not implemented yet: the MVP keeps state in memory):
+Target architecture (PostgreSQL holds the operator state today; chain-derived state is still in memory and rebuilt by re-indexing):
 
 ```mermaid
 flowchart LR
@@ -112,7 +112,7 @@ actions:
 | `oci-blockchain` | TRON (TronGrid-compatible) and EVM JSON-RPC providers, failover, indexer, reorg handling | **MVP** — in progress |
 | `oci-intelligence` | Detectors, explainable risk scoring, graph exposure | **MVP** — in progress |
 | `oci-alerting` | Rule DSL v1, evaluator (windows, dedup, cooldown), alert lifecycle, connectors | **MVP** — in progress |
-| `oci-app` | Spring Boot app: REST API v1, API-key/OIDC security, demo mode (persistence *planned*) | **MVP** — in progress |
+| `oci-app` | Spring Boot app: REST API v1, API-key/OIDC security, demo mode, PostgreSQL persistence of operator state (chain-derived state *planned*) | **MVP** — in progress |
 | `frontend` | Angular UI: analysis, graph explorer, rules, alerts | **MVP** — in progress |
 | Bitcoin / Solana providers | UTXO and slot-based chains | *planned* |
 | Kafka transport, ClickHouse analytics, Apache AGE graph | Scale-out options | *planned* ([ADR-0004](docs/adr/0004-postgresql-first-clickhouse-later.md), [0005](docs/adr/0005-graph-store.md), [0006](docs/adr/0006-event-bus-outbox-kafka-later.md)) |

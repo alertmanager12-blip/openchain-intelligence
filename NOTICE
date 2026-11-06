@@ -14,6 +14,13 @@ their own licences, including:
     https://bitbucket.org/snakeyaml
   - springdoc-openapi and Swagger UI (Apache License 2.0)
     https://springdoc.org
+  - PostgreSQL JDBC Driver (BSD-2-Clause)
+    https://jdbc.postgresql.org
+    Copyright (c) 1997, PostgreSQL Global Development Group. All rights reserved.
+  - Flyway Community Edition (Apache License 2.0)
+    https://github.com/flyway/flyway
+  - HikariCP (Apache License 2.0)
+    https://github.com/brettwooldridge/HikariCP
   - RxJS (Apache License 2.0)
     https://rxjs.dev
   - Angular (MIT)

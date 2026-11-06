@@ -49,7 +49,7 @@ OCI is a **modular monolith** ([ADR-0001](../adr/0001-modular-monolith-and-worke
 - `api` role — REST API v1, authentication, investigation queries.
 - `worker` role — indexers, detection, scoring, rule evaluation, notification delivery.
 
-In the MVP both roles run in the same JVM, with in-memory state. Target design: roles selected by `OCI_ROLES` (not implemented yet) and workers coordinating through PostgreSQL (checkpoints, `SELECT … FOR UPDATE SKIP LOCKED` leases, outbox) instead of in-memory state, so that splitting them becomes a configuration change.
+In the MVP both roles run in the same JVM; operator state (keys, connectors, rules, alerts, outbox) is in PostgreSQL when configured, chain-derived state in memory. Target design: roles selected by `OCI_ROLES` (not implemented yet) and workers coordinating through PostgreSQL (checkpoints, `SELECT … FOR UPDATE SKIP LOCKED` leases, outbox) instead of in-memory state, so that splitting them becomes a configuration change.
 
 Why not microservices: the team is small, the domain boundaries are still moving, and the hardest problems (reorg consistency, idempotency) are much easier inside one transactional database. The module boundaries give us the *option* to extract services later along the same seams.
 

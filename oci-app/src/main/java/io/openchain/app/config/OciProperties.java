@@ -17,6 +17,7 @@ public class OciProperties {
     private final Security security = new Security();
     private final Ingestion ingestion = new Ingestion();
     private final Notifications notifications = new Notifications();
+    private final Persistence persistence = new Persistence();
     /** Real chain providers, keyed by network id (tron, ethereum, bsc, polygon). Off unless enabled. */
     private Map<String, Chain> chains = new LinkedHashMap<>();
 
@@ -26,6 +27,7 @@ public class OciProperties {
     public Security getSecurity() { return security; }
     public Ingestion getIngestion() { return ingestion; }
     public Notifications getNotifications() { return notifications; }
+    public Persistence getPersistence() { return persistence; }
     public Map<String, Chain> getChains() { return chains; }
     public void setChains(Map<String, Chain> chains) { this.chains = chains; }
 
@@ -138,8 +140,16 @@ public class OciProperties {
     }
 
     public static class Security {
-        /** OCI_SECURITY_API_KEY_PEPPER: HMAC key for API key hashes. A random ephemeral pepper is used when empty. */
+        /**
+         * OCI_SECURITY_API_KEY_PEPPER: HMAC key for API key hashes. Required with PostgreSQL persistence (outside demo
+         * mode); in memory mode a random ephemeral pepper is used when empty.
+         */
         private String apiKeyPepper;
+        /**
+         * OCI_CRYPTO_MASTER_KEY: base64 of 32 random bytes, AES-256-GCM key for connector secrets at rest. Required
+         * with PostgreSQL persistence. Never logged.
+         */
+        private String cryptoMasterKey;
         /** {@code <env>} part of generated keys ({@code oci_<env>_...}). */
         private String keyEnvironment = "live";
         /** Expiry applied to created keys when the request gives none. */
@@ -151,6 +161,8 @@ public class OciProperties {
         private final Oidc oidc = new Oidc();
 
         public String getApiKeyPepper() { return apiKeyPepper; }
+        public String getCryptoMasterKey() { return cryptoMasterKey; }
+        public void setCryptoMasterKey(String cryptoMasterKey) { this.cryptoMasterKey = cryptoMasterKey; }
         public void setApiKeyPepper(String apiKeyPepper) { this.apiKeyPepper = apiKeyPepper; }
         public String getKeyEnvironment() { return keyEnvironment; }
         public void setKeyEnvironment(String keyEnvironment) { this.keyEnvironment = keyEnvironment; }
@@ -192,6 +204,18 @@ public class OciProperties {
         public void setAudience(String audience) { this.audience = audience; }
         public String getRolesClaim() { return rolesClaim; }
         public void setRolesClaim(String rolesClaim) { this.rolesClaim = rolesClaim; }
+    }
+
+    /** Operator-state persistence (PostgreSQL when spring.datasource.url is set). */
+    public static class Persistence {
+        /**
+         * How long a delivery claimed by an instance stays reserved for it. An instance that crashes mid-attempt
+         * releases its claims when this lease expires; the delivery is then retried (at least once).
+         */
+        private Duration deliveryClaimLease = Duration.ofMinutes(2);
+
+        public Duration getDeliveryClaimLease() { return deliveryClaimLease; }
+        public void setDeliveryClaimLease(Duration deliveryClaimLease) { this.deliveryClaimLease = deliveryClaimLease; }
     }
 
     /** Server-side credentials of notification channels (never returned by the API). */

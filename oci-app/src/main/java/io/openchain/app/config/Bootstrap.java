@@ -111,6 +111,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         if (demo) {
             demoKeys();
             if (demoSink != null) connectors.register(demoSink);
+        } else {
+            // a database used for a demo earlier must not keep demo credentials (fixed demo-ui key, generated admin key)
+            int retired = keys.retireGenerated("demo-admin", "demo-bootstrap", "bootstrap")
+                    + keys.retireGenerated("demo-ui", "demo-bootstrap", "bootstrap");
+            if (retired > 0) log.warn("demo mode is off: {} key(s) created by a previous demo bootstrap revoked", retired);
         }
         if (props.getRules().isLoadOnStartup()) loadRules();
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
@@ -166,6 +171,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             keys.register(configured.trim(), "demo-admin", List.of("*"), null, "demo-bootstrap");
             log.warn("DEMO MODE: demo admin API key configured ({})", ApiKeyService.redact(configured.trim()));
         } else {
+            // with a persistent store, the key generated at the previous start is revoked (and older ones purged)
+            int retired = keys.retireGenerated("demo-admin", "demo-bootstrap", "demo-bootstrap");
+            if (retired > 0) log.info("DEMO MODE: {} demo admin key(s) generated at a previous start revoked", retired);
             ApiKeyService.Created c = keys.create("demo-admin", List.of("*"), Duration.ofDays(1), "demo-bootstrap");
             // Printed once, on purpose, and only in demo mode. Never enable demo mode in production.
             log.warn("DEMO MODE: demo admin API key (all permissions, valid 24h, shown once): {}", c.plaintext());
@@ -176,9 +184,10 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                     ApiKeyService.redact(d.getUiKey().trim()), d.getUiKeyScopes());
         }
         Instant now = clock.instant();
-        users.put(new UserDirectory.User("u1", "admin@example.invalid", "Demo Admin", "ADMIN", now.minus(Duration.ofHours(1))));
-        users.put(new UserDirectory.User("u2", "analyst@example.invalid", "Demo Analyst", "ANALYST", now.minus(Duration.ofHours(3))));
-        users.put(new UserDirectory.User("u3", "viewer@example.invalid", "Demo Viewer", "VIEWER", null));
+        // insert-if-absent: role changes made by an administrator survive a restart with a persistent store
+        users.putIfAbsent(new UserDirectory.User("u1", "admin@example.invalid", "Demo Admin", "ADMIN", now.minus(Duration.ofHours(1))));
+        users.putIfAbsent(new UserDirectory.User("u2", "analyst@example.invalid", "Demo Analyst", "ANALYST", now.minus(Duration.ofHours(3))));
+        users.putIfAbsent(new UserDirectory.User("u3", "viewer@example.invalid", "Demo Viewer", "VIEWER", null));
     }
 
     private void startSimulated(Network n) {

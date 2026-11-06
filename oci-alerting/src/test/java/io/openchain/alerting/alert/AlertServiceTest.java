@@ -63,6 +63,18 @@ class AlertServiceTest {
         });
     }
 
+    @Test void replayedTriggeringEventIsIdempotent() {
+        Alert a = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15)).alert();
+        service.transition(a.id(), AlertStatus.RESOLVED, "analyst", "done");
+        // the same event processed again (re-indexing after a restart): no new alert, no occurrence added
+        AlertService.MatchOutcome again = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15));
+        assertThat(again.created()).isFalse();
+        assertThat(again.alert().id()).isEqualTo(a.id());
+        assertThat(again.alert().occurrenceCount()).isEqualTo(1);
+        assertThat(again.alert().status()).isEqualTo(AlertStatus.RESOLVED);
+        assertThat(service.repository().findAll()).hasSize(1);
+    }
+
     @Test void sameDedupKeyWithinCooldownIsGrouped() {
         Alert first = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15)).alert();
         AlertService.MatchOutcome second = service.onMatch(match("k1", T0.plus(Duration.ofMinutes(10)), "e2", Severity.HIGH), Duration.ofMinutes(15));

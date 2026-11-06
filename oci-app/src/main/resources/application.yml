@@ -66,7 +66,10 @@ oci:
     dispatch-interval: 2s
     event-history-size: 100000
   security:
+    # Required with PostgreSQL persistence (outside demo mode): openssl rand -base64 48. Changing it invalidates all API keys.
     api-key-pepper: ${OCI_SECURITY_API_KEY_PEPPER:}
+    # AES-256-GCM key for connector secrets at rest (base64 of 32 bytes: openssl rand -base64 32). Required with PostgreSQL.
+    crypto-master-key: ${OCI_CRYPTO_MASTER_KEY:}
     key-environment: live
     default-key-ttl: 90d
     max-key-ttl: 365d
@@ -80,6 +83,10 @@ oci:
   # chains:
   #   tron:     { enabled: true, provider: trongrid, url: https://api.trongrid.io, api-key-header: TRON-PRO-API-KEY, api-key: ${TRONGRID_API_KEY} }
   #   ethereum: { enabled: true, provider: json-rpc, url: https://your-rpc.example, start-block: -100 }
+  # Operator state (API keys, connectors, rules, alerts, deliveries, label reports, users) is stored in PostgreSQL when
+  # SPRING_DATASOURCE_URL (spring.datasource.url) is set - schema migrated by Flyway at startup - and in memory otherwise.
+  persistence:
+    delivery-claim-lease: 2m
   notifications:
     telegram:
       # Bot token used by TELEGRAM connectors (destination chat id is given per connector). Unset = channel disabled.
