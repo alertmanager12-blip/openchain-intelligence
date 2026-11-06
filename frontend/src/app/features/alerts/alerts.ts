@@ -181,7 +181,7 @@ export class AlertsPage {
     effect(() => {
       const status = this.status();
       const severity = this.severity();
-      untracked(() => this.list.run(() => this.api.alerts({ status, severity, limit: 500 })));
+      untracked(() => this.list.run(() => this.api.alerts({ status, severity, limit: 200 })));
     });
     effect(() => this.rows.set(this.list.data()?.items ?? []));
   }

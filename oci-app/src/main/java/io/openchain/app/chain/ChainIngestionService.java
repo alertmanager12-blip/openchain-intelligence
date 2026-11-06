@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -61,18 +63,21 @@ public class ChainIngestionService {
         private final Network network;
         private final BlockchainProvider provider;
         private final SimulatedChainProvider simulator;
+        private final DemoLedgerProvider ledger;
         private final BlockIndexer indexer;
         private final Duration blockTime;
         private volatile NetworkStatus lastStatus;
         private volatile long lastIndexedBlock = -1;
         private volatile String lastError;
         private volatile Instant lastPollAt;
+        private IndexerConfig indexerConfig;
 
-        NetworkRuntime(Network network, BlockchainProvider provider, SimulatedChainProvider simulator, BlockIndexer indexer,
-                       Duration blockTime) {
+        NetworkRuntime(Network network, BlockchainProvider provider, SimulatedChainProvider simulator, DemoLedgerProvider ledger,
+                       BlockIndexer indexer, Duration blockTime) {
             this.network = network;
             this.provider = provider;
             this.simulator = simulator;
+            this.ledger = ledger;
             this.indexer = indexer;
             this.blockTime = blockTime;
         }
@@ -80,6 +85,9 @@ public class ChainIngestionService {
         public Network network() { return network; }
         public BlockchainProvider provider() { return provider; }
         public Optional<SimulatedChainProvider> simulator() { return Optional.ofNullable(simulator); }
+        /** Demo ledger (simulated networks only): scenario injection point. */
+        public Optional<DemoLedgerProvider> ledger() { return Optional.ofNullable(ledger); }
+        public IndexerConfig indexerConfig() { return indexerConfig; }
         public Duration blockTime() { return blockTime; }
         public NetworkStatus lastStatus() { return lastStatus; }
         public long lastIndexedBlock() { return lastIndexedBlock; }
@@ -95,6 +103,10 @@ public class ChainIngestionService {
     private final Clock clock;
     private final Map<Network, NetworkRuntime> runtimes = new ConcurrentHashMap<>();
     private final Deque<Signal> recentSignals = new ArrayDeque<>();
+    private final AtomicLong eventsIndexed = new AtomicLong();
+    private final AtomicLong transfersIndexed = new AtomicLong();
+    private final AtomicLong eventsRetracted = new AtomicLong();
+    private final Set<Address> trackedWallets = ConcurrentHashMap.newKeySet();
 
     public ChainIngestionService(IntelligencePipeline intelligence, AlertingPipeline alerting, EventHistory history,
                                  LabelCatalog labels, TokenRegistry tokens, Clock clock) {
@@ -109,11 +121,12 @@ public class ChainIngestionService {
     // ---- registration -----------------------------------------------------------------------------------------
 
     public synchronized NetworkRuntime register(BlockchainProvider provider, SimulatedChainProvider simulator,
-                                                IndexerConfig config, Duration blockTime) {
+                                                DemoLedgerProvider ledger, IndexerConfig config, Duration blockTime) {
         Network n = provider.network();
         if (runtimes.containsKey(n)) throw new IllegalStateException("network already registered: " + n.id());
         BlockIndexer indexer = new BlockIndexer(provider, new InMemoryCheckpointStore(), this::onEvent, config, tokens, clock);
-        NetworkRuntime rt = new NetworkRuntime(n, provider, simulator, indexer, blockTime);
+        NetworkRuntime rt = new NetworkRuntime(n, provider, simulator, ledger, indexer, blockTime);
+        rt.indexerConfig = config;
         runtimes.put(n, rt);
         log.info("network {} registered (provider {}, start block {}, {} confirmations)", n.id(), provider.id(),
                 config.startBlock(), config.confirmations());
@@ -169,6 +182,7 @@ public class ChainIngestionService {
 
     /** Indexer sink. Package-visible for tests; called under the {@link #poll} lock. */
     void onEvent(ChainEvent e) {
+        if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (e.removed()) {
             history.record(e);
             alerting.onEvent(e);
@@ -180,6 +194,9 @@ public class ChainIngestionService {
             Optional<ValueFlow> flow = toFlow(e);
             if (flow.isPresent()) {
                 ValueFlow f = flow.get();
+                transfersIndexed.incrementAndGet();
+                trackedWallets.add(f.from());
+                trackedWallets.add(f.to());
                 WalletProfile senderBefore = intelligence.profiles().profileOrEmpty(f.from());
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
                 fresh.addAll(r.newSignals());
@@ -204,6 +221,21 @@ public class ChainIngestionService {
             while (recentSignals.size() > MAX_SIGNALS_KEPT) recentSignals.removeLast();
         }
     }
+
+    /**
+     * Entry point for events produced inside the platform (INTERNAL_EVENT connector): recorded and evaluated by the
+     * rule engine, which enforces the hop limit (loop protection). Serialised with ingestion.
+     */
+    public synchronized void publishInternal(ChainEvent e) {
+        history.record(e);
+        alerting.onEvent(e);
+    }
+
+    public long eventsIndexed() { return eventsIndexed.get(); }
+    public long transfersIndexed() { return transfersIndexed.get(); }
+    public long eventsRetracted() { return eventsRetracted.get(); }
+    /** Addresses seen in at least one indexed value flow. */
+    public Set<Address> trackedWallets() { return Set.copyOf(trackedWallets); }
 
     /** Most recent detection signals first. */
     public List<Signal> recentSignals() {

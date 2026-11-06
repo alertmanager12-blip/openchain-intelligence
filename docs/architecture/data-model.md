@@ -374,7 +374,7 @@ create table rules (
 create table rule_versions (                 -- immutable
   rule_id         uuid not null references rules(id),
   version         int not null,
-  schema_version  text not null,              -- 'oci.rules/v1'
+  schema_version  text not null,              -- 'openchain.io/rule/v1'
   source_yaml     text not null check (length(source_yaml) <= 65536),
   compiled_hash   text not null,              -- sha256 of canonical compiled form
   created_by      uuid references users(id),

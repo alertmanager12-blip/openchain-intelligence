@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
@@ -80,7 +82,11 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/transactions/**").hasAuthority(authority(Scopes.TRANSACTION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/graph/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
-                        .requestMatchers(HttpMethod.GET, API + "/networks").hasAuthority(authority(Scopes.WALLET_READ))
+                        .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))
+                        // demo evidence (demo mode only): wallets + alerts
+                        .requestMatchers(HttpMethod.GET, API + "/demo/**").access(AuthorizationManagers.allOf(
+                                AuthorityAuthorizationManager.hasAuthority(authority(Scopes.WALLET_READ)),
+                                AuthorityAuthorizationManager.hasAuthority(authority(Scopes.ALERTS_READ))))
                         // labels
                         .requestMatchers(API + "/labels/reports").hasAuthority(authority(Scopes.LABELS_REPORT))
                         .requestMatchers(HttpMethod.GET, API + "/labels").hasAuthority(authority(Scopes.WALLET_READ))

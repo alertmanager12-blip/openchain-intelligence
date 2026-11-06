@@ -30,13 +30,15 @@ public abstract class ApiTestSupport {
 
     @Autowired protected MockMvc mvc;
 
-    /** Records webhook calls instead of sending them; answers 204. */
+    /** Local webhook sink at the OutboundHttp port: records URL, headers and raw body of every delivery; answers 204. */
     public static final class StubHttp implements OutboundHttp {
         public final List<URI> calls = new CopyOnWriteArrayList<>();
         public final List<Map<String, String>> headers = new CopyOnWriteArrayList<>();
+        public final List<byte[]> bodies = new CopyOnWriteArrayList<>();
         @Override public HttpResult post(URI uri, Map<String, String> h, byte[] body) {
             calls.add(uri);
             headers.add(h);
+            bodies.add(body);
             return new HttpResult(204, Map.of(), new byte[0], false);
         }
     }

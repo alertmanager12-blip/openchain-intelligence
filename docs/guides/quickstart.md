@@ -44,48 +44,51 @@ Look at `riskScore.contributions[]`: each point is attributed to a signal with e
 
 ```bash
 cat > burst.yaml <<'EOF'
-apiVersion: oci.rules/v1
-kind: Rule
-metadata:
-  name: demo-usdt-burst
-  severity: HIGH
-spec:
+apiVersion: openchain.io/rule/v1
+id: demo-usdt-burst
+version: 1.0.0
+name: Demo USDT burst
+author: quickstart
+scope:
   networks: [tron]
   eventTypes: [TOKEN_TRANSFER]
-  where:
-    all:
-      - { field: transaction.token.symbol, op: eq, value: USDT }
-  window: { type: sliding, size: 1h, groupBy: [transaction.from] }
-  having:
-    all:
-      - { aggregate: count, op: gte, value: 5 }
-      - { aggregate: sum, field: transaction.amount, op: gte, value: "50000" }
-  dedup: { cooldown: 6h }
+conditions:
+  logic: AND
+  rules:
+    - { field: transaction.token.symbol, operator: EQUALS, value: USDT }
+aggregation:
+  window: 1h
+  groupBy: [transaction.from]
+  function: SUM
+  field: transaction.amount
+  operator: GREATER_THAN_OR_EQUAL
+  threshold: "50000"
+severity: HIGH
+cooldown: 6h
 EOF
 
 curl -s -X POST -H "Authorization: Bearer $OCI_KEY" -H "Content-Type: application/yaml" \
   -H "Idempotency-Key: $(uuidgen)" --data-binary @burst.yaml localhost:8080/api/v1/rules/import | jq
-RULE_ID=...   # from the response
+RULE_ID=demo-usdt-burst   # the rule id (rules are created disabled)
 
 curl -s -X POST -H "Authorization: Bearer $OCI_KEY" -H "Content-Type: application/json" \
-  -d '{"network":"tron","from":"-PT2H","to":"now"}' \
-  localhost:8080/api/v1/rules/$RULE_ID/test | jq '.stats, .matches[0]'
+  -d "{\"network\":\"tron\",\"from\":\"$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)\",\"to\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
+  localhost:8080/api/v1/rules/$RULE_ID/test | jq '{evaluatedEvents, matchCount, estimatedAlertsPerDay, warnings}, .matches[0]'
 ```
 
 DRY_RUN replays recent simulated transfers: no alert is created, no notification is sent.
 
 ## 5. Enable and receive a webhook
 
-Start a local receiver (demo mode allows `http://` sinks on the compose network):
+Webhook targets must be public `https://` URLs (the SSRF guard rejects `http://`, private and loopback addresses, demo mode included). For a local test, expose a receiver through an HTTPS tunnel (e.g. a request-bin service) and use its URL:
 
 ```bash
-docker run --rm -d --name sink --network openchain-intelligence_default -p 9999:8080 mendhak/http-https-echo:37
 curl -s -X POST -H "Authorization: Bearer $OCI_KEY" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"name":"local-sink","url":"http://sink:8080/hook","events":["alert.opened","alert.retracted"]}' \
+  -d '{"name":"local-sink","url":"https://YOUR-HTTPS-RECEIVER.example/hook","events":["alert.opened","alert.retracted"]}' \
   localhost:8080/api/v1/webhooks | jq   # note the secret, shown once
 ```
 
-Add `actions: [{connector: local-sink}]` to the rule, `PUT` it, then `POST /api/v1/rules/$RULE_ID/enable`. Within a few simulated minutes `docker logs sink` shows a signed `alert.opened` request. Verify the signature with the snippets in the [API docs](../api/README.md#webhook-payload-and-signature).
+Add `actions: [{type: WEBHOOK, connectorId: <id returned above, e.g. wh-1a2b...>}]` to the rule, `PUT` it, then `POST /api/v1/rules/$RULE_ID/enable`. Within a few simulated minutes your receiver gets a signed `alert.opened` request (`X-OCI-Signature`, `X-OCI-Event`, `X-OCI-Delivery-Id`). Verify the signature with the snippets in the [API docs](../api/README.md#webhook-payload-and-signature).
 
 ## 6. Triage
 

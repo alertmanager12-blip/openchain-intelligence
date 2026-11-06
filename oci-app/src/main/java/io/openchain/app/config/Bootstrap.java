@@ -2,13 +2,15 @@ package io.openchain.app.config;
 
 import io.openchain.alerting.alert.AlertService;
 import io.openchain.alerting.notify.ConnectorRegistry;
-import io.openchain.alerting.notify.DeliveryResult;
-import io.openchain.alerting.notify.Notification;
-import io.openchain.alerting.notify.NotificationConnector;
 import io.openchain.alerting.pipeline.AlertingPipeline;
-import io.openchain.alerting.rule.ActionType;
 import io.openchain.app.chain.ChainIngestionService;
+import io.openchain.app.chain.DemoLedgerProvider;
 import io.openchain.app.chain.TimeShiftedProvider;
+import io.openchain.app.demo.DemoNotificationSink;
+import io.openchain.app.demo.DemoScenarios;
+import io.openchain.alerting.notify.connector.InternalEventConnector;
+import io.openchain.blockchain.tron.TronAddress;
+import org.springframework.beans.factory.ObjectProvider;
 import io.openchain.app.labels.LabelCatalog;
 import io.openchain.app.rules.RuleRegistry;
 import io.openchain.app.security.ApiKeyService;
@@ -60,7 +62,6 @@ import org.springframework.stereotype.Component;
 public class Bootstrap implements ApplicationRunner, DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(Bootstrap.class);
-    public static final String DEMO_CONNECTOR_ID = "default-webhook";
 
     private final OciProperties props;
     private final LabelCatalog labels;
@@ -73,6 +74,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final UserDirectory users;
     private final TokenRegistry tokens;
     private final Clock clock;
+    private final DemoNotificationSink demoSink;
+    private final DemoScenarios demoScenarios;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
         Thread t = new Thread(r, "oci-background");
         t.setDaemon(true);
@@ -81,7 +84,10 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
 
     public Bootstrap(OciProperties props, LabelCatalog labels, RuleRegistry rules, ChainIngestionService chains,
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
-                     UserDirectory users, TokenRegistry tokens, Clock clock) {
+                     UserDirectory users, TokenRegistry tokens, Clock clock, ObjectProvider<DemoNotificationSink> demoSink,
+                     ObjectProvider<DemoScenarios> demoScenarios) {
+        this.demoSink = demoSink.getIfAvailable();
+        this.demoScenarios = demoScenarios.getIfAvailable();
         this.props = props;
         this.labels = labels;
         this.rules = rules;
@@ -100,9 +106,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         long t0 = System.nanoTime();
         loadLabelFiles();
         boolean demo = props.getDemo().isEnabled();
+        // internal bus: INTERNAL_EVENT actions feed derived events back to the rule engine (hop-limited by the engine)
+        connectors.register(new InternalEventConnector("internal-bus", chains::publishInternal, clock));
         if (demo) {
             demoKeys();
-            connectors.register(new DemoLogConnector());
+            if (demoSink != null) connectors.register(demoSink);
         }
         if (props.getRules().isLoadOnStartup()) loadRules();
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
@@ -180,28 +188,55 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 d.getMaxTransfersPerBlock(), d.getAddressPoolSize(), tokens);
         int blocks = (int) Math.max(1, Duration.ofMinutes(d.getSeedMinutes()).toSeconds() / blockTime.toSeconds());
         sim.mine(blocks);
-        seedDemoLabels(sim);
+        DemoLedgerProvider ledger = new DemoLedgerProvider(sim, faucetOf(n), 500_000);
+        Address sanctioned = seedDemoLabels(sim, ledger.faucet());
+        if (demoScenarios != null && n == Network.TRON) demoScenarios.plan(ledger, sim.head(), sim.addressPool(), sanctioned, labels);
         Instant headTime = sim.getBlock(sim.head()).orElseThrow().timestamp();
-        TimeShiftedProvider provider = new TimeShiftedProvider(sim, Duration.between(headTime, clock.instant()));
+        TimeShiftedProvider provider = new TimeShiftedProvider(ledger, Duration.between(headTime, clock.instant()));
         int confirmations = Math.min(n.defaultConfirmations(), 12);
         IndexerConfig cfg = new IndexerConfig("demo-" + n.id(), 1, confirmations, n.maxReorgDepth(), 200);
-        ChainIngestionService.NetworkRuntime rt = chains.register(provider, sim, cfg, blockTime);
+        ChainIngestionService.NetworkRuntime rt = chains.register(provider, sim, ledger, cfg, blockTime);
         long t0 = System.nanoTime();
         chains.poll(rt);
-        log.info("demo network {}: {} simulated blocks indexed in {} ms", n.id(), rt.lastIndexedBlock(), (System.nanoTime() - t0) / 1_000_000);
+        log.info("demo network {}: {} simulated blocks indexed in {} ms ({} overdrafting simulated transfers dropped)", n.id(),
+                rt.lastIndexedBlock(), (System.nanoTime() - t0) / 1_000_000, ledger.droppedOverdrafts());
         if (d.isLive()) {
             scheduler.scheduleAtFixedRate(guard("mine " + n.id(), () -> { sim.mine(1); chains.poll(rt); }),
                     blockTime.toMillis(), blockTime.toMillis(), TimeUnit.MILLISECONDS);
         }
     }
 
-    /** Fictional labels on simulated addresses so exposure, risk and graph views have something to show. */
-    private void seedDemoLabels(SimulatedChainProvider sim) {
+    /** Fictional funding source of the demo ledger. */
+    static Address faucetOf(Network n) {
+        String hex = java.util.HexFormat.of().formatHex(sha256("oci-demo-faucet:" + n.id())).substring(0, 40);
+        return switch (n) {
+            case TRON -> new Address(n, TronAddress.fromHex(hex));
+            case ETHEREUM, BSC, POLYGON -> new Address(n, "0x" + hex);
+            default -> new Address(n, "sim" + hex);
+        };
+    }
+
+    private static byte[] sha256(String s) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Fictional labels on simulated addresses; returns the demo-sanctioned address. */
+    private Address seedDemoLabels(SimulatedChainProvider sim, Address faucet) {
         List<Address> pool = sim.addressPool();
         Instant at = Instant.parse("2026-01-01T00:00:00Z");
         record L(LabelCategory c, String name, String source, double rel, EvidenceLevel ev, String ref) {}
+        // the demo-sanctioned entity is a dedicated address outside the random pool: random simulated traffic would
+        // otherwise give most wallets sanctions exposure (only scenario B touches it)
+        String hex = java.util.HexFormat.of().formatHex(sha256("oci-demo-sanctioned:" + sim.network().id())).substring(0, 40);
+        Address sanctioned = sim.network() == Network.TRON ? new Address(sim.network(), TronAddress.fromHex(hex))
+                : new Address(sim.network(), (sim.network() == Network.ETHEREUM || sim.network() == Network.BSC || sim.network() == Network.POLYGON ? "0x" : "sim") + hex);
+        labels.save(new AddressLabel(sanctioned, LabelCategory.SANCTIONED, "DEMO fictional sanctioned entity", "demo-sanctions-list", 1.0, at,
+                EvidenceLevel.CONFIRMED_BY_SOURCE, "demo://sanctions/sim"));
         List<L> specs = List.of(
-                new L(LabelCategory.SANCTIONED, "DEMO fictional sanctioned entity", "demo-sanctions-list", 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE, "demo://sanctions/sim"),
                 new L(LabelCategory.MIXER, "DEMO fictional mixer", "demo-community-feed", 0.6, EvidenceLevel.RISK_SIGNAL, "demo://feed/mixer"),
                 new L(LabelCategory.SCAM, "DEMO fictional scam report", "demo-community-feed", 0.4, EvidenceLevel.RISK_SIGNAL, "demo://feed/scam"),
                 new L(LabelCategory.EXCHANGE, "DEMO fictional exchange hot wallet", "demo-directory", 0.9, EvidenceLevel.ANOMALY, null),
@@ -210,16 +245,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             L s = specs.get(i);
             labels.save(new AddressLabel(pool.get(pool.size() - 1 - i), s.c(), s.name(), s.source(), s.rel(), at, s.ev(), s.ref()));
         }
-    }
-
-    /** Demo sink for the {@code default-webhook} connector referenced by the repository rules: logs, sends nothing. */
-    static final class DemoLogConnector implements NotificationConnector {
-        @Override public String id() { return DEMO_CONNECTOR_ID; }
-        @Override public ActionType type() { return ActionType.WEBHOOK; }
-        @Override public DeliveryResult send(Notification n) {
-            log.info("demo connector '{}': notification {} (not sent anywhere: demo mode)", DEMO_CONNECTOR_ID, n.deliveryId());
-            return new DeliveryResult(true, false, 0, "logged by demo connector");
-        }
+        labels.save(new AddressLabel(faucet, LabelCategory.EXCHANGE, "DEMO fictional exchange faucet (funds the simulated wallets)",
+                "demo-directory", 0.9, at, EvidenceLevel.ANOMALY, null));
+        return sanctioned;
     }
 
     // ---- real providers -----------------------------------------------------------------------------------------
@@ -241,7 +269,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
             };
             long start = c.getStartBlock() >= 0 ? c.getStartBlock() : Math.max(0, p.getNetworkStatus().headBlock() + c.getStartBlock());
-            ChainIngestionService.NetworkRuntime rt = chains.register(p, null, IndexerConfig.of(n.id() + "-indexer", n, start), null);
+            ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, IndexerConfig.of(n.id() + "-indexer", n, start), null);
             long every = props.getIngestion().getPollInterval().toMillis();
             scheduler.scheduleWithFixedDelay(guard("poll " + n.id(), () -> chains.poll(rt)), 0, every, TimeUnit.MILLISECONDS);
         } catch (RuntimeException e) {

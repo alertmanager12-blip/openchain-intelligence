@@ -5,7 +5,8 @@ spring:
     banner-mode: off
   mvc:
     problemdetails:
-      enabled: true
+      # our GlobalExceptionHandler (a ResponseEntityExceptionHandler) renders every error in the contract format
+      enabled: false
   jackson:
     default-property-inclusion: always
 

@@ -56,7 +56,7 @@ Signing off certifies that you wrote the patch or otherwise have the right to su
 
 ## Contributing rules
 
-Rules (schema `oci.rules/v1`, see [writing-rules.md](docs/guides/writing-rules.md)) are reviewed like code:
+Rules (schema `openchain.io/rule/v1`, see [writing-rules.md](docs/guides/writing-rules.md)) are reviewed like code:
 
 1. Open a **Rule contribution** issue (template) describing the observable behaviour, known false positives and evidence level.
 2. Add the rule under `rules/<pack>/<rule-name>.yaml` with:

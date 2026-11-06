@@ -1,0 +1,75 @@
+apiVersion: openchain.io/rule/v1
+id: sanctioned-exposure-signal
+version: 1.0.0
+name: Exposure to a listed address (direct or indirect)
+description: The detection engine reports direct or indirect (multi-hop) value exposure of a wallet to an address on a sanctions list.
+author: openchain-community
+enabled: true
+tags: [generic, exposure, sanctions]
+scope:
+  eventTypes: [DETECTION_SIGNAL]
+conditions:
+  logic: AND
+  rules:
+    - field: signal.type
+      operator: IN
+      value: [SANCTIONED_EXPOSURE, INDIRECT_EXPOSURE]
+    - field: signal.confidence
+      operator: GREATER_THAN_OR_EQUAL
+      value: "0.5"
+severity: HIGH
+evidenceLevel: RISK_SIGNAL
+cooldown: 6h
+dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+expectedConfidence: 0.5
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+documentation: |
+  Raises an alert when oci-intelligence emits a SANCTIONED_EXPOSURE (direct counterparty on a sanctions list) or an
+  INDIRECT_EXPOSURE signal (value that reached the wallet through intermediaries) with a confidence of at least 0.5.
+  Indirect exposure confidence decays with each hop (source reliability x 0.5^(hops-1)), so the 0.5 floor keeps
+  direct exposure and 2-hop exposure to an authoritative list, and drops weaker, more distant paths.
+  Exposure describes where funds came from; it is not a statement about the wallet owner. Propagation stops at
+  exchanges and bridges (pooled funds). One alert per wallet per 6 hours.
+examples:
+  - name: 2-hop exposure with confidence 0.5 matches
+    expect: MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.confidence: "0.5"
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: 3-hop exposure with confidence 0.25 does not match
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.confidence: "0.25"
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: other signal types do not match
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: FAST_FORWARDING
+        signal.confidence: "0.9"
+tests:
+  - name: repeated exposure signals for the same wallet are grouped
+    events:
+      - offset: 0s
+        network: tron
+        fields:
+          signal.type: SANCTIONED_EXPOSURE
+          signal.confidence: "0.9"
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+      - offset: 10m
+        network: tron
+        fields:
+          signal.type: INDIRECT_EXPOSURE
+          signal.confidence: "0.5"
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+    expectTriggers: 2
+    expectAlerts: 1

@@ -9,7 +9,8 @@ Users must define monitoring rules (filters, thresholds, sliding windows, groupi
 
 ## Considered options
 
-1. **Declarative DSL** in YAML/JSON validated by JSON Schema `oci.rules/v1`, compiled to a closed operator tree.
+1. **Declarative DSL** in YAML/JSON validated by JSON Schema `openchain.io/rule/v1`, compiled to a closed operator tree.
+   _(Exemple aligné sur le format canonique `openchain.io/rule/v1` ; aucun changement de décision.)_
 2. Expression language (SpEL, MVEL, JEXL, CEL).
 3. Embedded scripting (GraalJS, Groovy, Lua).
 4. WASM plugins.

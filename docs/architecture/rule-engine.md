@@ -4,7 +4,7 @@ Module: `oci-alerting` (depends only on `oci-core`). Decision record: [ADR-0007]
 
 ## 1. Design principles
 
-1. **Rules are data, not code.** A rule is a YAML/JSON document validated against schema `oci.rules/v1` and compiled to a tree of a *closed* set of operators implemented in Java. Nothing in a rule is ever executed, evaluated as an expression language, or used for reflection.
+1. **Rules are data, not code.** A rule is a YAML/JSON document validated against schema `openchain.io/rule/v1` (`oci-alerting/src/main/resources/schema/rule-v1.schema.json`, enforced by `RuleValidator`) and compiled to a tree of a *closed* set of operators implemented in Java. Nothing in a rule is ever executed, evaluated as an expression language, or used for reflection.
 2. **Deterministic and replayable.** Given the same event stream (by `eventTime`) a rule produces the same matches. This enables DRY_RUN and reorg retraction.
 3. **Explainable.** Every alert stores which conditions held, with the observed values and thresholds, and the contributing `eventId`s.
 4. **Bounded.** Static complexity limits at compile time, evaluation budgets at run time.
@@ -12,58 +12,58 @@ Module: `oci-alerting` (depends only on `oci-core`). Decision record: [ADR-0007]
 ## 2. Schema v1
 
 ```yaml
-apiVersion: oci.rules/v1
-kind: Rule
-metadata:
-  name: usdt-burst-outflow            # ^[a-z0-9-]{3,64}$, unique per tenant
-  description: Burst of large USDT outflows from one address
-  severity: HIGH                      # INFO | LOW | MEDIUM | HIGH | CRITICAL
-  tags: [stablecoin, outflow]
-spec:
-  networks: [tron, ethereum]          # subset of Network ids
+apiVersion: openchain.io/rule/v1      # mandatory, exact
+id: usdt-burst-outflow                # lowercase slug, unique
+version: 1.0.0                        # semver; every PUT stores an immutable version
+name: USDT burst outflow
+description: Burst of large USDT outflows from one address
+author: your-team
+enabled: true
+tags: [stablecoin, outflow]
+scope:                                # empty / missing = any
+  networks: [tron, ethereum]          # Network ids
   eventTypes: [TOKEN_TRANSFER]        # ChainEvent.EventType
-  confirmations: default              # default | 0 (provisional) | integer >= network default
-  where:                              # per-event filter (boolean tree)
-    all:
-      - field: transaction.token.symbol
-        op: in
-        value: [USDT]
-      - field: transaction.amount
-        op: gte
-        value: "1000"                 # decimals as strings → BigDecimal, exact
-  window:                             # optional: aggregate over a sliding window
-    type: sliding                     # sliding | tumbling
-    size: 1h                          # ISO-8601 or 30s/15m/1h/1d; max 7d
-    groupBy: [transaction.from]       # max 3 fields
-    allowedLateness: 5m               # default 2m
-  having:                             # conditions on aggregates (only with window)
-    all:
-      - aggregate: count
-        op: gte
-        value: 5
-      - aggregate: sum
-        field: transaction.amount
-        op: gte
-        value: "50000"
-  dedup:
-    key: [rule, transaction.from]     # default [rule, groupBy...]
-    cooldown: 6h                      # no new notification while an alert with this key is open and within cooldown
-  actions:
-    - connector: ops-webhook          # connector name in the tenant
-    - connector: compliance-email
+conditions:                           # per-event filter: recursive group, logic AND | OR | NOT
+  logic: AND
+  rules:
+    - field: transaction.token.symbol
+      operator: IN
+      value: [USDT]
+    - field: transaction.amount
+      operator: GREATER_THAN_OR_EQUAL
+      value: "1000"                   # decimals as strings -> exact BigDecimal
+aggregation:                          # optional: sliding event-time window (exclusive with sequence)
+  window: 1h                          # 30s / 15m / 1h / 1d; between 1s and 7d
+  groupBy: [transaction.from]         # 0..3 catalog fields
+  function: SUM                       # COUNT | SUM | DISTINCT_COUNT | MAX | RATIO_OF_BALANCE
+  field: transaction.amount
+  operator: GREATER_THAN_OR_EQUAL     # GREATER_THAN | GREATER_THAN_OR_EQUAL
+  threshold: "50000"
+severity: HIGH                        # INFO | LOW | MEDIUM | HIGH | CRITICAL
+evidenceLevel: ANOMALY                # ANOMALY | RISK_SIGNAL | CONFIRMED_BY_SOURCE (needs a source-backed field)
+cooldown: 6h                          # matches with the same dedup key are grouped into one alert
+dedupKey: "{{rule.id}}:{{group.key}}" # placeholders only: rule.id, rule.version, group.key, network, event.<field>
+actions:                              # connector ids configured by an operator (rules never carry URLs)
+  - type: WEBHOOK
+    connectorId: ops-webhook
+  - type: EMAIL
+    connectorId: compliance-email
 ```
 
 ### Operators (closed set)
 
 | Category | Operators |
 |---|---|
-| Comparison | `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `between` |
-| Sets | `in`, `not_in` (≤ 1 000 literal values), `in_list` (reference to a tenant **watchlist** by name) |
-| Strings | `starts_with`, `ends_with`, `contains` (literal, case-insensitive option) — **no regex** in v1 |
-| Presence | `exists`, `not_exists` |
-| Labels / risk | `has_label` (category), `risk_level_gte` |
-| Boolean | `all`, `any`, `not` (max depth 5) |
-| Aggregates | `count`, `sum`, `min`, `max`, `avg`, `distinct_count` (field) |
+| Comparison | `EQUALS`, `NOT_EQUALS`, `GREATER_THAN`, `GREATER_THAN_OR_EQUAL`, `LESS_THAN`, `LESS_THAN_OR_EQUAL`, `BETWEEN` |
+| Sets | `IN`, `NOT_IN` (<= 1 000 literal values) |
+| Strings | `CONTAINS`, `STARTS_WITH` (optional `ignoreCase`), `MATCHES` (bounded, ReDoS-safe regex) |
+| Presence | `EXISTS` |
+| Boolean groups | `logic: AND`, `OR`, `NOT` (NOT = exactly one child; max depth 5, max 50 conditions) |
+| Aggregation | `COUNT`, `SUM`, `MAX`, `DISTINCT_COUNT`, `RATIO_OF_BALANCE` (one per rule) |
+| Sequence | ordered steps sharing a key within a duration (`sequence:`, exclusive with `aggregation:`) |
+
+Labels are matched through enriched string fields (`wallet.labels` / `counterparty.labels` with `CONTAINS`, e.g. `mixer`).
+Named watchlists (`in_list`) and min/avg aggregates are not part of v1.
 
 Fields are resolved from `ChainEvent.fields` by exact key lookup (`transaction.amount`, `transaction.from`, `transaction.to`, `transaction.token.symbol`, `transaction.token.contract`, `wallet.risk_score`, `wallet.labels`, `signal.type`, …). The allowed field catalogue is part of the schema; unknown fields are compile errors. Types are checked at compile time (a `BigDecimal` field only accepts numeric operators with decimal-string literals).
 
@@ -71,7 +71,7 @@ Fields are resolved from `ChainEvent.fields` by exact key lookup (`transaction.a
 
 ```
 YAML (safe loader: no tags, max 64 KiB, max depth 20, max aliases 0)
-  → JSON tree → JSON Schema oci.rules/v1 validation (errors with JSON pointer paths)
+  → JSON tree → RuleValidator (schema openchain.io/rule/v1; errors with JSON paths, returned as JSON pointers by the API)
   → semantic checks (field catalogue, types, connectors exist, window ≤ 7d, limits)
   → CompiledRule (immutable): Predicate tree, WindowSpec, HavingSpec, DedupSpec, actions
   → compiled_hash = sha256(canonical JSON of the normalised rule)
@@ -103,7 +103,7 @@ Per incoming `ChainEvent`:
 When an event arrives with `removed = true`:
 
 1. Remove its contribution from every window that contains it (lookup by `eventId`), recompute aggregates.
-2. For each **open** alert whose `event_ids` contains it, re-evaluate `having` on the remaining contributions:
+2. For each **open** alert whose `event_ids` contains it, re-evaluate the `aggregation` threshold on the remaining contributions:
    - still satisfied → keep the alert, append `alert_events(OCCURRENCE_RETRACTED)`;
    - no longer satisfied → status `RETRACTED`, `alert_events(RETRACTED, reason=REORG)`, and a `alert.retracted` notification is queued to the same connectors.
 3. Alerts in terminal human states (`RESOLVED`, `FALSE_POSITIVE`) are not modified; a history entry is added.

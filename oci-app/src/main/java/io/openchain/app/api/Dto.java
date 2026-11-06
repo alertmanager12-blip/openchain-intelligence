@@ -89,7 +89,9 @@ public final class Dto {
                            String address, String txHash, String summary, String evidenceLevel, String assignee,
                            long occurrenceCount, Instant firstSeen, Instant lastSeen, Instant createdAt, Instant updatedAt,
                            List<String> matchedEventIds, Map<String, Object> matchedEvent, Map<String, Object> evidence,
-                           List<CommentDto> comments, List<HistoryDto> history) {}
+                           List<CommentDto> comments, List<HistoryDto> history,
+                           /** Demo scenario id (A-E) when the alert comes from fictitious demo data, else null. */
+                           String demoScenario) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,
@@ -99,7 +101,9 @@ public final class Dto {
                              Instant createdAt, Instant lastDeliveryAt, String lastDeliveryStatus,
                              @JsonInclude(JsonInclude.Include.NON_NULL) String secret) {}
 
-    public record FieldDefDto(String path, String type, String description, boolean sourceBacked) {}
+    /** {@code available=false}: valid in rules but not populated by the current ingestion pipeline (never matches yet). */
+    public record FieldDefDto(String path, String type, String description, boolean sourceBacked,
+                              @JsonInclude(JsonInclude.Include.NON_NULL) List<String> options, boolean available) {}
 
     public record LabelReportDto(String id, String network, String address, String category, String description,
                                  List<String> evidenceUrls, String reference, String status, Instant createdAt) {}

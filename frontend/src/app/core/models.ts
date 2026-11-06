@@ -319,6 +319,8 @@ export interface FieldDef {
   type: FieldType;
   description: string;
   options?: string[];
+  /** false = accepted in rules but not populated by the backend pipeline yet (a condition on it never matches). */
+  available?: boolean;
 }
 
 export type Role = 'ADMIN' | 'ANALYST' | 'VIEWER';
@@ -341,4 +343,31 @@ export interface ApiKey {
   revoked: boolean;
   /** Only present in the creation response. */
   secret?: string;
+}
+
+/** GET /dashboard. Sections the caller has no permission for are null and named in omittedSections. */
+export interface Dashboard {
+  generatedAt: string;
+  totals: {
+    walletsTracked: number;
+    eventsIndexed: number;
+    transfersIndexed: number;
+    eventsRetracted: number;
+    rules: number;
+    rulesEnabled: number;
+    alerts: number | null;
+    openAlerts: number | null;
+    signals24h: number | null;
+  };
+  riskDistribution: Record<RiskLevel, number>;
+  networks: NetworkStatus[];
+  activity: { start: string; events: number; alerts: number | null; signals: number | null }[];
+  alerts: {
+    byStatus: Record<AlertStatus, number>;
+    bySeverity: Record<Severity, number>;
+    openBySeverity: Record<Severity, number>;
+    recent: Alert[];
+  } | null;
+  recentSignals: Signal[] | null;
+  omittedSections: string[];
 }

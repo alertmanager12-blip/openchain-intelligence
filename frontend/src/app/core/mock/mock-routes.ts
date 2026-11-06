@@ -66,6 +66,7 @@ function findRule(id: string): Rule {
   return r;
 }
 
+on('GET', '/dashboard', () => mockDb().dashboard());
 on('GET', '/networks', () => mockDb().networks());
 on('GET', '/signals', (req) => page(mockDb().signals, req, 20));
 on('GET', '/wallets/([^/]+)/analysis', (req, m) => mockDb().wallet(decodeURIComponent(m[1]), net(req)));

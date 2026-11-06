@@ -43,7 +43,7 @@ describe('pages (mock mode smoke test)', () => {
     ['wallet', WalletPage, { network: 'ethereum', address: addr }, 'Counterparties'],
     ['risk', RiskPage, { network: 'ethereum', address: addr }, 'Contributions'],
     ['alerts', AlertsPage, {}, 'al_'],
-    ['builder', RuleBuilderPage, {}, 'apiVersion: openchain.io/v1'],
+    ['builder', RuleBuilderPage, {}, 'apiVersion: openchain.io/rule/v1'],
     ['code', RuleCodePage, {}, 'Validate on server'],
     ['simulator', SimulatorPage, {}, 'Run dry run'],
     ['integrations', IntegrationsPage, {}, 'SOC webhook'],

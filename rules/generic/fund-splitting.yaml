@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: fund-splitting
-version: 1.0.0
+version: 1.1.0
 name: Fund splitting (more than 10 distinct recipients in 3 minutes)
 description: One sender transfers to more than 10 distinct recipients within a 3 minute window.
 author: openchain-community
@@ -33,6 +33,9 @@ severity: MEDIUM
 evidenceLevel: ANOMALY
 cooldown: 15m
 expectedConfidence: 0.4
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
 documentation: |
   Counts distinct recipients per sender in a 3-minute sliding window (event time). Rapid fan-out is a classic
   layering step ("splitting" / peel chains) but also matches payroll, airdrops and exchange hot-wallet payouts:

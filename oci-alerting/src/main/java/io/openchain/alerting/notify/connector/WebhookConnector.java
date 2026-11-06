@@ -13,9 +13,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Generic signed webhook. Body: {@link NotificationFormatter#json}. Headers: {@code X-OpenChain-Signature}
- * (HMAC-SHA256 over "timestamp.body"), {@code X-OpenChain-Idempotency-Id} (stable across retries) and
- * {@code X-OpenChain-Event: alert}. The URL is configured by the operator and SSRF-checked on every attempt.
+ * Generic signed webhook. Body: {@link NotificationFormatter#json}. Headers: {@code X-OCI-Signature}
+ * (HMAC-SHA256 over "timestamp.body"), {@code X-OCI-Delivery-Id} (stable across retries) and
+ * {@code X-OCI-Event: alert.opened}. The URL is configured by the operator and SSRF-checked on every attempt.
  */
 public final class WebhookConnector implements NotificationConnector {
 
@@ -44,7 +44,7 @@ public final class WebhookConnector implements NotificationConnector {
         headers.put("Content-Type", "application/json");
         headers.put(WebhookSignature.HEADER, WebhookSignature.header(secret, clock.instant().getEpochSecond(), body));
         headers.put(WebhookSignature.IDEMPOTENCY_HEADER, n.deliveryId());
-        headers.put(WebhookSignature.EVENT_HEADER, "alert");
+        headers.put(WebhookSignature.EVENT_HEADER, WebhookSignature.EVENT_ALERT_OPENED);
         return HttpConnectorSupport.post(http, url, headers, body);
     }
 }

@@ -13,8 +13,13 @@ public record BackoffPolicy(Duration initial, int multiplier, Duration max, int 
         if (maxAttempts < 1 || multiplier < 1 || jitter < 0 || jitter > 1) throw new IllegalArgumentException("invalid backoff policy");
     }
 
+    /**
+     * Uses {@link java.util.Random} (java.base, thread-safe). {@code RandomGenerator.getDefault()} must not be used:
+     * on Java 21 its L32X64MixRandom implementation lives in the optional {@code jdk.random} module, which the
+     * eclipse-temurin JRE runtime image does not ship, so the application failed to start in Docker.
+     */
     public static BackoffPolicy defaults() {
-        return new BackoffPolicy(Duration.ofSeconds(10), 2, Duration.ofMinutes(30), 8, 0.2, RandomGenerator.getDefault());
+        return new BackoffPolicy(Duration.ofSeconds(10), 2, Duration.ofMinutes(30), 8, 0.2, new java.util.Random());
     }
 
     /** @param attempt number of failed attempts so far (>= 1) */

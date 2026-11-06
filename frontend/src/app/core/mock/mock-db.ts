@@ -1,6 +1,6 @@
 /* In-memory fake data for mock mode. Every address and hash here is fictitious ("fa4ede30" ≈ fake demo). */
 import {
-  Alert, AlertStatus, ApiKey, Balance, ChainTransaction, Counterparty, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, Label,
+  ALERT_STATUSES, Alert, AlertStatus, ApiKey, Balance, Dashboard, ChainTransaction, Counterparty, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, Label,
   LabelReport, NETWORKS, NetworkId, NetworkStatus, RiskContribution, RiskLevel, RiskScore, Rule, RuleTestResult, SEVERITIES, Severity,
   Signal, Token, TransactionAnalysis, TokenTransfer, User, WalletAnalysis, Webhook,
 } from '../models';
@@ -137,8 +137,8 @@ export class MockDb {
     this.seedRules();
     this.seedAlerts(rng);
     this.webhooks.push(
-      { id: 'wh_ops', type: 'WEBHOOK', name: 'SOC webhook', target: 'https://hooks.example.invalid/oci', enabled: true, createdAt: iso(20 * D), lastDeliveryAt: iso(2 * H), lastDeliveryStatus: 'OK' },
-      { id: 'wh_slack', type: 'SLACK', name: '#compliance-alerts', target: 'https://hooks.slack.example.invalid/T000/B000', enabled: true, createdAt: iso(12 * D), lastDeliveryAt: iso(5 * H), lastDeliveryStatus: 'FAILED' },
+      { id: 'wh-ops', type: 'WEBHOOK', name: 'SOC webhook', target: 'https://hooks.example.invalid/oci', enabled: true, createdAt: iso(20 * D), lastDeliveryAt: iso(2 * H), lastDeliveryStatus: 'OK' },
+      { id: 'wh-slack', type: 'SLACK', name: '#compliance-alerts', target: 'https://hooks.slack.example.invalid/T000/B000', enabled: true, createdAt: iso(12 * D), lastDeliveryAt: iso(5 * H), lastDeliveryStatus: 'FAILED' },
     );
     NETWORKS.slice(0, 4).forEach((n, ni) => {
       for (let i = 1; i <= 5; i++) {
@@ -180,14 +180,14 @@ export class MockDb {
   private seedRules(): void {
     const drafts: RuleDraft[] = [
       { ...emptyRule(), id: 'large-stablecoin-transfer', name: 'Large stablecoin transfer', description: 'Single USDT/USDC transfer of 250k or more', severity: 'HIGH', networks: ['ethereum', 'tron'],
-        when: newGroup('all', [newCondition('token.symbol', 'in', ['USDT', 'USDC']), newCondition('amount', 'gte', '250000')]), actions: [{ type: 'alert', target: '' }, { type: 'webhook', target: 'wh_ops' }] },
+        when: newGroup('all', [newCondition('transaction.token.symbol', 'in', ['USDT', 'USDC']), newCondition('transaction.amount', 'gte', '250000')]), actions: [{ type: 'alert', target: '' }, { type: 'webhook', target: 'wh-ops' }] },
       { ...emptyRule(), id: 'mixer-exposure', name: 'Funds received from mixer-labelled address', severity: 'CRITICAL', networks: ['ethereum', 'bsc', 'polygon'],
-        when: newGroup('all', [newCondition('from', 'has_label', 'mixer'), newGroup('any', [newCondition('amount_usd', 'gte', '10000'), newCondition('to.risk_score', 'gte', 65)])]), cooldown: '1h' },
+        when: newGroup('all', [newCondition('counterparty.labels', 'contains', 'mixer'), newGroup('any', [newCondition('transaction.amount_usd', 'gte', '10000'), newCondition('counterparty.risk_score', 'gte', 65)])]), evidenceLevel: 'RISK_SIGNAL', cooldown: '1h' },
       { ...emptyRule(), id: 'structuring-burst', name: 'Structuring burst (many sub-10k transfers)', severity: 'MEDIUM', networks: ['tron'],
-        when: newGroup('all', [newCondition('token.symbol', 'eq', 'USDT'), newCondition('amount', 'between', ['9000', '9999.99'])]),
-        window: { duration: '2h', aggregate: 'count', field: null, groupBy: 'from', op: 'gte', value: '8' } },
+        when: newGroup('all', [newCondition('transaction.token.symbol', 'eq', 'USDT'), newCondition('transaction.amount', 'between', ['9000', '9999.99'])]),
+        window: { duration: '2h', aggregate: 'count', field: null, groupBy: ['transaction.from'], op: 'gte', value: '8' } },
       { ...emptyRule(), id: 'risky-approval', name: 'Unlimited approval to new contract', severity: 'LOW', enabled: false, eventTypes: ['APPROVAL'],
-        when: newGroup('all', [newCondition('contract.is_new', 'eq', true)]) },
+        when: newGroup('all', [newCondition('approval.unlimited', 'eq', true), newCondition('approval.spender_age_days', 'lt', 7)]) },
     ];
     drafts.forEach((d, i) => this.rules.push({ id: d.id, name: d.name, enabled: d.enabled, severity: d.severity, yaml: ruleToYaml(d), version: i + 1, updatedAt: iso((i + 1) * D) }));
   }
@@ -354,6 +354,33 @@ export class MockDb {
     return { root: address, nodes: [...nodes.values()], edges, truncated: nodes.size >= 80 };
   }
 
+  /** Mock of GET /dashboard, computed from this fake store. */
+  dashboard(): Dashboard {
+    const open = this.alerts.filter((a) => a.status === 'OPEN');
+    const count = <K extends string>(keys: readonly K[], f: (k: K) => number) => Object.fromEntries(keys.map((k) => [k, f(k)])) as Record<K, number>;
+    const levels: RiskLevel[] = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const start = Math.floor(NOW / H) * H - 23 * H;
+    return {
+      generatedAt: new Date(NOW).toISOString(),
+      totals: { walletsTracked: 160, eventsIndexed: 48_200, transfersIndexed: 47_900, eventsRetracted: 3, rules: this.rules.length,
+        rulesEnabled: this.rules.filter((r) => r.enabled).length, alerts: this.alerts.length, openAlerts: open.length,
+        signals24h: this.signals.filter((x) => Date.parse(x.detectedAt) > NOW - D).length },
+      riskDistribution: count(levels, (l) => ({ UNKNOWN: 12, LOW: 96, MEDIUM: 31, HIGH: 15, CRITICAL: 6 })[l]),
+      networks: this.networks(),
+      activity: Array.from({ length: 24 }, (_, i) => ({ start: new Date(start + i * H).toISOString(), events: 1800 + ((i * 37) % 400),
+        alerts: this.alerts.filter((a) => Math.floor(Date.parse(a.createdAt) / H) * H === start + i * H).length,
+        signals: this.signals.filter((x) => Math.floor(Date.parse(x.detectedAt) / H) * H === start + i * H).length })),
+      alerts: {
+        byStatus: count(ALERT_STATUSES, (st) => this.alerts.filter((a) => a.status === st).length),
+        bySeverity: count(SEVERITIES, (sv) => this.alerts.filter((a) => a.severity === sv).length),
+        openBySeverity: count(SEVERITIES, (sv) => open.filter((a) => a.severity === sv).length),
+        recent: this.alerts.slice(0, 5),
+      },
+      recentSignals: this.signals.slice(0, 10),
+      omittedSections: [],
+    };
+  }
+
   simulate(yaml: string, from: string, to: string): RuleTestResult {
     const parsed = yamlToRule(yaml);
     if (!parsed.draft || parsed.errors.length) throw new ProblemError(422, 'Rule invalid', parsed.errors.map((e) => `${e.path || 'line ' + e.line}: ${e.message}`).join('; '));
@@ -361,7 +388,8 @@ export class MockDb {
     const days = Math.max(1 / 24, (Date.parse(to) - Date.parse(from)) / D);
     const rng = new Rng(`sim:${yaml}`);
     const conditions = JSON.stringify(d.when).split('"condition"').length - 1;
-    const evaluated = Math.round(days * 48_000 * d.networks.length);
+    const nets: NetworkId[] = d.networks.length ? d.networks : ['ethereum'];
+    const evaluated = Math.round(days * 48_000 * nets.length);
     const selectivity = Math.pow(0.08, conditions) * (d.window ? 0.2 : 1) * (0.5 + rng.next());
     const matchCount = Math.min(evaluated, Math.round(evaluated * selectivity));
     const perDay = Math.round((matchCount / days) * 10) / 10;
@@ -372,7 +400,7 @@ export class MockDb {
     if (estimated > 50) warnings.push(`~${estimated} alerts/day expected: analysts will not keep up. Add conditions or raise thresholds.`);
     if (conditions <= 1) warnings.push('Only one condition: rules this broad usually produce noise.');
     const matches = Array.from({ length: Math.min(matchCount, 25) }, () => {
-      const n = rng.pick(d.networks);
+      const n = rng.pick(nets);
       const t = rng.pick(tokensOf(n));
       const amount = rng.raw(0, 6);
       return { eventId: `${n}:${fakeTxHash(n, rng)}:${rng.int(0, 5)}`, network: n, eventTime: new Date(Date.parse(to) - rng.int(0, Math.round(days * D))).toISOString(), summary: `${amount} ${t.symbol} ${fakeAddress(n, rng.int(1, 60)).slice(0, 12)}… → ${fakeAddress(n, rng.int(61, 99)).slice(0, 12)}…`, fields: { 'token.symbol': t.symbol, amount } };

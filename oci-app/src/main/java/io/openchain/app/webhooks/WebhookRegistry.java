@@ -79,7 +79,8 @@ public class WebhookRegistry {
         byte[] raw = new byte[32];
         random.nextBytes(raw);
         String secret = "whsec_" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
-        String id = "wh_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        // a lowercase slug, so rules can reference it as actions[].connectorId (RuleValidator SLUG)
+        String id = "wh-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         // Receivers verify with the secret string as HMAC key (see docs/api "Webhook payload and signature").
         Switchable c = new Switchable(new WebhookConnector(id, url, secret.getBytes(StandardCharsets.UTF_8), http, clock));
         connectors.register(c);

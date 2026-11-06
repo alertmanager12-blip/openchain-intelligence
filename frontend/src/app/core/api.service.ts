@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  Alert, AlertStatus, ApiKey, ChainTransaction, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus,
+  Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus,
   Page, RiskScore, Rule, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis,
   User, WalletAnalysis, Webhook,
 } from './models';
@@ -42,6 +42,9 @@ export class ApiService {
   private enc = encodeURIComponent;
 
   // --- networks & signals
+  dashboard(): Observable<Dashboard> {
+    return this.http.get<Dashboard>(`${this.base}/dashboard`);
+  }
   networks(): Observable<NetworkStatus[]> {
     return this.http.get<NetworkStatus[]>(`${this.base}/networks`);
   }

@@ -95,7 +95,7 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 | Method | Path | Scope | Description |
 |---|---|---|---|
 | GET | `/wallets/{address}/analysis?network=` | wallet:read | Profile, risk score with contributions, signals, labels, data freshness |
-| GET | `/wallets/{address}/transactions?network=&token=&from=&to=&direction=in\|out\|all&cursor=&limit=` | transaction:read | Transactions, cursor paginated |
+| GET | `/wallets/{address}/transactions?network=&cursor=&limit=` | transaction:read | Transactions, newest first, cursor paginated (`token`/`from`/`to`/`direction` filters: not implemented yet) |
 | GET | `/wallets/{address}/risk?network=` | risk:read | Current `RiskScore` + recent history |
 | GET | `/wallets/{address}/exposure?network=&depth=1..3` | investigation:read | Direct/indirect exposure to labelled categories (amount and share, by hop) |
 | GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
@@ -154,7 +154,7 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 
 | Method | Path | Scope | Description |
 |---|---|---|---|
-| POST | `/webhooks` | webhooks:write | Create webhook connector `{ name, url, events[] }`; response includes the signing `secret` **once** |
+| POST | `/webhooks` | webhooks:write | Create webhook connector `{ name, url, events[] }` (https only); response includes the signing `secret` **once** and an `id` (`wh-…`, a slug usable as `actions[].connectorId`) |
 | GET | `/webhooks` | webhooks:read | List (secrets never returned) |
 | GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
 | GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | investigation:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
@@ -170,13 +170,16 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 | POST | `/api-keys/{id}/revoke` | keys:admin | Revoke (`DELETE /api-keys/{id}` is an alias) |
 | GET / PATCH | `/users`, `/users/{id}` | keys:admin | Console users and their role `{ role }` |
 | GET | `/signals?network=&type=&cursor=&limit=` | risk:read | Recent detection signals |
-| GET | `/rules/fields` | rules:read | Field catalog usable in rules |
+| GET | `/rules/fields` | rules:read | Field catalog usable in rules; `available=false` marks fields the pipeline does not populate yet |
 | GET | `/rules/export` | rules:read | All current rule sources, `---` separated |
 | POST | `/rules/test` | rules:write | DRY_RUN of an unsaved rule (`source`/`yaml` in the body) |
 | DELETE | `/rules/{id}` | rules:write | Delete a rule |
 | DELETE | `/webhooks/{id}` | webhooks:write | Delete a connector |
 | POST | `/webhooks/{id}/test` | webhooks:write | Signed test delivery → `{ delivered, statusCode, message }` |
 | GET | `/labels/reports` | labels:report | Submitted label reports |
+| GET | `/dashboard` | wallet:read | Totals, risk distribution, networks, 24 h activity; `alerts` (needs alerts:read) and `recentSignals` (needs risk:read) are `null` otherwise, listed in `omittedSections` |
+| GET | `/rules/event-types` | rules:read | Event types with `available` (produced by the current pipeline) |
+| GET | `/demo/scenarios`, `/demo/notifications` | wallet:read + alerts:read | **Demo mode only.** Fictitious scenarios A-E and the evidence produced by the real pipeline |
 
 ## Webhook payload and signature
 

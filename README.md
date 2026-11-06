@@ -12,7 +12,7 @@ Licence: [Apache-2.0](LICENSE).
 
 - **Explainable by design** — every risk point and every alert links to evidence: transactions, rule version, source, timestamp.
 - **Honest about evidence** — signals are tagged `ANOMALY`, `RISK_SIGNAL` or `CONFIRMED_BY_SOURCE`. OCI never labels an address as criminal.
-- **Programmable, safely** — rules are declarative data (`oci.rules/v1`): filters, sliding windows, group-by, dedup, cooldown. No scripting, no code execution.
+- **Programmable, safely** — rules are declarative data (`openchain.io/rule/v1`): filters, sliding windows, group-by, dedup, cooldown. No scripting, no code execution.
 - **Reorg-aware** — confirmations are first-class; alerts depending on orphaned blocks are retracted.
 - **Exact amounts** — `BigInteger`/`BigDecimal` end to end.
 - **Multi-chain** — one provider SPI, failover and rate limiting; TRON and EVM first.
@@ -77,21 +77,29 @@ This starts in **demo mode** (`OCI_DEMO_MODE=true`) on a simulated chain — no 
 A rule looks like this:
 
 ```yaml
-apiVersion: oci.rules/v1
-kind: Rule
-metadata: { name: usdt-burst-outflow, severity: HIGH }
-spec:
+apiVersion: openchain.io/rule/v1
+id: usdt-burst-outflow
+version: 1.0.0
+name: USDT burst outflow
+author: your-team
+scope:
   networks: [tron]
   eventTypes: [TOKEN_TRANSFER]
-  where:
-    all: [ { field: transaction.token.symbol, op: eq, value: USDT } ]
-  window: { type: sliding, size: 1h, groupBy: [transaction.from] }
-  having:
-    all:
-      - { aggregate: count, op: gte, value: 5 }
-      - { aggregate: sum, field: transaction.amount, op: gte, value: "50000" }
-  dedup: { cooldown: 6h }
-  actions: [ { connector: ops-webhook } ]
+conditions:
+  logic: AND
+  rules:
+    - { field: transaction.token.symbol, operator: EQUALS, value: USDT }
+aggregation:                      # one aggregate per rule: SUM over a sliding 1h event-time window per sender
+  window: 1h
+  groupBy: [transaction.from]
+  function: SUM
+  field: transaction.amount
+  operator: GREATER_THAN_OR_EQUAL
+  threshold: "50000"
+severity: HIGH
+cooldown: 6h
+actions:
+  - { type: WEBHOOK, connectorId: ops-webhook }
 ```
 
 ## Module status

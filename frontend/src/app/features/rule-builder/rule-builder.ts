@@ -5,7 +5,7 @@ import { catchError, of } from 'rxjs';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { FieldDef, NETWORKS, NetworkId, Rule, SEVERITIES } from '../../core/models';
-import { ACTION_TYPES, AGGREGATES, ActionType, DEFAULT_FIELDS, EVENT_TYPES, RuleDraft, emptyRule } from '../../core/rules/rule-model';
+import { ACTION_TYPES, AGGREGATES, AVAILABLE_EVENT_TYPES, ActionType, DEFAULT_FIELDS, EVENT_TYPES, EVIDENCE_LEVELS, RuleDraft, emptyRule } from '../../core/rules/rule-model';
 import { ruleToYaml, validateDraft, yamlToRule } from '../../core/rules/rule-yaml';
 import { UI } from '../../shared/ui';
 import { ConditionGroupEditor } from './condition-group';
@@ -38,13 +38,16 @@ import { ConditionGroupEditor } from './condition-group';
               <label>Identifier<input name="id" class="mono" [ngModel]="d().id" (ngModelChange)="patch({ id: $event })" [disabled]="!!loadedId()" />
                 @if (err('id'); as m) { <span class="field-error">{{ m }}</span> }</label>
               <label>Severity<select name="sev" [ngModel]="d().severity" (ngModelChange)="patch({ severity: $event })">@for (s of severities; track s) { <option [value]="s">{{ s }}</option> }</select></label>
+              <label>Evidence level<select name="ev" [ngModel]="d().evidenceLevel" (ngModelChange)="patch({ evidenceLevel: $event })">@for (e of evidenceLevels; track e) { <option [value]="e">{{ e }}</option> }</select></label>
+              <label>Version<input name="ver" [ngModel]="d().version" (ngModelChange)="patch({ version: $event })" placeholder="1.0.0" /></label>
+              <label>Author<input name="author" [ngModel]="d().author" (ngModelChange)="patch({ author: $event })" /></label>
             </div>
             <label>Description<input name="desc" [ngModel]="d().description" (ngModelChange)="patch({ description: $event })" placeholder="What this rule is for, for the analyst who receives the alert" /></label>
             <fieldset><legend>Networks</legend><div class="row">
               @for (n of networks; track n) { <label class="check"><input type="checkbox" [checked]="d().networks.includes(n)" (change)="toggleNetwork(n)" />{{ n }}</label> }
             </div>@if (err('networks'); as m) { <span class="field-error">{{ m }}</span> }</fieldset>
             <fieldset><legend>Event types</legend><div class="row">
-              @for (t of eventTypes; track t) { <label class="check"><input type="checkbox" [checked]="d().eventTypes.includes(t)" (change)="toggleEvent(t)" />{{ t }}</label> }
+              @for (t of eventTypes; track t) { <label class="check"><input type="checkbox" [checked]="d().eventTypes.includes(t)" (change)="toggleEvent(t)" />{{ t }}{{ availableEvents.includes(t) ? '' : ' (not yet available)' }}</label> }
             </div>@if (err('event_types'); as m) { <span class="field-error">{{ m }}</span> }</fieldset>
           </section>
 
@@ -63,7 +66,7 @@ import { ConditionGroupEditor } from './condition-group';
                 @if (w.aggregate !== 'count') {
                   <label>Of field<select name="wf" [ngModel]="w.field" (ngModelChange)="patchWindow({ field: $event })">@for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }}</option> }</select></label>
                 }
-                <label>Group by<select name="gb" [ngModel]="w.groupBy" (ngModelChange)="patchWindow({ groupBy: $event || null })"><option value="">(none)</option>@for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }}</option> }</select></label>
+                <label>Group by<select name="gb" [ngModel]="w.groupBy[0] ?? ''" (ngModelChange)="patchWindow({ groupBy: $event ? [$event, ...w.groupBy.slice(1)] : [] })"><option value="">(none)</option>@for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }}</option> }</select></label>
                 <label>Over<input name="wd" [ngModel]="w.duration" (ngModelChange)="patchWindow({ duration: $event })" placeholder="1h" /></label>
                 <label>Is<select name="wo" [ngModel]="w.op" (ngModelChange)="patchWindow({ op: $event })">@for (o of windowOps; track o) { <option [value]="o">{{ o }}</option> }</select></label>
                 <label>Threshold<input name="wv" inputmode="decimal" [ngModel]="w.value" (ngModelChange)="patchWindow({ value: $event })" /></label>
@@ -77,7 +80,7 @@ import { ConditionGroupEditor } from './condition-group';
             @for (a of d().actions; track $index; let i = $index) {
               <div class="row">
                 <label>Type<select [ngModel]="a.type" (ngModelChange)="setAction(i, { type: $event })" [name]="'at' + i">@for (t of actionTypes; track t) { <option [value]="t">{{ t }}</option> }</select></label>
-                @if (a.type !== 'alert') { <label class="grow">Target (connector id or recipient)<input [name]="'tg' + i" [ngModel]="a.target" (ngModelChange)="setAction(i, { target: $event })" placeholder="wh_ops" /></label> }
+                @if (a.type !== 'alert') { <label class="grow">Connector id<input [name]="'tg' + i" [ngModel]="a.target" (ngModelChange)="setAction(i, { target: $event })" placeholder="wh-ops" /></label> }
                 <button class="btn btn--sm btn--ghost" type="button" (click)="removeAction(i)" aria-label="Remove action">✕</button>
               </div>
               @if (err('actions[' + i + '].target'); as m) { <span class="field-error">{{ m }}</span> }
@@ -131,10 +134,12 @@ export class RuleBuilderPage {
 
   readonly networks = NETWORKS;
   readonly severities = SEVERITIES;
+  readonly evidenceLevels = EVIDENCE_LEVELS;
   readonly eventTypes = EVENT_TYPES;
+  readonly availableEvents = AVAILABLE_EVENT_TYPES;
   readonly aggregates = AGGREGATES;
   readonly actionTypes = ACTION_TYPES;
-  readonly windowOps = ['gt', 'gte', 'lt', 'lte', 'eq'];
+  readonly windowOps = ['gt', 'gte'];
 
   readonly d = signal<RuleDraft>(emptyRule());
   readonly catalog = signal<FieldDef[]>(DEFAULT_FIELDS);
@@ -173,7 +178,7 @@ export class RuleBuilderPage {
     if (w) this.patch({ window: { ...w, ...p } });
   }
   toggleWindow(): void {
-    this.patch({ window: this.d().window ? null : { duration: '1h', aggregate: 'sum', field: 'amount', groupBy: 'from', op: 'gt', value: '1000000' } });
+    this.patch({ window: this.d().window ? null : { duration: '1h', aggregate: 'sum', field: 'transaction.amount', groupBy: ['transaction.from'], op: 'gt', value: '1000000' } });
   }
   toggleNetwork(n: NetworkId): void {
     const s = this.d().networks;

@@ -8,6 +8,8 @@ import io.openchain.app.api.ApiException;
 import io.openchain.app.api.ApiMapper;
 import io.openchain.app.api.Dto;
 import io.openchain.app.chain.EventHistory;
+import io.openchain.app.demo.DemoScenarios;
+import org.springframework.beans.factory.ObjectProvider;
 import io.openchain.core.event.ChainEvent;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -42,10 +44,12 @@ public class AlertFacade {
 
     private final AlertService alerts;
     private final EventHistory history;
+    private final ObjectProvider<DemoScenarios> demo;
 
-    public AlertFacade(AlertService alerts, EventHistory history) {
+    public AlertFacade(AlertService alerts, EventHistory history, ObjectProvider<DemoScenarios> demo) {
         this.alerts = alerts;
         this.history = history;
+        this.demo = demo;
     }
 
     public static String apiStatus(AlertStatus s) { return OPEN.contains(s) ? "OPEN" : s.name(); }
@@ -171,7 +175,17 @@ public class AlertFacade {
                 apiStatus(a.status()), a.status().name(), allowed, a.network() == null ? null : a.network().id(), address, txHash,
                 summary(a, fields), a.evidenceLevel() == null ? null : a.evidenceLevel().name(), a.assignee(), a.occurrenceCount(),
                 a.firstSeen(), a.lastSeen(), a.createdAt(), a.updatedAt(), a.matchedEventIds(), matched,
-                ApiMapper.jsonSafe(a.evidence()), comments, hist);
+                ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a));
+    }
+
+    private String demoScenario(Alert a) {
+        DemoScenarios d = demo.getIfAvailable();
+        if (d == null) return null;
+        for (String id : a.matchedEventIds()) {
+            var s = d.scenarioOf(id);
+            if (s.isPresent()) return s.get();
+        }
+        return null;
     }
 
     private static String summary(Alert a, Map<String, Object> f) {

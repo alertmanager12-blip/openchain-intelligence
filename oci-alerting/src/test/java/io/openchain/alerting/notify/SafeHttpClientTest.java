@@ -40,7 +40,7 @@ class SafeHttpClientTest {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/ok", ex -> {
             receivedBody.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            receivedSig.set(ex.getRequestHeaders().getFirst("X-OpenChain-Signature"));
+            receivedSig.set(ex.getRequestHeaders().getFirst("X-OCI-Signature"));
             byte[] r = "ok".getBytes();
             ex.sendResponseHeaders(200, r.length);
             try (OutputStream o = ex.getResponseBody()) { o.write(r); }
@@ -77,7 +77,7 @@ class SafeHttpClientTest {
 
     @Test void postsBodyAndHeadersToPinnedAddress() throws Exception {
         HttpResult r = devClient(Duration.ofSeconds(2), 1024).post(URI.create(base + "/ok?x=1"),
-                Map.of("X-OpenChain-Signature", "t=1,v1=ab", "Content-Type", "application/json"), "{\"a\":1}".getBytes());
+                Map.of("X-OCI-Signature", "t=1,v1=ab", "Content-Type", "application/json"), "{\"a\":1}".getBytes());
         assertThat(r.status()).isEqualTo(200);
         assertThat(new String(r.body())).isEqualTo("ok");
         assertThat(receivedBody.get()).isEqualTo("{\"a\":1}");

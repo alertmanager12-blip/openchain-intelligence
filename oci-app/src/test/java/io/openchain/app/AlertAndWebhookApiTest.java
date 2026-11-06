@@ -105,7 +105,7 @@ class AlertAndWebhookApiTest extends ApiTestSupport {
                 .andExpect(jsonPath("$.delivered").value(true))
                 .andExpect(jsonPath("$.statusCode").value(204));
         assertThat(http.calls).hasSize(before + 1);
-        assertThat(http.headers.getLast()).containsKey("X-OpenChain-Signature");
+        assertThat(http.headers.getLast()).containsKey("X-OCI-Signature").containsKey("X-OCI-Delivery-Id").containsEntry("X-OCI-Event", "alert.opened");
         mvc.perform(delete("/api/v1/webhooks/" + id).header("X-API-Key", ADMIN)).andExpect(status().isNoContent());
         mvc.perform(post("/api/v1/webhooks/" + id + "/test").header("X-API-Key", ADMIN)).andExpect(status().isNotFound());
     }

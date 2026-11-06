@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
-Public API stability (REST API v1, rule schema `oci.rules/v1`) is guaranteed from 1.0.0; during 0.x minor versions may contain breaking changes, which are always listed here.
+Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaranteed from 1.0.0; during 0.x minor versions may contain breaking changes, which are always listed here.
 
 ## [Unreleased]
 

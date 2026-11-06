@@ -63,7 +63,7 @@ sequenceDiagram
   E->>W: add(rule@v3, groupKey=from, e.eventId, amount, t)
   W->>W: evict contributions with time < watermark - 1h<br/>(watermark = max eventTime - allowedLateness)
   W-->>E: aggregate {count=5, sum=52 000, first=t0, last=t}
-  E->>E: having count>=5 AND sum>=50000 → match
+  E->>E: aggregation SUM(amount)>=50000 → match
   E->>D: RuleMatch(rule@v3, groupKey, window[t0,t], eventIds)
   D->>DB: SELECT alert WHERE dedup_key=hash(rule, groupKey) AND status open
   alt open alert exists and within cooldown (6h since last notification)

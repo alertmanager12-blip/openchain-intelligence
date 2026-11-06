@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: wallet-draining
-version: 1.0.0
+version: 1.1.0
 name: Wallet drained (>80% of balance out in 2 minutes)
 description: Outgoing transfers from one wallet exceed 80% of its starting balance within a 2 minute window.
 author: openchain-community
@@ -29,6 +29,9 @@ severity: HIGH
 evidenceLevel: ANOMALY
 cooldown: 30m
 expectedConfidence: 0.5
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
 documentation: |
   For each (sender, token), sums outgoing amounts in a 2-minute event-time window and divides by wallet.balance
   of the earliest transfer in the window (the balance BEFORE the first outflow). Fires above 80%.

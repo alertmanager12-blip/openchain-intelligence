@@ -2,10 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { FormsModule } from '@angular/forms';
 import { FieldDef, FieldType } from '../../core/models';
 import {
-  Condition, ConditionGroup, ConditionValue, OPERATORS_BY_TYPE, OPERATOR_LABELS, Operator, newCondition, newGroup,
+  Condition, ConditionGroup, ConditionValue, OPERATORS_BY_TYPE, OPERATOR_LABELS, Operator, availabilityNote, newCondition, newGroup,
 } from '../../core/rules/rule-model';
 
-const LABEL_CATEGORIES = ['exchange', 'mixer', 'scam-report', 'sanctioned', 'bridge', 'defi-protocol', 'gambling'];
+/** Label category ids as written in wallet.labels / counterparty.labels by the backend. */
+const LABEL_CATEGORIES = ['sanctioned', 'mixer', 'scam', 'phishing', 'ransomware', 'stolen-funds', 'darknet-market', 'flagged-community', 'exchange', 'bridge', 'defi-protocol', 'other'];
 const MAX_DEPTH = 4;
 
 /** Default value for a field type / operator pair, so a freshly switched condition is immediately valid-ish. */
@@ -13,7 +14,6 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
   if (op === 'exists') return null;
   if (op === 'in' || op === 'not_in') return [];
   if (op === 'between') return type === 'number' ? ([0, 100] as unknown as string[]) : ['0', '0'];
-  if (op === 'has_label') return 'mixer';
   switch (type) {
     case 'boolean': return true;
     case 'number': return 0;
@@ -31,26 +31,27 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="group" [class.nested]="depth() > 1" role="group" [attr.aria-label]="(group().match === 'all' ? 'All' : 'Any') + ' of the following conditions'">
+    <div class="group" [class.nested]="depth() > 1" role="group" [attr.aria-label]="(group().match === 'all' ? 'All' : group().match === 'any' ? 'Any' : 'None') + ' of the following conditions'">
       <div class="row head">
         <span class="kw">{{ depth() === 1 ? 'WHEN' : '' }}</span>
         <div class="seg" role="radiogroup" aria-label="Group logic">
           <button type="button" role="radio" [attr.aria-checked]="group().match === 'all'" [attr.aria-pressed]="group().match === 'all'" (click)="setMatch('all')">ALL (AND)</button>
           <button type="button" role="radio" [attr.aria-checked]="group().match === 'any'" [attr.aria-pressed]="group().match === 'any'" (click)="setMatch('any')">ANY (OR)</button>
+          <button type="button" role="radio" [attr.aria-checked]="group().match === 'not'" [attr.aria-pressed]="group().match === 'not'" (click)="setMatch('not')">NOT</button>
         </div>
         <span class="spacer"></span>
         @if (removable()) { <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove.emit()" aria-label="Remove group">Remove group</button> }
       </div>
 
       @for (ch of group().children; track ch.id; let i = $index; let first = $first) {
-        @if (!first) { <div class="joiner">{{ group().match === 'all' ? 'AND' : 'OR' }}</div> }
+        @if (!first) { <div class="joiner">{{ group().match === 'any' ? 'OR' : 'AND' }}</div> }
         @if (ch.kind === 'group') {
           <oci-condition-group [group]="ch" [catalog]="catalog()" [depth]="depth() + 1" [removable]="true" [errors]="errors()" [path]="childPath(i)" (changed)="changed.emit()" (remove)="removeAt(i)" />
         } @else {
           <div class="cond" [class.invalid]="hasError(childPath(i))">
             <label class="f">Field
               <select [ngModel]="ch.field" (ngModelChange)="setField(ch, $event)">
-                @for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }} ({{ f.type }})</option> }
+                @for (f of catalog(); track f.path) { <option [value]="f.path" [title]="f.description">{{ f.path }} ({{ f.type }}){{ note(f.available) }}</option> }
               </select>
             </label>
             <label class="o">Operator
@@ -128,6 +129,7 @@ export class ConditionGroupEditor {
   readonly opLabel = OPERATOR_LABELS;
   readonly labelCats = LABEL_CATEGORIES;
   readonly maxDepth = MAX_DEPTH;
+  readonly note = availabilityNote;
   readonly ownErrors = computed(() => this.errors().filter((e) => e.path === this.path()).map((e) => e.message));
   readonly hasOwnError = computed(() => this.ownErrors().length > 0);
 
@@ -154,7 +156,7 @@ export class ConditionGroupEditor {
   inputKind(c: Condition): 'none' | 'bool' | 'enum' | 'label' | 'list' | 'range' | 'number' | 'text' {
     const t = this.def(c)?.type;
     if (c.op === 'exists') return 'none';
-    if (c.op === 'has_label') return 'label';
+    if (c.op === 'contains' && c.field.endsWith('.labels')) return 'label';
     if (c.op === 'in' || c.op === 'not_in') return 'list';
     if (c.op === 'between') return 'range';
     if (t === 'boolean') return 'bool';
@@ -169,7 +171,7 @@ export class ConditionGroupEditor {
     return Array.isArray(c.value) ? String(c.value[i] ?? '') : '';
   }
 
-  setMatch(m: 'all' | 'any'): void {
+  setMatch(m: 'all' | 'any' | 'not'): void {
     this.group().match = m;
     this.changed.emit();
   }
@@ -202,12 +204,12 @@ export class ConditionGroupEditor {
     this.changed.emit();
   }
   addCondition(): void {
-    this.group().children.push(newCondition(this.catalog()[0]?.path ?? 'amount', 'eq', ''));
+    this.group().children.push(newCondition(this.catalog()[0]?.path ?? 'transaction.amount', 'eq', ''));
     const c = this.group().children.at(-1) as Condition;
     this.setField(c, c.field);
   }
   addGroup(): void {
-    this.group().children.push(newGroup(this.group().match === 'all' ? 'any' : 'all', [newCondition('amount', 'gte', '')]));
+    this.group().children.push(newGroup(this.group().match === 'all' ? 'any' : 'all', [newCondition('transaction.amount', 'gte', '')]));
     this.changed.emit();
   }
   removeAt(i: number): void {

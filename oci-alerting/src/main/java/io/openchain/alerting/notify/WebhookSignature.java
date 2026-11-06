@@ -10,15 +10,17 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Webhook signature: header {@code X-OpenChain-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "t.body")>}.
+ * Webhook signature: header {@code X-OCI-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "t.body")>}.
  * Receivers must verify with {@link #verify}, which uses a constant-time comparison and rejects stale timestamps
- * (replay protection), and should deduplicate on the {@code X-OpenChain-Idempotency-Id} header.
+ * (replay protection), and should deduplicate on the {@code X-OCI-Delivery-Id} header.
  */
 public final class WebhookSignature {
 
-    public static final String HEADER = "X-OpenChain-Signature";
-    public static final String IDEMPOTENCY_HEADER = "X-OpenChain-Idempotency-Id";
-    public static final String EVENT_HEADER = "X-OpenChain-Event";
+    public static final String HEADER = "X-OCI-Signature";
+    public static final String IDEMPOTENCY_HEADER = "X-OCI-Delivery-Id";
+    public static final String EVENT_HEADER = "X-OCI-Event";
+    /** Event sent with every alert notification (deliveries are enqueued when an alert is opened). */
+    public static final String EVENT_ALERT_OPENED = "alert.opened";
     public static final int MIN_SECRET_BYTES = 32;
 
     private WebhookSignature() {}

@@ -55,6 +55,16 @@ public class RuleController {
 
     private static final Pattern DOC_SEPARATOR = Pattern.compile("(?m)^---[ \\t]*$");
     private static final MediaType YAML = MediaType.parseMediaType("application/yaml");
+    private static final List<String> SEVERITIES = List.of("INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL");
+    /** Closed value sets of STRING catalog fields (served as SPA type "enum"). */
+    private static final Map<String, List<String>> ENUMS = Map.of(
+            "network", java.util.Arrays.stream(Network.values()).map(Network::id).toList(),
+            "event.type", java.util.Arrays.stream(ChainEvent.EventType.values()).map(Enum::name).toList(),
+            "wallet.risk_level", java.util.Arrays.stream(io.openchain.core.risk.RiskLevel.values()).map(Enum::name).toList(),
+            "signal.type", java.util.Arrays.stream(io.openchain.core.detection.SignalType.values()).map(Enum::name).toList(),
+            "signal.severity", SEVERITIES,
+            "alert.severity", SEVERITIES,
+            "signal.evidence_level", List.of("ANOMALY", "RISK_SIGNAL", "CONFIRMED_BY_SOURCE"));
 
     private final RuleRegistry registry;
     private final RuleTester tester;
@@ -121,14 +131,22 @@ public class RuleController {
 
     @GetMapping("/fields")
     public List<Dto.FieldDefDto> fields() {
-        return catalog.all().stream().map(f -> new Dto.FieldDefDto(f.name(), switch (f.type()) {
+        return catalog.all().stream().map(f -> new Dto.FieldDefDto(f.name(), ENUMS.containsKey(f.name()) ? "enum" : switch (f.type()) {
             case DECIMAL -> "amount";
             case INTEGER -> "number";
             case BOOLEAN -> "boolean";
             case TIMESTAMP -> "timestamp";
             case STRING -> f.name().endsWith(".from") || f.name().endsWith(".to") || f.name().endsWith(".address")
-                    || f.name().endsWith(".contract") || f.name().endsWith(".spender") || f.name().endsWith(".owner") ? "address" : "string";
-        }, f.description(), f.sourceBacked())).toList();
+                    || f.name().endsWith(".contract") || f.name().endsWith(".spender") || f.name().endsWith(".owner")
+                    || f.name().endsWith(".new_owner") ? "address" : "string";
+        }, f.description(), f.sourceBacked(), ENUMS.get(f.name()), PopulatedFields.FIELDS.contains(f.name()))).toList();
+    }
+
+    /** Event types and whether the current pipeline produces them. */
+    @GetMapping("/event-types")
+    public List<Map<String, Object>> eventTypes() {
+        return java.util.Arrays.stream(ChainEvent.EventType.values())
+                .map(t -> Map.<String, Object>of("type", t.name(), "available", PopulatedFields.EVENT_TYPES.contains(t))).toList();
     }
 
     // ---- validate -----------------------------------------------------------------------------------------------

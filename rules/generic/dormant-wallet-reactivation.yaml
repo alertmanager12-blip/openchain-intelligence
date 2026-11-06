@@ -1,0 +1,58 @@
+apiVersion: openchain.io/rule/v1
+id: dormant-wallet-reactivation
+version: 1.0.0
+name: Dormant wallet reactivated
+description: A wallet without any activity for a long period (default 180 days) sends value again.
+author: openchain-community
+enabled: true
+tags: [generic, dormancy]
+scope:
+  eventTypes: [DETECTION_SIGNAL]
+conditions:
+  logic: AND
+  rules:
+    - field: signal.type
+      operator: EQUALS
+      value: DORMANT_REACTIVATION
+severity: LOW
+evidenceLevel: ANOMALY
+cooldown: 24h
+dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+expectedConfidence: 0.3
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+documentation: |
+  Raises an alert when oci-intelligence emits a DORMANT_REACTIVATION signal: the wallet sends value after a gap
+  longer than the configured dormancy (DetectionConfig.dormancy, 180 days by default). This is a behavioural
+  ANOMALY: owners legitimately return to old wallets (cold storage, inheritance, long-term holding). It is useful
+  context when combined with exposure or draining patterns. One alert per wallet per day.
+examples:
+  - name: dormancy signal matches
+    expect: MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: DORMANT_REACTIVATION
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: other signal types do not match
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: UNUSUAL_AMOUNT
+tests:
+  - name: one alert per wallet per day
+    events:
+      - offset: 0s
+        network: tron
+        fields:
+          signal.type: DORMANT_REACTIVATION
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+      - offset: 1h
+        network: tron
+        fields:
+          signal.type: DORMANT_REACTIVATION
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+    expectTriggers: 2
+    expectAlerts: 1

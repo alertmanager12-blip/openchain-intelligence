@@ -109,6 +109,8 @@ jobs:
           tags: openchain-intelligence/frontend:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+      - name: Compose smoke test (start, end-to-end demo checks, stop)
+        run: bash deploy/smoke-test.sh
 
   codeql:
     name: CodeQL

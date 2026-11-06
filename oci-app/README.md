@@ -38,6 +38,19 @@ hashes; random and ephemeral when unset), `OCI_SECURITY_OIDC_ISSUER_URI` (JWT re
 set; roles from the `oci_roles` claim), `oci.security.keys` (provisioned keys, hashed at startup),
 `oci.chains.*` (real TronGrid / EVM JSON-RPC providers, off by default), `OCI_RULES_DIRS`.
 
+## Demo scenarios (fictitious)
+
+In demo mode five FICTITIOUS stories are injected into the simulated TRON ledger and processed by the real pipeline
+(indexer → detection → risk → rule engine → alert → notification sink): A large transfer, B 2-hop exposure to a
+(demo-)sanctioned address, C wallet draining, D fund splitting, E dormant wallet reactivation.
+`GET /api/v1/demo/scenarios` lists each one with its events, signals, risk scores, alerts and simulated notifications
+(`checks` must all be true); alerts carry `demoScenario`. Addresses are generated and labelled `demo-scenarios`.
+
+The demo ledger (`DemoLedgerProvider`) funds every simulated wallet from a fictional faucet and drops simulated
+transfers that would overdraw their sender, so balances and `wallet.balance` are consistent (no negative balances,
+no balance ratios > 1). Alerts per rule on a fresh demo start, before → after: `wallet-draining` 122 → 2,
+`suspicious-wallet` 40 → 42 (now the largest: every demo wallet is < 30 days old), total 162 → 51.
+
 ## Not implemented yet (TODO)
 
 - **Persistence**: PostgreSQL + Flyway for rules/versions, alerts, API keys, users, label reports, webhook
@@ -47,5 +60,9 @@ set; roles from the `oci_roles` claim), `oci.security.keys` (provisioned keys, h
   `Retry-After` mapping exist, but nothing raises it yet.
 - **ETag / If-Match** on `PUT /rules/{id}` (412). `GET /rules/{id}` sends an ETag but it is not enforced.
 - **Outbox / Kafka** event bus (ADR-0006): the pipeline is called in-process.
+- `token` / `direction` / `from` / `to` filters on `GET /wallets/{a}/transactions`.
+- Catalog fields/event types never produced yet (`transaction.amount_usd`, `wallet.watchlisted`, `contract.*`,
+  `approval.*`, `CONTRACT_*`, `APPROVAL`, `RISK_SCORE_CHANGED`, ...): flagged `available=false` by `/rules/fields`
+  and `/rules/event-types`, and marked "not yet available" in the Alert Builder.
 - Multi-tenancy (`oci_tenant`), audit_log table, Slack/Discord/Telegram/email connector management,
   label report moderation, alert re-open (the alerting lifecycle makes RESOLVED/FALSE_POSITIVE terminal).

@@ -30,6 +30,9 @@ RUN groupadd --system --gid 10001 oci \
  && useradd --system --uid 10001 --gid oci --home-dir /app --shell /usr/sbin/nologin oci
 WORKDIR /app
 COPY --from=build --chown=oci:oci /app.jar /app/app.jar
+# Community rule pack (read-only): resolved as `rules` relative to WORKDIR by oci.rules.directories.
+# Without it the container started with 0 rules and never raised an alert. Override with OCI_RULES_DIRS + a volume.
+COPY --chown=oci:oci rules /app/rules
 USER 10001:10001
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/urandom" \
     SERVER_PORT=8080

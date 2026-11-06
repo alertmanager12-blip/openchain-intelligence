@@ -95,7 +95,7 @@ public final class SafeHttpClient implements OutboundHttp {
         sb.append("Host: ").append(t.host()).append(defaultPort ? "" : ":" + t.port()).append("\r\n");
         sb.append("Content-Length: ").append(length).append("\r\n");
         sb.append("Connection: close\r\n");
-        sb.append("User-Agent: OpenChain-Alerting/1.0\r\n");
+        sb.append("User-Agent: OpenChain-Intelligence-Webhook/0.1\r\n");
         for (Map.Entry<String, String> h : headers.entrySet()) {
             String name = h.getKey(), value = h.getValue();
             if (!name.matches("^[A-Za-z0-9-]{1,64}$")) throw new IllegalArgumentException("invalid header name");

@@ -54,7 +54,14 @@ class RuleApiTest extends ApiTestSupport {
                 .andExpect(jsonPath("$.items[*].id", hasItem("large-usdt-transfer")))
                 .andExpect(jsonPath("$.items[0].yaml", containsString("apiVersion")));
         mvc.perform(get("/api/v1/rules/fields").header("X-API-Key", READER))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[*].path", hasItem("transaction.amount")));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[*].path", hasItem("transaction.amount")))
+                .andExpect(jsonPath("$[?(@.path == 'transaction.amount')].available", hasItem(true)))
+                .andExpect(jsonPath("$[?(@.path == 'transaction.amount_usd')].available", hasItem(false)))
+                .andExpect(jsonPath("$[?(@.path == 'network')].type", hasItem("enum")));
+        mvc.perform(get("/api/v1/rules/event-types").header("X-API-Key", READER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.type == 'TOKEN_TRANSFER')].available", hasItem(true)))
+                .andExpect(jsonPath("$[?(@.type == 'APPROVAL')].available", hasItem(false)));
     }
 
     @Test

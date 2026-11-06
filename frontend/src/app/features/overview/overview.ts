@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
-import { Alert, NetworkStatus, Page, SEVERITIES, Signal } from '../../core/models';
+import { Dashboard, SEVERITIES } from '../../core/models';
 import { timeAgo } from '../../shared/format';
 import { query } from '../../shared/query';
 import { UI } from '../../shared/ui';
@@ -17,14 +17,17 @@ import { UI } from '../../shared/ui';
           <h1>Overview</h1>
           <p>Network ingestion health, open alerts and the latest detection signals. A signal is not proof of wrongdoing: it is a reason to look closer.</p>
         </div>
-        <button class="btn" type="button" (click)="load()" [disabled]="networks.loading()">Refresh</button>
+        <button class="btn" type="button" (click)="load()" [disabled]="dash.loading()">Refresh</button>
       </div>
 
       <section aria-labelledby="h-net">
         <h3 id="h-net">Networks</h3>
-        <oci-state [loading]="networks.loading()" [error]="networks.error()" [hasData]="!!networks.data()" (retry)="networks.retry()">
+        <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.data()" (retry)="dash.retry()">
+          @if (dash.data(); as d) {
+            <p class="small muted">{{ d.totals.walletsTracked.toLocaleString('en-US') }} wallets tracked · {{ d.totals.eventsIndexed.toLocaleString('en-US') }} events indexed · {{ d.totals.rulesEnabled }}/{{ d.totals.rules }} rules enabled@if (d.totals.signals24h !== null) { · {{ d.totals.signals24h }} signals in 24 h }</p>
+          }
           <div class="grid grid-cards">
-            @for (n of networks.data() ?? []; track n.network) {
+            @for (n of dash.data()?.networks ?? []; track n.network) {
               <article class="card net">
                 <div class="row"><span class="dot" [class.dot--bad]="!n.healthy" aria-hidden="true"></span><strong class="cap">{{ n.network }}</strong>
                   <span class="spacer"></span><span class="small" [class.bad]="!n.healthy">{{ n.healthy ? 'Healthy' : 'Degraded' }}</span></div>
@@ -41,7 +44,7 @@ import { UI } from '../../shared/ui';
       <div class="grid grid-2">
         <section class="card" aria-labelledby="h-sev">
           <h2 id="h-sev">Open alerts by severity</h2>
-          <oci-state [loading]="alerts.loading()" [error]="alerts.error()" [hasData]="!!alerts.data()" [empty]="openTotal() === 0" emptyText="No open alerts." (retry)="alerts.retry()">
+          <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.data()?.alerts" [empty]="openTotal() === 0" emptyText="No open alerts (or no alerts:read permission)." (retry)="dash.retry()">
             <ul class="bars">
               @for (s of bySeverity(); track s.severity) {
                 <li>
@@ -57,12 +60,12 @@ import { UI } from '../../shared/ui';
 
         <section class="card card--flush" aria-labelledby="h-sig">
           <h2 id="h-sig">Recent signals</h2>
-          <oci-state [loading]="signals.loading()" [error]="signals.error()" [hasData]="!!signals.data()" [empty]="(signals.data()?.items ?? []).length === 0" emptyText="No signals detected yet." (retry)="signals.retry()">
+          <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.data()" [empty]="(dash.data()?.recentSignals ?? []).length === 0" emptyText="No signals detected yet (or no risk:read permission)." (retry)="dash.retry()">
             <div class="table-wrap">
               <table>
                 <thead><tr><th scope="col">Signal</th><th scope="col">Evidence</th><th scope="col">Address</th><th scope="col">When</th></tr></thead>
                 <tbody>
-                  @for (s of (signals.data()?.items ?? []).slice(0, 10); track s.id) {
+                  @for (s of (dash.data()?.recentSignals ?? []).slice(0, 10); track s.id) {
                     <tr>
                       <td><oci-severity [value]="s.severity" /> {{ s.type }}<div class="small muted">{{ s.evidence[0]?.description }}</div></td>
                       <td><oci-evidence [value]="s.evidenceLevel" /><div class="small muted">conf. {{ (s.confidence * 100).toFixed(0) }}%</div></td>
@@ -91,14 +94,13 @@ import { UI } from '../../shared/ui';
 })
 export class OverviewPage {
   private readonly api = inject(ApiService);
-  readonly networks = query<NetworkStatus[]>();
-  readonly alerts = query<Page<Alert>>();
-  readonly signals = query<Page<Signal>>();
+  /** One call: GET /dashboard (networks, open alerts by severity, recent signals, totals). */
+  readonly dash = query<Dashboard>();
   readonly ago = timeAgo;
 
   readonly bySeverity = computed(() => {
-    const items = this.alerts.data()?.items ?? [];
-    const counts = SEVERITIES.map((severity) => ({ severity, count: items.filter((a) => a.severity === severity).length }));
+    const open = this.dash.data()?.alerts?.openBySeverity;
+    const counts = SEVERITIES.map((severity) => ({ severity, count: open?.[severity] ?? 0 }));
     const max = Math.max(1, ...counts.map((c) => c.count));
     return counts.map((c) => ({ ...c, pct: (c.count / max) * 100 }));
   });
@@ -109,8 +111,6 @@ export class OverviewPage {
   }
 
   load(): void {
-    this.networks.run(() => this.api.networks());
-    this.alerts.run(() => this.api.alerts({ status: 'OPEN', limit: 500 }));
-    this.signals.run(() => this.api.recentSignals(20));
+    this.dash.run(() => this.api.dashboard());
   }
 }
