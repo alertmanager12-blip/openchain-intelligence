@@ -59,6 +59,16 @@ describe('pages (mock mode smoke test)', () => {
     });
   }
 
+  it('opens an alert from a deep link and explains why it fired', async () => {
+    const el = await render(AlertsPage, { id: 'al_0001' });
+    const sheet = el.querySelector('[role="dialog"]');
+    expect(sheet?.textContent).toContain('Why this alert fired');
+    expect(sheet?.textContent).toContain('Measured values');
+    expect(sheet?.querySelectorAll('table.cond tbody tr').length).toBeGreaterThan(0);
+    expect(sheet?.querySelector('oci-gauge[role="meter"]')).not.toBeNull();
+    expect(sheet?.textContent).toContain('Contributing transactions');
+  });
+
   it('shows a retryable error state when the provider is down', async () => {
     const el = await render(RiskPage, { network: 'solana', address: fakeAddress('solana', 1) });
     expect(el.querySelector('.state--error')?.textContent).toContain('Provider unavailable');

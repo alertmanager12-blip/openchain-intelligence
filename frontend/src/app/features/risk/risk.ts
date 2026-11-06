@@ -6,7 +6,7 @@ import { EvidenceLevel, NETWORKS, NetworkId, RiskContribution, RiskScore } from 
 import { detectQuery } from '../../core/network-detect';
 import { formatAge, timeAgo } from '../../shared/format';
 import { TableState, query } from '../../shared/query';
-import { UI } from '../../shared/ui';
+import { UI, sentence } from '../../shared/ui';
 
 const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL: 1, CONFIRMED_BY_SOURCE: 2 };
 
@@ -18,8 +18,8 @@ const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL:
     <div class="page">
       <div class="page-head">
         <div>
-          <h1>Risk Intelligence</h1>
-          <p>Every score is the sum of explained contributions. Each one shows where it comes from, how confident it is and how old the evidence is. A score is an indicator for prioritisation, never a verdict about a person.</p>
+          <h1>Wallet risk</h1>
+          <p>Every score is the sum of explained contributions. Each one shows where it comes from, how confident it is and how old the evidence is. A score helps you prioritise; it is never a verdict about a person.</p>
         </div>
       </div>
 
@@ -28,32 +28,27 @@ const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL:
         <label>Network<select name="n" [ngModel]="netInput()" (ngModelChange)="netInput.set($event)">
           @for (n of networks; track n) { <option [ngValue]="n">{{ n }}</option> }
         </select></label>
-        <button class="btn btn--primary" type="submit" [disabled]="!addrInput().trim()">Score</button>
+        <button class="btn btn--primary" type="submit" [disabled]="!addrInput().trim()">Score wallet</button>
       </form>
 
-      <div class="legend card">
-        <div><oci-evidence value="ANOMALY" /> unusual behaviour, statistically. Not a risk claim.</div>
-        <div><oci-evidence value="RISK_SIGNAL" /> pattern associated with risk. Not proof.</div>
-        <div><oci-evidence value="CONFIRMED_BY_SOURCE" /> stated by a cited external source (e.g. official list).</div>
-      </div>
+      <dl class="legend" aria-label="Evidence levels">
+        <div><dt><oci-evidence value="ANOMALY" /></dt><dd>Statistically unusual behaviour. Not a risk claim.</dd></div>
+        <div><dt><oci-evidence value="RISK_SIGNAL" /></dt><dd>A pattern associated with risk. Not proof.</dd></div>
+        <div><dt><oci-evidence value="CONFIRMED_BY_SOURCE" /></dt><dd>Stated by a cited external source, such as an official list.</dd></div>
+      </dl>
 
       @if (address() && network()) {
         <oci-state [loading]="risk.loading()" [error]="risk.error()" [hasData]="!!risk.data()" (retry)="risk.retry()" loadingText="Computing score…">
           @if (risk.data(); as r) {
             <div class="grid top">
-              <section class="card gauge-card" aria-labelledby="h-g">
+              <section class="score" aria-labelledby="h-g">
                 <h2 id="h-g">Score</h2>
-                <svg viewBox="0 0 200 120" class="gauge" role="img" [attr.aria-label]="'Risk score ' + r.score + ' of 100, ' + r.level">
-                  <path d="M20 100 A80 80 0 0 1 180 100" class="track" />
-                  <path d="M20 100 A80 80 0 0 1 180 100" class="value risk-{{ r.level.toLowerCase() }}" [attr.stroke-dasharray]="arc() + ' 999'" />
-                  <text x="100" y="92" text-anchor="middle" class="num">{{ r.score }}</text>
-                  <text x="100" y="114" text-anchor="middle" class="lvl">{{ r.level }}</text>
-                </svg>
-                <p class="small muted">Method {{ r.method }} · model {{ r.modelVersion }} · computed {{ ago(r.computedAt) }}</p>
+                <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" />
+                <p class="small muted">Method {{ r.method }}, model {{ r.modelVersion }}, computed {{ ago(r.computedAt) }}.</p>
                 <p class="small"><oci-addr [address]="r.address" [network]="r.network" [full]="true" /></p>
-                <div class="row"><a class="btn btn--sm" [routerLink]="['/investigation']" [queryParams]="{ address: r.address, network: r.network }">Open in investigation</a></div>
+                <div class="row"><a class="btn btn--sm" [routerLink]="['/wallets', r.network, r.address]">Open wallet</a><a class="btn btn--sm" [routerLink]="['/investigation']" [queryParams]="{ address: r.address, network: r.network }">Trace fund flows</a></div>
               </section>
-              <section class="card card--flush" aria-labelledby="h-c">
+              <section class="section contrib" aria-labelledby="h-c">
                 <h2 id="h-c">Contributions</h2>
                 <div class="table-wrap"><table>
                   <thead><tr>
@@ -69,41 +64,42 @@ const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL:
                   <tbody>
                     @for (c of t.view(); track c.factor) {
                       <tr>
-                        <td class="nowrap"><strong>{{ c.factor }}</strong>@if (c.signalId) { <div class="small muted mono">{{ c.signalId }}</div> }</td>
+                        <td class="nowrap"><strong>{{ sentence(c.factor) }}</strong>@if (c.signalId) { <div class="small muted mono">{{ c.signalId }}</div> }</td>
                         <td><oci-evidence [value]="c.evidenceLevel" /></td>
-                        <td class="right mono" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
-                        <td class="right mono">{{ c.weight.toFixed(2) }}</td>
-                        <td class="right"><meter min="0" max="1" [value]="c.confidence" [attr.aria-label]="'confidence ' + c.confidence"></meter> {{ (c.confidence * 100).toFixed(0) }}%</td>
+                        <td class="right strong" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
+                        <td class="right">{{ c.weight.toFixed(2) }}</td>
+                        <td class="right nowrap"><span class="conf" aria-hidden="true"><span [style.width.%]="c.confidence * 100"></span></span> {{ (c.confidence * 100).toFixed(0) }}%</td>
                         <td class="nowrap">{{ age(c.ageSeconds) }}</td>
                         <td>{{ c.source }}</td>
                         <td class="expl">{{ c.explanation }}</td>
                       </tr>
                     } @empty { <tr><td colspan="8" class="muted">No contribution: nothing notable was observed.</td></tr> }
                   </tbody>
-                  <tfoot><tr><td colspan="2"><strong>Total (clamped 0-100)</strong></td><td class="right mono"><strong>{{ r.score }}</strong></td><td colspan="5"></td></tr></tfoot>
+                  <tfoot><tr><td colspan="2">Score (sum clamped to 0–100)</td><td class="right">{{ r.score }}</td><td colspan="5"></td></tr></tfoot>
                 </table></div>
               </section>
             </div>
           }
         </oci-state>
       } @else {
-        <div class="state state--empty card">Enter an address to see its risk breakdown.</div>
+        <div class="state state--empty">Enter an address above and choose its network to see how its score is built.</div>
       }
     </div>
   `,
   styles: `
     .grow { flex: 1; min-width: 240px; }
-    .legend { display: grid; gap: 6px; font-size: 13px; color: var(--text-2); }
-    .top { grid-template-columns: minmax(240px, 300px) 1fr; }
-    @media (max-width: 900px) { .top { grid-template-columns: 1fr; } }
-    .gauge { width: 100%; max-width: 260px; display: block; margin: 0 auto; }
-    .track { fill: none; stroke: var(--surface-2); stroke-width: 16; }
-    .value { fill: none; stroke: currentColor; stroke-width: 16; background: none; }
-    .num { font-size: 34px; font-weight: 700; fill: var(--text); }
-    .lvl { font-size: 12px; font-weight: 600; fill: var(--muted); letter-spacing: 0.08em; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 0; font-size: 13px; color: var(--ink-2); }
+    .legend div { display: flex; gap: 8px; align-items: center; }
+    .legend dd { margin: 0; }
+    .top { grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 40px; align-items: start; }
+    @media (max-width: 900px) { .top { grid-template-columns: minmax(0, 1fr); } }
+    .score { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .score h2 { margin: 0; }
+    .strong { font-weight: 600; }
     .neg { color: var(--ok); }
-    .expl { min-width: 260px; }
-    meter { width: 60px; vertical-align: middle; }
+    .expl { min-width: 260px; color: var(--ink-2); }
+    .conf { display: inline-block; width: 48px; height: 4px; background: var(--line-soft); vertical-align: middle; margin-right: 4px; }
+    .conf span { display: block; height: 100%; background: var(--ink-2); }
   `,
 })
 export class RiskPage {
@@ -118,8 +114,7 @@ export class RiskPage {
   readonly risk = query<RiskScore>();
   readonly ago = timeAgo;
   readonly age = formatAge;
-  /** Half circle of radius 80 has length 80π. */
-  readonly arc = computed(() => ((this.risk.data()?.score ?? 0) / 100) * Math.PI * 80);
+  readonly sentence = sentence;
 
   readonly t = new TableState<RiskContribution>(
     computed(() => this.risk.data()?.contributions ?? []),

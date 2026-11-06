@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus,
+  Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus,
   Page, RiskScore, Rule, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis,
   User, WalletAnalysis, Webhook,
 } from './models';
@@ -107,6 +107,9 @@ export class ApiService {
   }
   fieldCatalog(): Observable<FieldDef[]> {
     return this.http.get<FieldDef[]>(`${this.base}/rules/fields`);
+  }
+  eventTypes(): Observable<EventTypeDef[]> {
+    return this.http.get<EventTypeDef[]>(`${this.base}/rules/event-types`);
   }
 
   // --- alerts

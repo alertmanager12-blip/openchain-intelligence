@@ -33,18 +33,18 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
   template: `
     <div class="group" [class.nested]="depth() > 1" role="group" [attr.aria-label]="(group().match === 'all' ? 'All' : group().match === 'any' ? 'Any' : 'None') + ' of the following conditions'">
       <div class="row head">
-        <span class="kw">{{ depth() === 1 ? 'WHEN' : '' }}</span>
+        <span class="kw">{{ depth() === 1 ? 'When' : 'Group' }}</span>
         <div class="seg" role="radiogroup" aria-label="Group logic">
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'all'" [attr.aria-pressed]="group().match === 'all'" (click)="setMatch('all')">ALL (AND)</button>
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'any'" [attr.aria-pressed]="group().match === 'any'" (click)="setMatch('any')">ANY (OR)</button>
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'not'" [attr.aria-pressed]="group().match === 'not'" (click)="setMatch('not')">NOT</button>
+          <button type="button" role="radio" [attr.aria-checked]="group().match === 'all'" [attr.aria-pressed]="group().match === 'all'" (click)="setMatch('all')">All match</button>
+          <button type="button" role="radio" [attr.aria-checked]="group().match === 'any'" [attr.aria-pressed]="group().match === 'any'" (click)="setMatch('any')">Any matches</button>
+          <button type="button" role="radio" [attr.aria-checked]="group().match === 'not'" [attr.aria-pressed]="group().match === 'not'" (click)="setMatch('not')">None matches</button>
         </div>
         <span class="spacer"></span>
         @if (removable()) { <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove.emit()" aria-label="Remove group">Remove group</button> }
       </div>
 
       @for (ch of group().children; track ch.id; let i = $index; let first = $first) {
-        @if (!first) { <div class="joiner">{{ group().match === 'any' ? 'OR' : 'AND' }}</div> }
+        @if (!first) { <div class="joiner">{{ group().match === 'any' ? 'or' : group().match === 'not' ? 'nor' : 'and' }}</div> }
         @if (ch.kind === 'group') {
           <oci-condition-group [group]="ch" [catalog]="catalog()" [depth]="depth() + 1" [removable]="true" [errors]="errors()" [path]="childPath(i)" (changed)="changed.emit()" (remove)="removeAt(i)" />
         } @else {
@@ -89,7 +89,7 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
                 }
               }
             </div>
-            <button class="btn btn--sm btn--ghost x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" aria-label="Remove condition">✕</button>
+            <button class="btn btn--sm btn--ghost x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" [attr.aria-label]="'Remove condition ' + (i + 1)">Remove</button>
             @for (e of errorsFor(childPath(i)); track $index) { <p class="field-error full">{{ e }}</p> }
             @if (def(ch); as d) { <p class="small muted full">{{ d.description }}</p> }
           </div>
@@ -97,22 +97,22 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
       }
       @if (hasOwnError()) { <p class="field-error">{{ ownErrors().join('; ') }}</p> }
       <div class="row add">
-        <button class="btn btn--sm" type="button" (click)="addCondition()">+ Condition</button>
-        @if (depth() < maxDepth) { <button class="btn btn--sm" type="button" (click)="addGroup()">+ Group</button> }
+        <button class="btn btn--sm" type="button" (click)="addCondition()">Add condition</button>
+        @if (depth() < maxDepth) { <button class="btn btn--sm" type="button" (click)="addGroup()">Add group</button> }
       </div>
     </div>
   `,
   styles: `
-    .group { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: grid; gap: 8px; background: var(--surface); }
-    .nested { background: var(--surface-2); border-style: dashed; }
-    .kw { font-weight: 700; color: var(--accent); font-size: 12px; letter-spacing: 0.06em; }
-    .joiner { font-size: 11px; font-weight: 700; color: var(--muted); padding-left: 12px; }
-    .cond { display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto; gap: 8px; align-items: end; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); }
-    .cond.invalid { border-color: var(--danger); }
+    .group { border: 1px solid var(--line); border-radius: var(--r-panel); padding: 10px 12px; display: grid; gap: 8px; background: var(--surface); }
+    .nested { background: var(--bg); border-left: 2px solid var(--accent); }
+    .kw { font-weight: 600; color: var(--ink); font-size: 14px; min-width: 44px; }
+    .joiner { font-size: 12px; font-weight: 600; color: var(--muted); padding-left: 12px; }
+    .cond { display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto; gap: 8px; align-items: end; padding: 8px 0 10px; border-bottom: 1px solid var(--line-soft); }
+    .cond.invalid { border-bottom-color: var(--risk-critical); }
     .cond select, .cond input { width: 100%; }
     .full { grid-column: 1 / -1; margin: 0; }
     .x { align-self: end; }
-    @media (max-width: 720px) { .cond { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) { .cond { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class ConditionGroupEditor {

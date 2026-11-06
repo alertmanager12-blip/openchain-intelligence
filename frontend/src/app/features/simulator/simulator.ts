@@ -19,8 +19,8 @@ const PERIODS = [{ v: 1, l: 'Last 24 hours' }, { v: 7, l: 'Last 7 days' }, { v: 
     <div class="page">
       <div class="page-head">
         <div>
-          <h1>Rule Simulator</h1>
-          <p>Replay a rule over past events in DRY_RUN mode: nothing is alerted or sent. Use it to estimate noise before enabling a rule.</p>
+          <h1>Rule simulator</h1>
+          <p>Replay a rule over past events as a dry run: nothing is alerted or sent. Use it to estimate noise before you enable a rule.</p>
         </div>
       </div>
       <form class="card row" (submit)="$event.preventDefault(); run()">
@@ -35,26 +35,26 @@ const PERIODS = [{ v: 1, l: 'Last 24 hours' }, { v: 7, l: 'Last 7 days' }, { v: 
       @if (res.status() !== 'idle') {
         <oci-state [loading]="res.loading()" [error]="res.error()" [hasData]="!!res.data()" (retry)="res.retry()" loadingText="Replaying events…">
           @if (res.data(); as r) {
-            <div class="grid grid-cards">
-              <div class="card"><div class="small muted">Events evaluated</div><div class="kpi">{{ r.evaluatedEvents.toLocaleString('en-US') }}</div></div>
-              <div class="card"><div class="small muted">Matches</div><div class="kpi">{{ r.matchCount.toLocaleString('en-US') }}</div></div>
-              <div class="card"><div class="small muted">Estimated alerts / day</div><div class="kpi" [class.bad]="r.permissive">{{ r.estimatedTriggersPerDay }}</div><div class="small muted">after cooldown</div></div>
-              <div class="card"><div class="small muted">Match rate</div><div class="kpi">{{ rate() }}</div></div>
-            </div>
+            <dl class="measures" aria-label="Dry run results">
+              <div><dt>Events evaluated</dt><dd>{{ r.evaluatedEvents.toLocaleString('en-US') }}</dd></div>
+              <div><dt>Matches</dt><dd>{{ r.matchCount.toLocaleString('en-US') }}</dd></div>
+              <div><dt>Estimated alerts per day, after cooldown</dt><dd [class.bad]="r.permissive">{{ r.estimatedTriggersPerDay }}</dd></div>
+              <div><dt>Match rate</dt><dd>{{ rate() }}</dd></div>
+            </dl>
             @if (r.permissive) {
               <div class="note note--warn" role="alert"><strong>This rule looks too permissive.</strong>
                 @for (w of r.warnings; track $index) { <div>{{ w }}</div> }
-                <a routerLink="/rules/builder">Tighten it in the builder →</a></div>
+                <a routerLink="/rules/builder">Tighten the conditions in the rule builder</a></div>
             } @else if (r.warnings.length) {
               <div class="note">@for (w of r.warnings; track $index) { <div>{{ w }}</div> }</div>
             }
-            <section class="card card--flush">
-              <h2>Matched events (sample)</h2>
+            <section class="section">
+              <h2>Matched events, sample</h2>
               <div class="table-wrap"><table>
                 <thead><tr><th scope="col">Event</th><th scope="col">Network</th><th scope="col">When</th><th scope="col">Summary</th></tr></thead>
                 <tbody>@for (m of r.matches; track m.eventId) {
-                  <tr><td class="mono small">{{ m.eventId.slice(0, 28) }}…</td><td><oci-net [value]="m.network" /></td><td class="small nowrap">{{ ago(m.eventTime) }}</td><td class="mono small">{{ m.summary }}</td></tr>
-                } @empty { <tr><td colspan="4" class="muted">No event matched in this period.</td></tr> }</tbody>
+                  <tr><td class="mono small" [attr.title]="m.eventId">{{ m.eventId.slice(0, 28) }}…</td><td><oci-net [value]="m.network" /></td><td class="small nowrap">{{ ago(m.eventTime) }}</td><td class="small">{{ m.summary }}</td></tr>
+                } @empty { <tr><td colspan="4" class="muted">No event matched in this period. Try a longer period or loosen a condition.</td></tr> }</tbody>
               </table></div>
             </section>
           }

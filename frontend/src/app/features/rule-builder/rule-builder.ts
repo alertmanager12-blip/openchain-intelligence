@@ -4,10 +4,10 @@ import { Router, RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
-import { FieldDef, NETWORKS, NetworkId, Rule, SEVERITIES } from '../../core/models';
+import { EventTypeDef, FieldDef, NETWORKS, NetworkId, Rule, SEVERITIES } from '../../core/models';
 import { ACTION_TYPES, AGGREGATES, AVAILABLE_EVENT_TYPES, ActionType, DEFAULT_FIELDS, EVENT_TYPES, EVIDENCE_LEVELS, RuleDraft, emptyRule } from '../../core/rules/rule-model';
 import { ruleToYaml, validateDraft, yamlToRule } from '../../core/rules/rule-yaml';
-import { UI } from '../../shared/ui';
+import { UI, sentence } from '../../shared/ui';
 import { ConditionGroupEditor } from './condition-group';
 
 @Component({
@@ -18,11 +18,11 @@ import { ConditionGroupEditor } from './condition-group';
     <div class="page">
       <div class="page-head">
         <div>
-          <h1>Alert Builder</h1>
-          <p>Compose a rule without code. Rules are declarative data checked against a fixed set of operators: nothing you type is ever executed. The YAML on the right is exactly what gets saved.</p>
+          <h1>Rule builder</h1>
+          <p>Compose a rule without code. Rules are declarative data checked against a fixed set of operators, so nothing you type is ever executed. The YAML on the right is exactly what gets saved.</p>
         </div>
         <div class="row">
-          <label>Load rule<select [ngModel]="loadedId()" (ngModelChange)="loadRule($event)">
+          <label>Open a rule<select [ngModel]="loadedId()" (ngModelChange)="loadRule($event)">
             <option value="">New rule</option>@for (r of rules(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
           </select></label>
         </div>
@@ -37,17 +37,17 @@ import { ConditionGroupEditor } from './condition-group';
                 @if (err('name'); as m) { <span class="field-error">{{ m }}</span> }</label>
               <label>Identifier<input name="id" class="mono" [ngModel]="d().id" (ngModelChange)="patch({ id: $event })" [disabled]="!!loadedId()" />
                 @if (err('id'); as m) { <span class="field-error">{{ m }}</span> }</label>
-              <label>Severity<select name="sev" [ngModel]="d().severity" (ngModelChange)="patch({ severity: $event })">@for (s of severities; track s) { <option [value]="s">{{ s }}</option> }</select></label>
-              <label>Evidence level<select name="ev" [ngModel]="d().evidenceLevel" (ngModelChange)="patch({ evidenceLevel: $event })">@for (e of evidenceLevels; track e) { <option [value]="e">{{ e }}</option> }</select></label>
+              <label>Severity<select name="sev" [ngModel]="d().severity" (ngModelChange)="patch({ severity: $event })">@for (s of severities; track s) { <option [value]="s">{{ sentence(s) }}</option> }</select></label>
+              <label>Evidence level<select name="ev" [ngModel]="d().evidenceLevel" (ngModelChange)="patch({ evidenceLevel: $event })">@for (e of evidenceLevels; track e) { <option [value]="e">{{ sentence(e) }}</option> }</select></label>
               <label>Version<input name="ver" [ngModel]="d().version" (ngModelChange)="patch({ version: $event })" placeholder="1.0.0" /></label>
               <label>Author<input name="author" [ngModel]="d().author" (ngModelChange)="patch({ author: $event })" /></label>
             </div>
             <label>Description<input name="desc" [ngModel]="d().description" (ngModelChange)="patch({ description: $event })" placeholder="What this rule is for, for the analyst who receives the alert" /></label>
             <fieldset><legend>Networks</legend><div class="row">
-              @for (n of networks; track n) { <label class="check"><input type="checkbox" [checked]="d().networks.includes(n)" (change)="toggleNetwork(n)" />{{ n }}</label> }
+              @for (n of networks; track n) { <label class="check cap"><input type="checkbox" [checked]="d().networks.includes(n)" (change)="toggleNetwork(n)" />{{ n }}</label> }
             </div>@if (err('networks'); as m) { <span class="field-error">{{ m }}</span> }</fieldset>
             <fieldset><legend>Event types</legend><div class="row">
-              @for (t of eventTypes; track t) { <label class="check"><input type="checkbox" [checked]="d().eventTypes.includes(t)" (change)="toggleEvent(t)" />{{ t }}{{ availableEvents.includes(t) ? '' : ' (not yet available)' }}</label> }
+              @for (t of eventTypes(); track t.type) { <label class="check"><input type="checkbox" [checked]="d().eventTypes.includes(t.type)" (change)="toggleEvent(t.type)" />{{ t.type }}{{ t.available ? '' : ' (not yet available)' }}</label> }
             </div>@if (err('event_types'); as m) { <span class="field-error">{{ m }}</span> }</fieldset>
           </section>
 
@@ -81,12 +81,12 @@ import { ConditionGroupEditor } from './condition-group';
               <div class="row">
                 <label>Type<select [ngModel]="a.type" (ngModelChange)="setAction(i, { type: $event })" [name]="'at' + i">@for (t of actionTypes; track t) { <option [value]="t">{{ t }}</option> }</select></label>
                 @if (a.type !== 'alert') { <label class="grow">Connector id<input [name]="'tg' + i" [ngModel]="a.target" (ngModelChange)="setAction(i, { target: $event })" placeholder="wh-ops" /></label> }
-                <button class="btn btn--sm btn--ghost" type="button" (click)="removeAction(i)" aria-label="Remove action">✕</button>
+                <button class="btn btn--sm btn--ghost" type="button" (click)="removeAction(i)" [attr.aria-label]="'Remove action ' + (i + 1)">Remove</button>
               </div>
               @if (err('actions[' + i + '].target'); as m) { <span class="field-error">{{ m }}</span> }
             }
             <div class="row">
-              <button class="btn btn--sm" type="button" (click)="addAction()">+ Action</button>
+              <button class="btn btn--sm" type="button" (click)="addAction()">Add action</button>
               <span class="spacer"></span>
               <label>Cooldown<input name="cd" class="cd" [ngModel]="d().cooldown" (ngModelChange)="patch({ cooldown: $event })" placeholder="15m" /></label>
               <label class="check"><input type="checkbox" [checked]="d().enabled" (change)="patch({ enabled: !d().enabled })" />Enabled</label>
@@ -98,7 +98,7 @@ import { ConditionGroupEditor } from './condition-group';
 
         <aside class="card side">
           <div class="row"><h2 class="m0">YAML preview</h2><span class="spacer"></span>
-            <span class="small" [class.ok]="errors().length === 0" [class.bad]="errors().length > 0">{{ errors().length === 0 ? 'Valid' : errors().length + ' issue(s)' }}</span></div>
+            <span class="small" [class.ok]="errors().length === 0" [class.bad]="errors().length > 0">{{ errors().length === 0 ? 'Valid' : errors().length === 1 ? '1 issue to fix' : errors().length + ' issues to fix' }}</span></div>
           <pre class="code yaml" aria-label="Generated YAML">{{ yaml() }}</pre>
           @if (errors().length) {
             <ul class="errs">@for (e of errors(); track $index) { <li><span class="mono">{{ e.path }}</span>: {{ e.message }}</li> }</ul>
@@ -108,20 +108,21 @@ import { ConditionGroupEditor } from './condition-group';
           <div class="row">
             <button class="btn btn--primary" type="button" (click)="save()" [disabled]="errors().length > 0 || saving()">{{ saving() ? 'Saving…' : loadedId() ? 'Save changes' : 'Create rule' }}</button>
             <button class="btn" type="button" (click)="copy()">Copy YAML</button>
-            <button class="btn" type="button" (click)="simulate()" [disabled]="errors().length > 0">Simulate</button>
+            <button class="btn" type="button" (click)="simulate()" [disabled]="errors().length > 0">Run simulation</button>
           </div>
-          <a class="small" routerLink="/rules/code">Edit as code instead →</a>
+          <a class="small" routerLink="/rules/code">Edit this rule as code instead</a>
         </aside>
       </div>
     </div>
   `,
   styles: `
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); gap: 16px; align-items: start; }
-    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
     .meta { grid-template-columns: 2fr 1.4fr 1fr; }
     .win { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-    @media (max-width: 720px) { .meta { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) { .meta { grid-template-columns: minmax(0, 1fr); } }
     .side { position: sticky; top: 72px; display: grid; gap: 12px; }
+    .cap { text-transform: capitalize; }
     .yaml { max-height: 55vh; }
     .errs { margin: 0; padding-left: 18px; color: var(--danger); font-size: 12.5px; }
     .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--danger); font-weight: 600; }
@@ -135,11 +136,12 @@ export class RuleBuilderPage {
   readonly networks = NETWORKS;
   readonly severities = SEVERITIES;
   readonly evidenceLevels = EVIDENCE_LEVELS;
-  readonly eventTypes = EVENT_TYPES;
-  readonly availableEvents = AVAILABLE_EVENT_TYPES;
+  /** Loaded from GET /rules/event-types (live availability); static lists only as a fallback. */
+  readonly eventTypes = signal<EventTypeDef[]>(EVENT_TYPES.map((type) => ({ type, available: AVAILABLE_EVENT_TYPES.includes(type) })));
   readonly aggregates = AGGREGATES;
   readonly actionTypes = ACTION_TYPES;
   readonly windowOps = ['gt', 'gte'];
+  readonly sentence = sentence;
 
   readonly d = signal<RuleDraft>(emptyRule());
   readonly catalog = signal<FieldDef[]>(DEFAULT_FIELDS);
@@ -154,6 +156,7 @@ export class RuleBuilderPage {
 
   constructor() {
     this.api.fieldCatalog().pipe(catchError(() => of(DEFAULT_FIELDS))).subscribe((c) => this.catalog.set(c.length ? c : DEFAULT_FIELDS));
+    this.api.eventTypes().pipe(catchError(() => of([] as EventTypeDef[]))).subscribe((e) => { if (e.length) this.eventTypes.set(e); });
     this.api.rules().pipe(catchError(() => of({ items: [] as Rule[], nextCursor: null }))).subscribe((p) => this.rules.set(p.items));
   }
 

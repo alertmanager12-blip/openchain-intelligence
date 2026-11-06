@@ -58,6 +58,12 @@ describe('rule validation', () => {
     expect(validateDraft(sample())).toEqual([]);
   });
 
+  it('accepts every backend event type, including stablecoin freezes', () => {
+    const d = { ...sample(), eventTypes: ['STABLECOIN_FREEZE', 'STABLECOIN_UNFREEZE', 'NATIVE_TRANSFER', 'APPROVAL'] };
+    expect(validateDraft(d).filter((e) => e.path.startsWith('event_types'))).toEqual([]);
+    expect(validateDraft({ ...sample(), eventTypes: ['NOT_A_TYPE'] }).some((e) => e.path === 'event_types[0]')).toBe(true);
+  });
+
   it('reports operator/type mismatches and bad values with precise paths', () => {
     const d = sample();
     d.when = newGroup('all', [

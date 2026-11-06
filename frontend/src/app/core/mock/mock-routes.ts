@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpEvent, HttpHeaders, HttpRequest, HttpResponse } 
 import { Observable, delay, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Alert, AlertStatus, ApiKey, ConnectorType, LabelReport, NetworkId, Page, Rule, RuleTestRequest, Webhook } from '../models';
-import { DEFAULT_FIELDS } from '../rules/rule-model';
+import { AVAILABLE_EVENT_TYPES, DEFAULT_FIELDS, EVENT_TYPES } from '../rules/rule-model';
 import { yamlToRule } from '../rules/rule-yaml';
 import { MockDb, ProblemError } from './mock-db';
 
@@ -77,6 +77,7 @@ on('GET', '/transactions/([^/]+)/analysis', (req, m) => mockDb().transaction(dec
 on('GET', '/graph/([^/]+)', (req, m) => mockDb().graph(decodeURIComponent(m[1]), net(req), Math.min(3, Math.max(1, Number(req.params.get('depth') ?? 1))), req.params.get('token')));
 
 on('GET', '/rules/fields', () => DEFAULT_FIELDS);
+on('GET', '/rules/event-types', () => EVENT_TYPES.map((type) => ({ type, available: AVAILABLE_EVENT_TYPES.includes(type) })));
 on('GET', '/rules/export', () => mockDb().rules.map((r) => r.yaml).join('---\n'));
 on('POST', '/rules/validate', (req) => {
   const r = yamlToRule(body<{ yaml: string }>(req).yaml ?? '');

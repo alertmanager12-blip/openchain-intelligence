@@ -14,11 +14,11 @@ import { ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
     <div class="page">
       <div class="page-head">
         <div>
-          <h1>Alert as Code</h1>
-          <p>Version rules next to your code. YAML here is plain data (no anchors, tags or expressions) and is validated by the server before it is stored.</p>
+          <h1>Rules as code</h1>
+          <p>Version rules next to your code. The YAML is plain data, with no anchors, tags or expressions, and the server validates it before storing it.</p>
         </div>
         <div class="row">
-          <button class="btn" type="button" (click)="fileInput.click()">Import file…</button>
+          <button class="btn" type="button" (click)="fileInput.click()">Import a file…</button>
           <input #fileInput type="file" accept=".yaml,.yml,text/yaml" class="sr-only" (change)="importFile($event)" aria-label="Import YAML file" />
           <button class="btn" type="button" (click)="exportAll()" [disabled]="busy()">Export all rules</button>
         </div>
@@ -36,7 +36,7 @@ import { ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
             <button class="btn btn--primary" type="button" (click)="validate()" [disabled]="busy()">Validate on server</button>
             <button class="btn" type="button" (click)="importText()" [disabled]="busy() || local().errors.length > 0">Save (import)</button>
             <span id="yaml-status" class="small" [class.ok]="local().errors.length === 0" [class.bad]="local().errors.length > 0" aria-live="polite">
-              Local check: {{ local().errors.length === 0 ? 'no issue' : local().errors.length + ' issue(s)' }}
+              Local check: {{ local().errors.length === 0 ? 'no issue found' : local().errors.length === 1 ? '1 issue to fix' : local().errors.length + ' issues to fix' }}
             </span>
           </div>
         </section>
@@ -45,10 +45,10 @@ import { ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
           <section class="card">
             <h2>Validation</h2>
             @if (result(); as r) {
-              <p [class.ok]="r.valid" [class.bad]="!r.valid"><strong>{{ r.source }}: {{ r.valid ? 'valid' : r.errors.length + ' error(s)' }}</strong></p>
+              <p [class.ok]="r.valid" [class.bad]="!r.valid"><strong>{{ r.source }}: {{ r.valid ? 'valid' : r.errors.length === 1 ? '1 error' : r.errors.length + ' errors' }}</strong></p>
               <ul class="errs">@for (e of r.errors; track $index) { <li><span class="mono">{{ where(e) }}</span> {{ e.message }}</li> }</ul>
             } @else {
-              <ul class="errs">@for (e of local().errors; track $index) { <li><span class="mono">{{ where(e) }}</span> {{ e.message }}</li> } @empty { <li class="okli">Nothing to report locally. Validate on the server to be sure.</li> }</ul>
+              <ul class="errs">@for (e of local().errors; track $index) { <li><span class="mono">{{ where(e) }}</span> {{ e.message }}</li> } @empty { <li class="okli">No issue found locally. Validate on the server to be sure.</li> }</ul>
             }
             @if (error(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p>
               @for (f of e.fieldErrors; track $index) { <p class="field-error mono">{{ f.field }}: {{ f.message }}</p> } }
@@ -66,10 +66,10 @@ import { ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
   `,
   styles: `
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
-    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
-    .editor { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
+    @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    .editor { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
     .editor:focus-within { border-color: var(--accent); }
-    .gutter { margin: 0; padding: 8px 6px; min-width: 38px; text-align: right; color: var(--muted); background: var(--surface-2); font: 13px/1.55 var(--mono); user-select: none; overflow: hidden; }
+    .gutter { margin: 0; padding: 8px 6px; min-width: 38px; text-align: right; color: var(--muted); background: var(--sunken); font: 13px/1.55 var(--mono); user-select: none; overflow: hidden; }
     .editor textarea { border: 0; border-radius: 0; outline: none; padding: 8px 10px; min-height: 520px; flex: 1; }
     .errs { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--danger); display: grid; gap: 4px; }
     .okli { color: var(--muted); list-style: none; margin-left: -18px; }

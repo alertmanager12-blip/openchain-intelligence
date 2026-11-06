@@ -83,7 +83,9 @@ export interface RuleDraft {
   extra: Record<string, YamlValue>;
 }
 
-export const EVENT_TYPES = ['TOKEN_TRANSFER', 'NATIVE_TRANSFER', 'CONTRACT_CALL', 'CONTRACT_ADMIN_CHANGE', 'APPROVAL', 'RISK_SCORE_CHANGED', 'DETECTION_SIGNAL'] as const;
+/** Mirrors oci-core ChainEvent.EventType (every value the backend rule validator accepts in scope.eventTypes). */
+export const EVENT_TYPES = ['TOKEN_TRANSFER', 'NATIVE_TRANSFER', 'CONTRACT_CALL', 'CONTRACT_ADMIN_CHANGE', 'APPROVAL', 'RISK_SCORE_CHANGED',
+  'DETECTION_SIGNAL', 'STABLECOIN_FREEZE', 'STABLECOIN_UNFREEZE'] as const;
 export const EVIDENCE_LEVELS: readonly EvidenceLevel[] = ['ANOMALY', 'RISK_SIGNAL', 'CONFIRMED_BY_SOURCE'];
 
 /** Mirrors oci-alerting Operator.allowedFor(FieldType). */
@@ -181,8 +183,11 @@ const POPULATED = new Set([
 ]);
 export const DEFAULT_FIELDS: FieldDef[] = CATALOG.map((f) => ({ ...f, available: POPULATED.has(f.path) }));
 
-/** Event types the backend pipeline produces today; the others are valid in scope but never occur yet. */
-export const AVAILABLE_EVENT_TYPES: readonly string[] = ['TOKEN_TRANSFER', 'DETECTION_SIGNAL'];
+/**
+ * Fallback only (backend unreachable): the builder loads the live list from GET /rules/event-types, which reports which
+ * types the pipeline really produces. Mirrors oci-app PopulatedFields.EVENT_TYPES.
+ */
+export const AVAILABLE_EVENT_TYPES: readonly string[] = ['TOKEN_TRANSFER', 'NATIVE_TRANSFER', 'APPROVAL', 'STABLECOIN_FREEZE', 'STABLECOIN_UNFREEZE', 'DETECTION_SIGNAL'];
 
 /** UI suffix for catalog entries the backend does not populate yet. */
 export function availabilityNote(available: boolean | undefined): string {

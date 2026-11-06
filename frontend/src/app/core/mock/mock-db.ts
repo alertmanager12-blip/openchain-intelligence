@@ -211,8 +211,62 @@ export class MockDb {
         matchedEvent: { type: 'TOKEN_TRANSFER', network: n, from: address, to: fakeAddress(n, rng.int(41, 80)), 'token.symbol': tok.symbol, amount: rng.raw(0, 6) },
         comments: [], history: history.reverse(),
       });
+      this.attachEvidence(this.alerts[this.alerts.length - 1], tok.symbol, i);
     }
     this.alerts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /**
+   * Engine evidence in the AlertDto.evidence shape (see oci-alerting RuleEngine): condition outcomes for
+   * stateless rules, aggregate vs threshold over a window for windowed rules. Separate RNG so the
+   * rest of the seeded data stays identical.
+   */
+  private attachEvidence(a: Alert, symbol: string, i: number): void {
+    const rng = new Rng(`evidence:${a.id}`);
+    const n = a.network;
+    const ids = (k: number) => Array.from({ length: k }, (_, j) => `${n}:${fakeTxHash(n, rng)}:${j}`);
+    const amount = String(rng.int(250_000, 2_400_000)) + '.' + String(rng.int(0, 99)).padStart(2, '0');
+    a.ruleVersion = String(this.rules.find((r) => r.id === a.ruleId)?.version ?? 1);
+    a.occurrenceCount = 1 + (i % 4 === 0 ? rng.int(1, 5) : 0);
+    a.firstSeen = a.createdAt;
+    a.lastSeen = a.updatedAt;
+    switch (a.ruleId) {
+      case 'structuring-burst': {
+        const count = rng.int(8, 14);
+        a.matchedEventIds = ids(count);
+        a.matchedEvent = { ...a.matchedEvent, 'token.symbol': 'USDT', amount: '9' + rng.int(100, 990) + '.' + rng.int(10, 99) };
+        a.evidence = {
+          kind: 'AGGREGATION', function: 'COUNT', value: String(count), operator: 'GTE', threshold: '8', window: 'PT2H',
+          windowStartExclusive: new Date(Date.parse(a.createdAt) - 2 * H).toISOString(), windowEnd: a.createdAt, eventCount: count,
+          groupBy: ['transaction.from'], evidenceLevel: a.evidenceLevel,
+          conditions: [`transaction.token.symbol eq USDT (actual USDT) -> true`, `transaction.amount between [9000, 9999.99] (actual ${a.matchedEvent['amount']}) -> true`],
+        };
+        break;
+      }
+      case 'mixer-exposure': {
+        const usd = String(rng.int(10_000, 180_000));
+        const rs = rng.int(66, 97);
+        a.matchedEventIds = ids(1);
+        a.evidence = {
+          kind: 'STATELESS', evidenceLevel: a.evidenceLevel,
+          conditions: [`counterparty.labels contains mixer (actual [mixer, community]) -> true`, `transaction.amount_usd gte 10000 (actual ${usd}) -> true`, `counterparty.risk_score gte 65 (actual ${rs}) -> true`],
+        };
+        break;
+      }
+      case 'risky-approval': {
+        a.matchedEventIds = ids(1);
+        a.evidence = { kind: 'STATELESS', evidenceLevel: a.evidenceLevel, conditions: [`approval.unlimited eq true (actual true) -> true`, `approval.spender_age_days lt 7 (actual ${rng.int(0, 6)}) -> true`] };
+        break;
+      }
+      default: {
+        a.matchedEventIds = ids(1);
+        a.matchedEvent = { ...a.matchedEvent, 'token.symbol': symbol === 'USDC' ? 'USDC' : 'USDT', amount };
+        a.evidence = {
+          kind: 'STATELESS', evidenceLevel: a.evidenceLevel,
+          conditions: [`transaction.token.symbol in [USDT, USDC] (actual ${a.matchedEvent['token.symbol']}) -> true`, `transaction.amount gte 250000 (actual ${amount}) -> true`],
+        };
+      }
+    }
   }
 
   // ---------------------------------------------------------------- read models
@@ -223,6 +277,8 @@ export class MockDb {
       network: n, headBlock: base[n], finalizedBlock: base[n] - [64, 19, 15, 128, 6, 32][i], healthy: n !== 'solana',
       providerId: n === 'solana' ? 'solana-secondary' : `${n}-primary`, latencyMillis: [180, 95, 140, 210, 420, 2900][i], checkedAt: iso(15_000),
       detail: n === 'solana' ? 'Primary provider timing out; failed over to secondary. Data may lag.' : null,
+      enabled: true, lastIndexedBlock: base[n] - [64, 19, 15, 128, 6, 32][i] - [2, 0, 1, 4, 0, 940][i], indexerLag: [64, 19, 15, 128, 6, 32][i] + [2, 0, 1, 4, 0, 940][i],
+      simulated: n === 'polygon',
     }));
   }
 

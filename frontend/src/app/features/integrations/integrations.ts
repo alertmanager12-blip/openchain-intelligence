@@ -23,13 +23,13 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
     <div class="page">
       <div class="page-head"><div>
         <h1>Integrations</h1>
-        <p>Where alerts go. Rules reference a connector by its id in their actions.</p>
+        <p>Where alerts are delivered. Rules reference a connector by its id in their actions.</p>
       </div></div>
 
       <div class="grid layout">
         <section class="card card--flush">
           <h2>Connectors</h2>
-          <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.data()" [empty]="(list.data() ?? []).length === 0" emptyText="No connector yet." (retry)="list.retry()">
+          <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.data()" [empty]="(list.data() ?? []).length === 0" emptyText="No connector yet. Add one with the form to start delivering alerts." (retry)="list.retry()">
             <div class="table-wrap"><table>
               <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Target</th><th scope="col">Last delivery</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
               <tbody>@for (w of list.data() ?? []; track w.id) {
@@ -37,9 +37,9 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
                   <td><strong>{{ w.name }}</strong><div class="mono small muted">{{ w.id }}</div></td>
                   <td>{{ w.type }}</td>
                   <td class="mono small">{{ w.target }}</td>
-                  <td class="small">@if (w.lastDeliveryStatus) { <span [class.ok]="w.lastDeliveryStatus === 'OK'" [class.bad]="w.lastDeliveryStatus === 'FAILED'">{{ w.lastDeliveryStatus }}</span> · {{ ago(w.lastDeliveryAt) }} } @else { never }</td>
+                  <td class="small">@if (w.lastDeliveryStatus) { <span [class.ok]="w.lastDeliveryStatus === 'OK'" [class.bad]="w.lastDeliveryStatus === 'FAILED'">{{ w.lastDeliveryStatus === 'OK' ? 'Delivered' : 'Failed' }}</span><span class="muted">&#32;{{ ago(w.lastDeliveryAt) }}</span> } @else { <span class="muted">Never</span> }</td>
                   <td class="nowrap">
-                    <button class="btn btn--sm" type="button" (click)="test(w)" [disabled]="testing() === w.id">{{ testing() === w.id ? 'Sending…' : 'Test send' }}</button>
+                    <button class="btn btn--sm" type="button" (click)="test(w)" [disabled]="testing() === w.id">{{ testing() === w.id ? 'Sending…' : 'Send test' }}</button>
                     <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove(w)">Delete</button>
                   </td>
                 </tr>
@@ -59,7 +59,7 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
             <label>Name<input name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="SOC on-call" required /></label>
             <label>{{ meta().target }}<input name="target" class="mono" [ngModel]="target()" (ngModelChange)="target.set($event)" [placeholder]="meta().placeholder" required /></label>
             @if (createError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-            <div><button class="btn btn--primary" type="submit" [disabled]="busy() || meta().available === false || !name().trim() || !target().trim()">Create</button></div>
+            <div><button class="btn btn--primary" type="submit" [disabled]="busy() || meta().available === false || !name().trim() || !target().trim()">Create connector</button></div>
           </form>
           @if (secret(); as s) {
             <div class="note note--warn secret" role="alert">
@@ -74,7 +74,7 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
   `,
   styles: `
     .layout { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); align-items: start; }
-    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
     .seg { flex-wrap: wrap; }
     .ok { color: var(--ok); } .bad { color: var(--danger); }
     .secret { display: grid; gap: 8px; margin-top: 12px; } .secret code { word-break: break-all; }

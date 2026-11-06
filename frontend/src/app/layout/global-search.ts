@@ -12,18 +12,19 @@ import { detectQuery } from '../core/network-detect';
   template: `
     <form role="search" (submit)="$event.preventDefault(); go()">
       <label class="sr-only" for="gsearch">Search an address or transaction hash</label>
-      <input id="gsearch" type="search" autocomplete="off" spellcheck="false" placeholder="Search address or tx hash (0x…, T…, bc1…)"
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+      <input id="gsearch" type="search" autocomplete="off" spellcheck="false" placeholder="Search an address or transaction hash"
         [ngModel]="q()" (ngModelChange)="q.set($event)" name="q" aria-describedby="gsearch-hint" />
       <div id="gsearch-hint" class="hint" aria-live="polite">
         @if (q().trim()) {
           @if (det().kind === 'unknown') {
             <span class="bad">{{ det().reason }}</span>
           } @else {
-            <span>{{ det().kind === 'address' ? 'Address' : 'Transaction' }} ·</span>
+            <span>{{ det().kind === 'address' ? 'Open address on' : 'Open transaction on' }}</span>
             @for (n of det().candidates; track n; let first = $first) {
               <button type="button" class="chip" [class.primary]="first" (click)="go(n)">{{ n }}</button>
             }
-            @if (det().candidates.length > 1) { <span class="muted">format shared by several networks: pick one</span> }
+            @if (det().candidates.length > 1) { <span class="muted">This format is shared by several networks. Pick one.</span> }
           }
         }
       </div>
@@ -31,13 +32,15 @@ import { detectQuery } from '../core/network-detect';
   `,
   styles: `
     form { position: relative; }
-    input { width: 100%; font-family: var(--mono); font-size: 13px; }
-    .hint { position: absolute; top: 100%; left: 0; right: 0; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12px; padding-top: 4px; }
+    input { width: 100%; font-family: var(--mono); font-size: 13px; padding-left: 32px; background: var(--surface); }
+    input::placeholder { font-family: var(--font); font-size: 14px; }
+    .ico { position: absolute; left: 10px; top: 9px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+    .hint { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 13px; padding: 8px 10px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow-overlay); }
     .hint:empty { display: none; }
-    .hint .chip { cursor: pointer; font: inherit; font-size: 11.5px; }
+    .hint .chip { cursor: pointer; font: inherit; font-size: 12px; text-transform: capitalize; }
     .hint .chip.primary { border-color: var(--accent); color: var(--accent); }
-    .bad { color: var(--danger); background: var(--surface); padding: 0 4px; }
-    .hint > span:not(.bad) { background: var(--surface); padding: 0 4px; border-radius: 3px; }
+    .bad { color: var(--danger); }
   `,
 })
 export class GlobalSearch {

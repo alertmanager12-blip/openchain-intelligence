@@ -11,11 +11,12 @@ import { detectQuery } from '../../core/network-detect';
 import { ThemeService } from '../../core/theme.service';
 import { formatUnits, shortHash } from '../../shared/format';
 import { UI } from '../../shared/ui';
+import { levelLabel } from '../../shared/risk-gauge';
 
 const TOKENS: Record<NetworkId, string[]> = {
   ethereum: ['ETH', 'USDT', 'USDC'], tron: ['TRX', 'USDT'], bsc: ['BNB', 'USDT'], polygon: ['POL', 'USDC'], bitcoin: ['BTC'], solana: ['SOL', 'USDC'],
 };
-const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--sev-critical', HIGH: '--sev-high', MEDIUM: '--sev-medium', LOW: '--sev-low', UNKNOWN: '--muted' };
+const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--risk-critical', HIGH: '--risk-high', MEDIUM: '--risk-medium', LOW: '--risk-low', UNKNOWN: '--risk-unknown' };
 
 @Component({
   selector: 'oci-investigation',
@@ -25,8 +26,8 @@ const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--sev-critical', HIGH: 
     <div class="page">
       <div class="page-head">
         <div>
-          <h1>Investigation</h1>
-          <p>Follow funds hop by hop. Click a node to select it, double-click (or "Expand") to load its own counterparties. A connection to a flagged wallet does not mean shared intent.</p>
+          <h1>Fund flow graph</h1>
+          <p>Follow funds hop by hop. Select a wallet to see its details; double-click it, or use "Expand counterparties", to load its own counterparties. A connection to a flagged wallet does not mean shared intent.</p>
         </div>
       </div>
       <form class="card toolbar-form" (submit)="$event.preventDefault(); submit()">
@@ -48,22 +49,22 @@ const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--sev-critical', HIGH: 
           <div class="graph" #graphEl role="img" [attr.aria-label]="'Transaction graph with ' + nodeCount() + ' wallets'"></div>
           @if (loading()) { <div class="overlay"><span class="spinner"></span> Loading graph…</div> }
           @if (error(); as e) { <div class="overlay err" role="alert"><strong>{{ e.title }}</strong><span>{{ e.detail }}</span><button class="btn btn--sm" type="button" (click)="submit()">Retry</button></div> }
-          @if (!loading() && !error() && nodeCount() === 0) { <div class="overlay">Enter a root address and load the graph.</div> }
+          @if (!loading() && !error() && nodeCount() === 0) { <div class="overlay">Enter a root address above, then load the graph.</div> }
           <div class="legend small">
-            @for (l of riskLegend; track l) { <span><i class="sw" [style.background]="'var(' + riskVar[l] + ')'"></i>{{ l }}</span> }
-            <span>◆ labelled · ■ contract</span>
-            @if (truncated()) { <span class="warn">truncated: narrow filters to see all</span> }
+            @for (l of riskLegend; track l) { <span><i class="sw" [style.background]="'var(' + riskVar[l] + ')'"></i>{{ levelLabel(l) }}</span> }
+            <span><i class="shape dia" aria-hidden="true"></i>Labelled</span><span><i class="shape sq" aria-hidden="true"></i>Contract</span>
+            @if (truncated()) { <span class="warn">The graph was truncated. Narrow the token or dates to see everything.</span> }
           </div>
         </div>
-        <aside class="card side" aria-live="polite">
+        <aside class="side" aria-live="polite">
           @if (selected(); as n) {
             <h2>Selected wallet</h2>
             <p class="mono">{{ n.address }}</p>
             <dl class="kv">
               <dt>Risk</dt><dd><oci-risk [value]="n.riskLevel" /></dd>
-              <dt>Label</dt><dd>{{ n.label ?? 'none' }}</dd>
-              <dt>Hop</dt><dd>{{ n.depth }}</dd>
-              <dt>Contract</dt><dd>{{ n.isContract ? 'yes' : 'no' }}</dd>
+              <dt>Label</dt><dd>{{ n.label ?? 'None' }}</dd>
+              <dt>Hops from root</dt><dd>{{ n.depth }}</dd>
+              <dt>Contract</dt><dd>{{ n.isContract ? 'Yes' : 'No' }}</dd>
             </dl>
             <div class="stack">
               <button class="btn btn--sm" type="button" (click)="expand(n)" [disabled]="expanding()">{{ expanding() ? 'Expanding…' : 'Expand counterparties' }}</button>
@@ -73,29 +74,34 @@ const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--sev-critical', HIGH: 
             @if (pathInfo()) { <p class="small muted">{{ pathInfo() }}</p> }
           } @else {
             <h2>Selection</h2>
-            <p class="muted small">Select a node to see details, expand it or highlight the path from the root.</p>
+            <p class="muted small">Select a wallet in the graph to see its details, expand it or highlight its path from the root. Zoom in to read transfer amounts.</p>
           }
-          <h3 class="mt">Edges shown</h3>
-          <p class="small">{{ edgeCount() }} transfers · {{ nodeCount() }} wallets</p>
+          <h3 class="mt">Shown</h3>
+          <p class="small"><span class="num">{{ edgeCount() }}</span> transfers between <span class="num">{{ nodeCount() }}</span> wallets</p>
         </aside>
       </div>
     </div>
   `,
   styles: `
-    .toolbar-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .toolbar-form { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; }
     .grow { flex: 1; min-width: 220px; }
-    .depth { padding: 0 6px 4px; border: 0; }
-    .layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
-    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+    .depth { padding: 0 6px 0; border: 0; }
+    .depth legend { padding: 0 0 4px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
+    @media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
     .graph-card { position: relative; }
-    .graph { height: 600px; width: 100%; }
+    .graph { height: 600px; width: 100%; background: var(--surface); }
     @media (max-width: 720px) { .graph { height: 420px; } }
-    .overlay { position: absolute; inset: 0 0 32px; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; color: var(--muted); pointer-events: none; }
+    .overlay { position: absolute; inset: 0 0 36px; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; color: var(--ink-2); pointer-events: none; }
     .overlay.err { color: var(--danger); pointer-events: auto; }
-    .legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--border); color: var(--text-2); }
-    .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
+    .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+    .shape { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border: 1.5px solid var(--ink-2); vertical-align: -1px; }
+    .shape.dia { transform: rotate(45deg) scale(0.85); }
+    .shape.sq { border-radius: 2px; }
     .warn { color: var(--warn); }
-    .side { display: grid; gap: 10px; align-content: start; }
+    .side { display: grid; gap: 10px; align-content: start; padding-top: 12px; border-top: 1px solid var(--line); }
+    .side h2 { margin: 0; }
     .mt { margin-top: 8px; }
   `,
 })
@@ -110,6 +116,7 @@ export class InvestigationPage implements OnDestroy {
   readonly networks = NETWORKS;
   readonly riskLegend: RiskLevel[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
   readonly riskVar = RISK_VAR;
+  readonly levelLabel = levelLabel;
 
   readonly addr = signal('');
   readonly net = signal<NetworkId>('ethereum');
@@ -228,19 +235,19 @@ export class InvestigationPage implements OnDestroy {
       {
         selector: 'node',
         style: {
-          'background-color': 'data(color)', label: 'data(short)', color: this.css('--text-2'), 'font-size': 9, 'font-family': 'monospace',
-          'text-valign': 'bottom', 'text-margin-y': 4, width: 22, height: 22, 'border-width': 2, 'border-color': this.css('--surface'),
+          'background-color': 'data(color)', label: 'data(short)', color: this.css('--ink-2'), 'font-size': 9, 'font-family': this.css('--mono'),
+          'text-valign': 'bottom', 'text-margin-y': 4, 'text-wrap': 'wrap', width: 22, height: 22, 'border-width': 2, 'border-color': this.css('--surface'),
         },
       },
       { selector: 'node[?labelled]', style: { shape: 'diamond', width: 28, height: 28 } },
       { selector: 'node[?contract]', style: { shape: 'round-rectangle' } },
-      { selector: 'node[?root]', style: { 'border-color': this.css('--accent'), 'border-width': 4, width: 32, height: 32 } },
+      { selector: 'node[?root]', style: { 'border-color': this.css('--ink'), 'border-width': 3, width: 32, height: 32 } },
       { selector: 'node:selected', style: { 'border-color': this.css('--focus'), 'border-width': 4 } },
       {
         selector: 'edge',
         style: {
-          width: 1.5, 'line-color': this.css('--border'), 'target-arrow-color': this.css('--muted'), 'target-arrow-shape': 'triangle',
-          'curve-style': 'bezier', label: 'data(label)', 'font-size': 8, color: this.css('--muted'), 'text-rotation': 'autorotate',
+          width: 1.25, 'line-color': this.css('--line'), 'target-arrow-color': this.css('--muted'), 'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier', label: 'data(label)', 'font-size': 8, 'min-zoomed-font-size': 10, color: this.css('--muted'), 'text-rotation': 'autorotate',
           'text-background-color': this.css('--surface'), 'text-background-opacity': 0.85, 'text-background-padding': '1px',
         },
       },
@@ -252,11 +259,11 @@ export class InvestigationPage implements OnDestroy {
 
   private elements(): ElementDefinition[] {
     const nodes: ElementDefinition[] = [...this.nodes.values()].map((n) => ({
-      data: { id: n.id, short: n.label ? `${n.label} · ${shortHash(n.address, 6, 4)}` : shortHash(n.address, 6, 4), color: this.css(RISK_VAR[n.riskLevel]), labelled: !!n.label, contract: n.isContract, root: n.id === this.root },
+      data: { id: n.id, short: n.label ? `${n.label}\n${shortHash(n.address, 6, 4)}` : shortHash(n.address, 6, 4), color: this.css(RISK_VAR[n.riskLevel]), labelled: !!n.label, contract: n.isContract, root: n.id === this.root },
     }));
     const edges: ElementDefinition[] = [...this.edges.entries()]
       .filter(([, e]) => this.nodes.has(e.source) && this.nodes.has(e.target))
-      .map(([id, e]) => ({ data: { id, source: e.source, target: e.target, label: `${formatUnits(e.rawAmount, e.token.decimals, 2)} ${e.token.symbol} · ${e.timestamp.slice(0, 10)}` } }));
+      .map(([id, e]) => ({ data: { id, source: e.source, target: e.target, label: `${formatUnits(e.rawAmount, e.token.decimals, 2)} ${e.token.symbol}, ${e.timestamp.slice(0, 10)}` } }));
     return [...nodes, ...edges];
   }
 

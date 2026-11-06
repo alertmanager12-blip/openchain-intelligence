@@ -36,6 +36,12 @@ export interface NetworkStatus {
   latencyMillis: number;
   checkedAt: string;
   detail: string | null;
+  /** Present on backend responses (NetworkDto); optional so older payloads still type-check. */
+  enabled?: boolean;
+  lastIndexedBlock?: number;
+  indexerLag?: number;
+  /** True when the provider is the simulated demo ledger, not a real chain. */
+  simulated?: boolean;
 }
 
 export interface ChainTransaction {
@@ -215,9 +221,47 @@ export interface AlertHistoryEntry {
   detail: string | null;
 }
 
+/**
+ * Why an alert fired, as recorded by the rule engine (oci-alerting RuleEngine, AlertDto.evidence).
+ * `conditions` entries read "field op expected (actual value) -> true|false".
+ * Durations are ISO-8601 (e.g. "PT2H").
+ */
+export interface AlertEvidenceBase {
+  evidenceLevel?: EvidenceLevel;
+  conditions?: string[];
+}
+export interface StatelessEvidence extends AlertEvidenceBase {
+  kind: 'STATELESS';
+}
+export interface AggregationEvidence extends AlertEvidenceBase {
+  kind: 'AGGREGATION';
+  /** COUNT, SUM, AVG, MIN, MAX, DISTINCT_COUNT... */
+  function: string;
+  field?: string;
+  value: string;
+  operator: string;
+  threshold: string;
+  window: string;
+  windowStartExclusive: string;
+  windowEnd: string;
+  eventCount: number;
+  groupBy: string[];
+}
+export interface SequenceEvidence extends AlertEvidenceBase {
+  kind: 'SEQUENCE';
+  key: string;
+  within: string;
+  /** "stepName=eventId@instant" */
+  steps: string[];
+  span: string;
+}
+export type AlertEvidence = StatelessEvidence | AggregationEvidence | SequenceEvidence;
+
 export interface Alert {
   id: string;
   ruleId: string;
+  /** Version of the rule that matched (AlertDto.ruleVersion). */
+  ruleVersion?: string | null;
   ruleName: string;
   severity: Severity;
   status: AlertStatus;
@@ -230,6 +274,13 @@ export interface Alert {
   createdAt: string;
   updatedAt: string;
   matchedEvent: Record<string, unknown>;
+  /** Event ids "network:txHash:logIndex" that made the rule fire (several for windows / sequences). */
+  matchedEventIds?: string[];
+  /** Engine evidence: aggregate value vs threshold, window, sequence steps, condition outcomes. */
+  evidence?: AlertEvidence | null;
+  occurrenceCount?: number;
+  firstSeen?: string | null;
+  lastSeen?: string | null;
   comments: AlertComment[];
   history: AlertHistoryEntry[];
 }
@@ -313,6 +364,13 @@ export interface LabelReport {
 }
 
 export type FieldType = 'string' | 'address' | 'amount' | 'number' | 'boolean' | 'enum' | 'timestamp';
+
+/** GET /rules/event-types entry. */
+export interface EventTypeDef {
+  type: string;
+  /** false = valid in a rule scope but not produced by the pipeline yet. */
+  available: boolean;
+}
 
 export interface FieldDef {
   path: string;

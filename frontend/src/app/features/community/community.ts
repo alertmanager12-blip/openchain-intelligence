@@ -6,7 +6,7 @@ import { EvidenceLevel, Label, LabelReport, NETWORKS, NetworkId, Page } from '..
 import { detectQuery } from '../../core/network-detect';
 import { timeAgo } from '../../shared/format';
 import { TableState, query } from '../../shared/query';
-import { UI } from '../../shared/ui';
+import { UI, sentence } from '../../shared/ui';
 
 const EV_RANK: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL: 1, CONFIRMED_BY_SOURCE: 2 };
 const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'defi-protocol', 'gambling', 'other'];
@@ -18,7 +18,7 @@ const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'd
   template: `
     <div class="page">
       <div class="page-head"><div>
-        <h1>Community Intelligence</h1>
+        <h1>Community labels</h1>
         <p>Labels come from sources of different reliability. Community reports are reviewed before they influence any score, and a label describes an address, never a person.</p>
       </div></div>
 
@@ -29,13 +29,13 @@ const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'd
             <label class="grow">Filter<input type="search" [ngModel]="t.filter()" (ngModelChange)="t.filter.set($event)" placeholder="address, name, category, source" /></label>
             <label>Network<select [ngModel]="net()" (ngModelChange)="net.set($event); reload()"><option value="">All</option>@for (n of networks; track n) { <option [value]="n">{{ n }}</option> }</select></label>
           </div>
-          <oci-state [loading]="labels.loading()" [error]="labels.error()" [hasData]="!!labels.data()" [empty]="t.view().length === 0" emptyText="No label matches." (retry)="labels.retry()">
+          <oci-state [loading]="labels.loading()" [error]="labels.error()" [hasData]="!!labels.data()" [empty]="t.view().length === 0" emptyText="No label matches. Clear the filter or choose all networks." (retry)="labels.retry()">
             <div class="table-wrap"><table>
               <thead><tr>
                 <th scope="col">Address</th>
                 <th scope="col" [attr.aria-sort]="t.aria('category')"><button type="button" (click)="t.sort('category')">Label {{ t.icon('category') }}</button></th>
                 <th scope="col" [attr.aria-sort]="t.aria('source')"><button type="button" (click)="t.sort('source')">Source {{ t.icon('source') }}</button></th>
-                <th scope="col" [attr.aria-sort]="t.aria('rel')"><button type="button" (click)="t.sort('rel')">Reliability {{ t.icon('rel') }}</button></th>
+                <th scope="col" class="right" [attr.aria-sort]="t.aria('rel')"><button type="button" (click)="t.sort('rel')">Reliability {{ t.icon('rel') }}</button></th>
                 <th scope="col" [attr.aria-sort]="t.aria('ev')"><button type="button" (click)="t.sort('ev')">Evidence {{ t.icon('ev') }}</button></th>
               </tr></thead>
               <tbody>@for (l of t.view(); track l.id) {
@@ -43,7 +43,7 @@ const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'd
                   <td><oci-addr [address]="l.address" [network]="l.network" /><div><oci-net [value]="l.network" /></div></td>
                   <td><span class="chip">{{ l.category }}</span><div class="small">{{ l.name }}</div></td>
                   <td class="small">{{ l.source }}</td>
-                  <td><meter min="0" max="1" low="0.5" high="0.8" optimum="1" [value]="l.reliability" [attr.aria-label]="'reliability ' + l.reliability"></meter> {{ (l.reliability * 100).toFixed(0) }}%</td>
+                  <td class="right nowrap"><span class="rel" aria-hidden="true"><span [style.width.%]="l.reliability * 100"></span></span> {{ (l.reliability * 100).toFixed(0) }}%</td>
                   <td><oci-evidence [value]="l.evidenceLevel" /></td>
                 </tr>
               }</tbody>
@@ -65,15 +65,15 @@ const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'd
               <label>Reference (URL, tx hash, case id)<input name="ref" [ngModel]="ref()" (ngModelChange)="ref.set($event)" /></label>
               <p class="small muted">Do not include personal data about individuals. Reports are reviewed and may be rejected.</p>
               @if (submitError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-              @if (submitted()) { <p class="note" role="status">Report received. It stays PENDING until reviewed.</p> }
+              @if (submitted()) { <p class="note" role="status">Report received. It stays pending until a reviewer accepts or rejects it.</p> }
               <div><button class="btn btn--primary" type="submit" [disabled]="busy() || !addr().trim() || desc().trim().length < 20 || netMismatch()">Submit report</button></div>
             </form>
           </section>
           <section class="card">
             <h2>My reports</h2>
             @for (r of reports.data()?.items ?? []; track r.id) {
-              <p class="small"><span class="chip">{{ r.status }}</span> <span class="mono">{{ r.address.slice(0, 14) }}…</span> {{ r.category }} · {{ ago(r.createdAt) }}</p>
-            } @empty { <p class="small muted">No report yet.</p> }
+              <p class="small rep"><span class="chip">{{ sentence(r.status ?? 'PENDING') }}</span> <span class="mono">{{ r.address.slice(0, 14) }}…</span> <span>{{ r.category }}</span> <span class="muted">{{ ago(r.createdAt) }}</span></p>
+            } @empty { <p class="small muted">You have not reported an address yet.</p> }
           </section>
         </div>
       </div>
@@ -81,8 +81,11 @@ const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'd
   `,
   styles: `
     .layout { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); align-items: start; }
-    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
-    .grow { flex: 1; min-width: 200px; } meter { width: 60px; vertical-align: middle; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    .grow { flex: 1; min-width: 200px; }
+    .rel { display: inline-block; width: 48px; height: 4px; background: var(--line-soft); vertical-align: middle; margin-right: 4px; }
+    .rel span { display: block; height: 100%; background: var(--ink-2); }
+    .rep { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   `,
 })
 export class CommunityPage {
@@ -101,6 +104,7 @@ export class CommunityPage {
   readonly submitted = signal(false);
   readonly submitError = signal<ApiError | null>(null);
   readonly ago = timeAgo;
+  readonly sentence = sentence;
   readonly netMismatch = computed(() => {
     const d = detectQuery(this.addr());
     return !!this.addr().trim() && d.kind === 'address' && !d.candidates.includes(this.rnet());
