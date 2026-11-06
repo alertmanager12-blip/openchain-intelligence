@@ -22,4 +22,8 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 - PostgreSQL persistence of operator state (when `SPRING_DATASOURCE_URL` is set; in memory otherwise): API keys, connectors (targets and WEBHOOK secrets AES-256-GCM encrypted with `OCI_CRYPTO_MASTER_KEY`), rules and immutable versions, alerts with history and comments, delivery outbox (retries and dead letters survive a restart, `FOR UPDATE SKIP LOCKED` claiming), label reports, users. Flyway migration `V1__operator_state`; Spring JDBC; optimistic locking on rules and alerts; Testcontainers PostgreSQL 17 tests. Chain-derived state stays in memory and is rebuilt by re-indexing; replayed events do not duplicate alerts.
 - `OCI_CRYPTO_MASTER_KEY` (required with PostgreSQL) and `OCI_SECURITY_API_KEY_PEPPER` (required with PostgreSQL outside demo mode): the application fails fast when they are missing or when the dev-only compose defaults are used outside demo mode.
 
+### Security
+
+- Risk scores can no longer be raised for free by third parties: unsolicited dust (below 10 USDT/USDC by default, `DetectionConfig.Exposure.dustThresholds`) and transfers of unverified token contracts (fake tokens whose `Transfer` events name a sanctioned sender) no longer create direct or indirect exposure. They produce a `DUSTING` anomaly signal with zero score weight instead. Previously 0.000001 USDT, or a fake-token transfer, from a sanctioned address scored the recipient 80/HIGH.
+
 [Unreleased]: https://github.com/openchain-intelligence/openchain-intelligence/commits/main

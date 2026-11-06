@@ -11,7 +11,7 @@ import java.util.Optional;
  * surfaced as unverified ({@link #isKnown}).
  */
 public interface TokenRegistry {
-    String UNKNOWN_SYMBOL = "UNKNOWN";
+    String UNKNOWN_SYMBOL = io.openchain.core.model.Token.UNKNOWN_SYMBOL;
 
     Optional<Token> find(Network network, String contract);
 

@@ -9,6 +9,7 @@ import io.openchain.core.detection.Signal.EvidenceLevel;
 import io.openchain.core.detection.SignalType;
 import io.openchain.core.event.ChainEvent.EventType;
 import io.openchain.core.model.Address;
+import io.openchain.core.model.Token;
 import io.openchain.intelligence.Fx;
 import io.openchain.intelligence.detection.detectors.*;
 import io.openchain.intelligence.flow.ValueFlow;
@@ -261,17 +262,57 @@ class DetectorsTest {
         @Test void beyondMaxHopsAndThroughExchangesIsNotPropagated() {
             fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
             Address h1 = a("h1"), h2 = a("h2"), h3 = a("h3");
-            fx.flow(sanctioned, h3, "1", min(0));
-            fx.flow(h3, h2, "1", min(1));
-            fx.flow(h2, h1, "1", min(2));
-            assertThat(d.detect(fx.ctx(me, fx.flow(h1, me, "1", min(3))))).isEmpty(); // 4 hops > 3
+            // amounts above the dust threshold, so only the hop limit and the exchange stop can explain "no signal"
+            fx.flow(sanctioned, h3, "1000", min(0));
+            fx.flow(h3, h2, "1000", min(1));
+            fx.flow(h2, h1, "1000", min(2));
+            assertThat(d.detect(fx.ctx(me, fx.flow(h1, me, "1000", min(3))))).isEmpty(); // 4 hops > 3
 
             Fx ex = new Fx();
             Address exchange = a("e1");
             ex.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
             ex.label(exchange, LabelCategory.EXCHANGE, 0.9, EvidenceLevel.RISK_SIGNAL);
-            ex.flow(sanctioned, exchange, "1", min(0));
-            assertThat(d.detect(ex.ctx(me, ex.flow(exchange, me, "1", min(1))))).isEmpty();
+            ex.flow(sanctioned, exchange, "1000", min(0));
+            assertThat(d.detect(ex.ctx(me, ex.flow(exchange, me, "1000", min(1))))).isEmpty();
+        }
+
+        // ---- anti-griefing (audit probes 1 and 2): anyone can send dust or fake-token transfers to any wallet ----
+
+        @Test void unsolicitedDustFromSanctionedIsOnlyAZeroWeightDustingAnomaly() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            ValueFlow dust = fx.flow(sanctioned, me, "0.000001", min(0));
+            assertThat(d.detect(fx.ctx(me, dust))).singleElement().satisfies(s -> {
+                assertThat(s.type()).isEqualTo(SignalType.DUSTING);
+                assertThat(s.severity()).isEqualTo(Severity.INFO);
+                assertThat(s.evidenceLevel()).isEqualTo(EvidenceLevel.ANOMALY);
+                assertThat(s.evidence()).anyMatch(e -> e.kind().equals("flow") && e.reference().equals(dust.txHash()));
+                assertThat(s.evidence()).anyMatch(e -> e.kind().equals("pattern") && e.description().contains("below the dust threshold"));
+                assertWellFormed(s, "exposure@1");
+            });
+        }
+
+        @Test void unverifiedTokenTransferFromSanctionedCreatesNoExposure() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            Token fake = new Token(NET, "0xfa4e000000000000000000000000000000000000", Token.UNKNOWN_SYMBOL, 0);
+            ValueFlow spoofed = fx.flow(sanctioned, me, "1000000", fake, min(0));
+            assertThat(d.detect(fx.ctx(me, spoofed))).singleElement().satisfies(s -> {
+                assertThat(s.type()).isEqualTo(SignalType.DUSTING);
+                assertThat(s.evidence()).anyMatch(e -> e.kind().equals("pattern") && e.description().contains("1 of an unverified token contract"));
+            });
+        }
+
+        @Test void outboundTransferToSanctionedCountsWhateverTheAmount() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            // the wallet chose to send it: no dust exemption for outbound value
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, sanctioned, "0.5", min(0))))).singleElement()
+                    .satisfies(s -> assertThat(s.type()).isEqualTo(SignalType.SANCTIONED_EXPOSURE));
+        }
+
+        @Test void dustIsNotTracedIndirectly() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            Address h1 = a("h1");
+            fx.flow(sanctioned, h1, "0.01", min(0));  // dust into the intermediary
+            assertThat(d.detect(fx.ctx(me, fx.flow(h1, me, "5000", min(5))))).noneMatch(s -> s.type() == SignalType.INDIRECT_EXPOSURE);
         }
 
         @Test void noLabelsNoSignal() {

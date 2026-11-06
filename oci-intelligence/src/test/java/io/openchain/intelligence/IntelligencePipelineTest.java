@@ -53,4 +53,19 @@ class IntelligencePipelineTest {
         assertThat(r.scores()).singleElement().satisfies(s -> assertThat(s.score()).isPositive());
         assertThat(p.onEvent(e).duplicate()).isTrue();
     }
+
+    /** Audit probes 1 and 2, end to end: dust or fake-token transfers from a sanctioned address no longer score the victim. */
+    @Test void dustingAndSpoofedTransfersDoNotRaiseTheVictimsScore() throws Exception {
+        p.labels().saveAll(LabelFileLoader.fromClasspath("labels/demo-labels.csv"));
+        var dust = p.onTransfer(transfer("0xd1", 0, sanctioned, me, "0.000001", USDT, min(0)));
+        assertThat(dust.newSignals()).extracting(Signal::type).containsOnly(SignalType.DUSTING);
+        var fake = new io.openchain.core.model.Token(NET, "0xfa4e000000000000000000000000000000000000", io.openchain.core.model.Token.UNKNOWN_SYMBOL, 0);
+        p.onTransfer(transfer("0xd2", 0, sanctioned, me, "1", fake, min(1)));
+        var score = p.scoring().rescore(me);
+        assertThat(score.score()).isZero();
+        assertThat(score.contributions()).noneMatch(c -> c.factor().contains("EXPOSURE") && c.points() > 0);
+        // a real, material transfer still is exposure
+        p.onTransfer(transfer("0xd3", 0, sanctioned, me, "5000", USDT, min(2)));
+        assertThat(p.scoring().rescore(me).level()).isIn(RiskLevel.HIGH, RiskLevel.CRITICAL);
+    }
 }

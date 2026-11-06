@@ -68,6 +68,8 @@ public record ScoringConfig(Map<String, Double> weights, double defaultSignalWei
         w.put(signalFactor(SignalType.UNUSUAL_APPROVAL), 0.15);
         w.put(signalFactor(SignalType.DORMANT_REACTIVATION), 0.10);
         w.put(signalFactor(SignalType.UNUSUAL_AMOUNT), 0.10);
+        // explained to the analyst but never scored: dusting is something done TO the wallet, and is free to do
+        w.put(signalFactor(SignalType.DUSTING), 0.0);
         Map<Severity, Double> sev = new EnumMap<>(Severity.class);
         sev.put(Severity.INFO, 0.1); sev.put(Severity.LOW, 0.4); sev.put(Severity.MEDIUM, 0.7);
         sev.put(Severity.HIGH, 0.9); sev.put(Severity.CRITICAL, 1.0);

@@ -111,7 +111,7 @@ flowchart LR
 
 1. **Indexer** polls (or subscribes to) new heads, fetches token transfers for a block range, persists them and advances an `index_checkpoint` atomically.
 2. **Normaliser** maps each `TokenTransfer` to a `ChainEvent` with a flat `fields` map (`transaction.amount`, `transaction.token.symbol`, `transaction.from`, …). `eventId = network:txHash:logIndex` is deterministic: it is the idempotency key everywhere downstream.
-3. **Detection** runs stateless and windowed detectors (e.g. fast forwarding, structuring, dormant reactivation, exposure) and emits `Signal`s with evidence.
+3. **Detection** runs stateless and windowed detectors (e.g. fast forwarding, structuring, dormant reactivation, exposure) and emits `Signal`s with evidence. Exposure is protected against griefing: transfers of unverified token contracts and unsolicited inbound transfers below a per-token dust threshold (10 USDT / 10 USDC by default) create no exposure, direct or indirect; when they are the only link to a listed address a `DUSTING` anomaly (score weight 0) explains them. Outbound transfers always count.
 4. **Scoring** aggregates signals into a `RiskScore` (saturating aggregation with decay; see [ADR-0008](../adr/0008-explainable-risk-scoring.md)) and publishes `RISK_SCORE_CHANGED` when the band changes.
 5. **Rule engine** evaluates compiled rules against events, maintains window state, deduplicates and applies cooldowns, then opens or updates **alerts**.
 6. **Notifications** are written to a `deliveries` outbox in the same transaction as the alert, then delivered by a worker with retries, HMAC signatures and SSRF protection.

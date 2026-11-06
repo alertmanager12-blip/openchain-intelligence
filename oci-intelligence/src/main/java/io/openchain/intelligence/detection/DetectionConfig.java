@@ -50,9 +50,18 @@ public record DetectionConfig(
      * Exposure to labelled addresses via actual value flows. Indirect exposure is traced backwards
      * (funds that reached the wallet), time-consistent, hop-limited; confidence = reliability * hopDecay^(hops-1).
      * Propagation stops at {@code stopAt} categories (e.g. exchanges: pooled funds).
+     * Anti-griefing: flows of unverified tokens ({@link io.openchain.core.model.Token#isUnverified()}) and inbound flows
+     * below {@code dustThresholds} (per verified symbol, human units) never create exposure; when they are the only link
+     * to a listed address a zero-weight DUSTING anomaly is emitted instead. Outbound flows always count: the wallet
+     * chose to send them.
      */
     public record Exposure(int maxHops, double hopDecay, double minConfidence, int maxPaths, int maxVisitedFlows,
-                           Set<LabelCategory> stopAt) {}
+                           Set<LabelCategory> stopAt, Map<String, BigDecimal> dustThresholds) {
+        public Exposure { dustThresholds = Map.copyOf(dustThresholds); }
+
+        /** Inbound threshold for this symbol; 0 (no dust filter) for symbols without one. */
+        public BigDecimal dustThreshold(String symbol) { return dustThresholds.getOrDefault(symbol, BigDecimal.ZERO); }
+    }
 
     /** Approvals with raw amount >= {@code unlimitedThreshold} are considered unlimited. */
     public record Approval(BigInteger unlimitedThreshold) {}
@@ -67,7 +76,8 @@ public record DetectionConfig(
                 new RapidDrain(0.80, Duration.ofHours(1), BigDecimal.ZERO),
                 new FanOut(20, Duration.ofHours(1)),
                 new CircularFlow(4, Duration.ofDays(7), true, 10_000),
-                new Exposure(3, 0.5, 0.05, 20, 5_000, Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE)),
+                new Exposure(3, 0.5, 0.05, 20, 5_000, Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE),
+                        Map.of("USDT", new BigDecimal("10"), "USDC", new BigDecimal("10"))),
                 new Approval(BigInteger.TWO.pow(96).subtract(BigInteger.ONE)),
                 20);
     }

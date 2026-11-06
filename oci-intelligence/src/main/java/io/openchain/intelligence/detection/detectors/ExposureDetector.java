@@ -6,6 +6,7 @@ import io.openchain.core.detection.Signal.Evidence;
 import io.openchain.core.detection.Signal.EvidenceLevel;
 import io.openchain.core.detection.SignalType;
 import io.openchain.core.model.Address;
+import io.openchain.intelligence.detection.DetectionConfig;
 import io.openchain.intelligence.detection.DetectionContext;
 import io.openchain.intelligence.flow.ValueFlow;
 import io.openchain.intelligence.label.AddressLabel;
@@ -31,6 +32,9 @@ import java.util.Set;
  *     Stops at the labelled source and at {@code stopAt} categories. Evidence lists the full path.</li>
  * </ul>
  * Exposure describes where value came from / went to; it never qualifies the subject.
+ * <p>Anti-griefing (anyone can send dust, or emit a fake-token Transfer whose {@code from} is a sanctioned address):
+ * flows of unverified tokens and inbound flows below the per-symbol dust threshold create no exposure, direct or
+ * indirect. When they are the only link to a listed address, a DUSTING anomaly (zero score weight) records them.
  */
 public final class ExposureDetector extends AbstractDetector {
     public ExposureDetector() { super("exposure", 1); }
@@ -43,20 +47,33 @@ public final class ExposureDetector extends AbstractDetector {
         return out;
     }
 
+    /** True when this flow may carry exposure into {@code subject}'s view (see class doc). */
+    private static boolean counts(ValueFlow f, Address subject, DetectionConfig.Exposure cfg) {
+        if (f.token().isUnverified()) return false;
+        boolean inbound = f.to().equals(subject);
+        return !inbound || f.amount().compareTo(cfg.dustThreshold(f.token().symbol())) >= 0;
+    }
+
     private List<Signal> direct(DetectionContext ctx) {
         Address s = ctx.subject();
+        var cfg = ctx.config().exposure();
         Map<String, List<ValueFlow>> flowsByLabel = new LinkedHashMap<>();
+        Map<String, List<ValueFlow>> dustByLabel = new LinkedHashMap<>();
         Map<String, AddressLabel> labelByKey = new LinkedHashMap<>();
         for (ValueFlow f : ctx.flows().involving(s)) {
             if (f.from().equals(f.to())) continue;
             for (AddressLabel l : ctx.labels().findRisky(f.counterparty(s))) {
                 labelByKey.putIfAbsent(l.key(), l);
-                flowsByLabel.computeIfAbsent(l.key(), k -> new ArrayList<>()).add(f);
+                (counts(f, s, cfg) ? flowsByLabel : dustByLabel).computeIfAbsent(l.key(), k -> new ArrayList<>()).add(f);
             }
         }
         List<Signal> out = new ArrayList<>();
         labelByKey.forEach((key, l) -> {
             List<ValueFlow> fl = flowsByLabel.get(key);
+            if (fl == null) {
+                out.add(dusting(ctx, l, dustByLabel.get(key)));
+                return;
+            }
             Map<String, BigDecimal[]> perToken = new java.util.TreeMap<>();
             for (ValueFlow f : fl) {
                 BigDecimal[] io = perToken.computeIfAbsent(f.token().symbol(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
@@ -79,6 +96,25 @@ public final class ExposureDetector extends AbstractDetector {
         return out;
     }
 
+    private Signal dusting(DetectionContext ctx, AddressLabel l, List<ValueFlow> fl) {
+        var cfg = ctx.config().exposure();
+        long unverified = fl.stream().filter(f -> f.token().isUnverified()).count();
+        List<Evidence> ev = new ArrayList<>();
+        ev.add(labelEvidence(l));
+        ev.addAll(flowEvidence(fl.reversed(), "ignored inbound transfer from listed address", ctx.config().maxEvidenceItems()));
+        ev.add(new Evidence("pattern", fl.size() + " unsolicited inbound transfer(s) from address listed as " + l.category()
+                + " by " + l.source() + " ignored for exposure: " + unverified + " of an unverified token contract, "
+                + (fl.size() - unverified) + " below the dust threshold (" + cfg.dustThresholds() + ")",
+                fl.getLast().txHash(), qualifiedId(), fl.getLast().timestamp()));
+        return signal(ctx, SignalType.DUSTING, ctx.subject(), fl.getLast().txHash(), Severity.INFO, l.sourceReliability(),
+                EvidenceLevel.ANOMALY, ev, "dusting|" + l.address() + "|" + l.category() + "|" + l.source());
+    }
+
+    /** Indirect tracing follows inbound value only: same rule as {@link #counts} for inbound flows. */
+    private static boolean traceable(ValueFlow f, DetectionConfig.Exposure cfg) {
+        return !f.token().isUnverified() && f.amount().compareTo(cfg.dustThreshold(f.token().symbol())) >= 0;
+    }
+
     private List<Signal> indirect(DetectionContext ctx) {
         var cfg = ctx.config().exposure();
         if (cfg.maxHops() < 2) return List.of();
@@ -87,7 +123,7 @@ public final class ExposureDetector extends AbstractDetector {
         Set<Address> visited = new HashSet<>(Set.of(s));
         int budget = cfg.maxVisitedFlows();
         for (ValueFlow f : ctx.flows().incoming(s)) {
-            if (f.from().equals(s) || !visited.add(f.from())) continue;
+            if (f.from().equals(s) || !traceable(f, cfg) || !visited.add(f.from())) continue;
             queue.add(new Node(f.from(), List.of(f)));
         }
         Map<String, Signal> found = new LinkedHashMap<>();
@@ -110,7 +146,8 @@ public final class ExposureDetector extends AbstractDetector {
             ValueFlow downstream = n.path().getFirst();
             for (ValueFlow g : ctx.flows().incoming(n.address())) {
                 if (--budget <= 0) break;
-                if (g.timestamp().isAfter(downstream.timestamp()) || g.from().equals(n.address()) || !visited.add(g.from())) continue;
+                if (g.timestamp().isAfter(downstream.timestamp()) || g.from().equals(n.address()) || !traceable(g, cfg)
+                        || !visited.add(g.from())) continue;
                 List<ValueFlow> p = new ArrayList<>(n.path().size() + 1);
                 p.add(g); p.addAll(n.path());
                 queue.add(new Node(g.from(), p));

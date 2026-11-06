@@ -7,6 +7,8 @@ public enum SignalType {
     DORMANT_REACTIVATION, ADDRESS_PROLIFERATION, CIRCULAR_FLOW, FLOW_CONCENTRATION, RAPID_DRAIN,
     // C. risk exposure
     SANCTIONED_EXPOSURE, FLAGGED_EXPOSURE, INDIRECT_EXPOSURE, MIXER_EXPOSURE, SCAM_EXPOSURE,
+    /** Only unsolicited dust or unverified-token transfers link the wallet to a listed address (an anomaly, not exposure). */
+    DUSTING,
     // D. smart contract
     OWNERSHIP_CHANGE, DANGEROUS_ADMIN_PERMISSION, MINT_CAPABILITY, UNUSUAL_APPROVAL, MALICIOUS_CONTRACT_INTERACTION
 }
