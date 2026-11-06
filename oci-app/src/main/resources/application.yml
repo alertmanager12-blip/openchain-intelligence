@@ -1,0 +1,86 @@
+spring:
+  application:
+    name: openchain-intelligence
+  main:
+    banner-mode: off
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    default-property-inclusion: always
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-exception: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: OpenChain Intelligence
+    version: 0.1.0-SNAPSHOT
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+oci:
+  demo:
+    # OCI_DEMO_MODE=true: simulated TRON + Ethereum chains, fictional labels, a generated admin key (logged once).
+    enabled: ${OCI_DEMO_MODE:false}
+    networks: [tron, ethereum]
+    seed-minutes: 60
+    live: true
+    seed: 42
+    address-pool-size: 40
+    max-transfers-per-block: 3
+    api-key: ${OCI_DEMO_API_KEY:}
+  rules:
+    # first existing directory wins (repo root when run from the root, ../rules when run from oci-app/)
+    directories: ${OCI_RULES_DIRS:rules,../rules}
+    load-on-startup: true
+    max-dry-run-events: 50000
+  labels:
+    files: []
+  ingestion:
+    poll-interval: 5s
+    dispatch-interval: 2s
+    event-history-size: 100000
+  security:
+    api-key-pepper: ${OCI_SECURITY_API_KEY_PEPPER:}
+    key-environment: live
+    default-key-ttl: 90d
+    max-key-ttl: 365d
+    cors-allowed-origins: ${OCI_CORS_ALLOWED_ORIGINS:http://localhost:4200}
+    oidc:
+      # JWT resource server is configured only when set (lazy discovery: no IdP call at startup)
+      issuer-uri: ${OCI_SECURITY_OIDC_ISSUER_URI:}
+      audience: ${OCI_SECURITY_OIDC_AUDIENCE:}
+      roles-claim: oci_roles
+  # Real providers (off by default). Example:
+  # chains:
+  #   tron:     { enabled: true, provider: trongrid, url: https://api.trongrid.io, api-key-header: TRON-PRO-API-KEY, api-key: ${TRONGRID_API_KEY} }
+  #   ethereum: { enabled: true, provider: json-rpc, url: https://your-rpc.example, start-block: -100 }
+  chains: {}
+
+logging:
+  level:
+    oci.audit: INFO

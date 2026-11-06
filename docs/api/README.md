@@ -19,15 +19,19 @@ Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served 
 - **Users (SPA)**: OIDC Authorization Code + PKCE with your IdP; the SPA sends `Authorization: Bearer <access_token>` (JWT validated against the IdP JWKS; tenant from claim `oci_tenant`, roles from `oci_roles` or the IdP role mapping).
 - **Machines**: API key `Authorization: Bearer oci_<env>_<prefix>_<secret>` (or `X-API-Key`). Keys have scopes and optional expiry; only a hash is stored.
 
-| Scope | Grants |
+| Permission | Grants |
 |---|---|
-| `wallets:read` | wallet and transaction analysis, graph, labels read |
-| `rules:read` / `rules:write` | rule read / create, update, enable, disable, import, test |
+| `wallet:read` | wallet analysis, networks, labels read |
+| `transaction:read` | wallet transactions, transaction analysis |
+| `risk:read` | wallet risk score + history, detection signals |
+| `investigation:read` | flow graph, exposure |
+| `rules:read` / `rules:write` | rule read, validate, export / create, update, delete, enable, disable, import, test |
 | `alerts:read` / `alerts:write` | alert read / acknowledge, status, assign, comment |
-| `webhooks:write` | connector management |
-| `labels:report` | submit label reports |
+| `webhooks:read` / `webhooks:write` | connector listing / connector create, delete, test |
+| `labels:report` | submit and list label reports |
+| `keys:admin` | API keys, users, operational (actuator) endpoints |
 
-Roles: `VIEWER` (read), `ANALYST` (+ alerts:write, labels:report), `RULE_AUTHOR` (+ rules:write), `ADMIN` (+ webhooks, keys, tenant settings).
+Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
 
 ## Errors — RFC 9457 `application/problem+json`
 
@@ -90,11 +94,11 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 
 | Method | Path | Scope | Description |
 |---|---|---|---|
-| GET | `/wallets/{address}/analysis?network=` | wallets:read | Profile, risk score with contributions, signals, labels, data freshness |
-| GET | `/wallets/{address}/transactions?network=&token=&from=&to=&direction=in\|out\|all&cursor=&limit=` | wallets:read | Token transfers, cursor paginated |
-| GET | `/wallets/{address}/risk?network=` | wallets:read | Current `RiskScore` + recent history |
-| GET | `/wallets/{address}/exposure?network=&depth=1..3` | wallets:read | Direct/indirect exposure to labelled categories (amount and share, by hop) |
-| GET | `/transactions/{hash}/analysis?network=` | wallets:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
+| GET | `/wallets/{address}/analysis?network=` | wallet:read | Profile, risk score with contributions, signals, labels, data freshness |
+| GET | `/wallets/{address}/transactions?network=&token=&from=&to=&direction=in\|out\|all&cursor=&limit=` | transaction:read | Transactions, cursor paginated |
+| GET | `/wallets/{address}/risk?network=` | risk:read | Current `RiskScore` + recent history |
+| GET | `/wallets/{address}/exposure?network=&depth=1..3` | investigation:read | Direct/indirect exposure to labelled categories (amount and share, by hop) |
+| GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
 
 Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 
@@ -151,11 +155,28 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 | Method | Path | Scope | Description |
 |---|---|---|---|
 | POST | `/webhooks` | webhooks:write | Create webhook connector `{ name, url, events[] }`; response includes the signing `secret` **once** |
-| GET | `/webhooks` | webhooks:write | List (secrets never returned) |
-| GET | `/networks` | wallets:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
-| GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | wallets:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
-| GET | `/labels?network=&address=&category=` | wallets:read | Labels with source, evidence level, status |
+| GET | `/webhooks` | webhooks:read | List (secrets never returned) |
+| GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
+| GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | investigation:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
+| GET | `/labels?network=&address=&category=` | wallet:read | Labels with source, evidence level, status |
 | POST | `/labels/reports` | labels:report | Submit a community report `{ network, address, category, description, evidenceUrls[] }`; enters moderation, never auto-published |
+
+### Administration and SPA helpers
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| POST | `/api-keys` | keys:admin | `{ name, scopes[], expiresAt? \| expiresInDays? }` → key with `secret` **once** |
+| GET | `/api-keys` | keys:admin | List (prefix, scopes, expiry, last use, revocation; never secrets) |
+| POST | `/api-keys/{id}/revoke` | keys:admin | Revoke (`DELETE /api-keys/{id}` is an alias) |
+| GET / PATCH | `/users`, `/users/{id}` | keys:admin | Console users and their role `{ role }` |
+| GET | `/signals?network=&type=&cursor=&limit=` | risk:read | Recent detection signals |
+| GET | `/rules/fields` | rules:read | Field catalog usable in rules |
+| GET | `/rules/export` | rules:read | All current rule sources, `---` separated |
+| POST | `/rules/test` | rules:write | DRY_RUN of an unsaved rule (`source`/`yaml` in the body) |
+| DELETE | `/rules/{id}` | rules:write | Delete a rule |
+| DELETE | `/webhooks/{id}` | webhooks:write | Delete a connector |
+| POST | `/webhooks/{id}/test` | webhooks:write | Signed test delivery → `{ delivered, statusCode, message }` |
+| GET | `/labels/reports` | labels:report | Submitted label reports |
 
 ## Webhook payload and signature
 

@@ -1,0 +1,23 @@
+oci:
+  demo:
+    enabled: true
+    networks: [tron]
+    seed-minutes: 15
+    live: false
+    api-key: oci_test_admin001_TestAdminKeyOnlyForUnitTests000000000001
+  security:
+    key-environment: test
+    api-key-pepper: test-pepper-not-a-secret
+    keys:
+      - name: reader
+        key: oci_test_reader01_TestReaderKeyOnlyForUnitTests00000000001
+        scopes: [wallet:read, alerts:read, rules:read]
+      - name: analyst
+        key: oci_test_analyst1_TestAnalystKeyOnlyForUnitTests0000000001
+        scopes: [wallet:read, transaction:read, risk:read, investigation:read, alerts:read, alerts:write, rules:read, rules:write]
+  ingestion:
+    dispatch-interval: 1h
+logging:
+  level:
+    root: WARN
+    oci.audit: INFO

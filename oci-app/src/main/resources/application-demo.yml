@@ -1,0 +1,12 @@
+# Demo profile (`mvn -pl oci-app spring-boot:run` activates it). Security stays ON: every API call needs a key.
+oci:
+  demo:
+    enabled: true
+    # Fixed, PUBLICLY DOCUMENTED key for the Angular dev server (frontend Settings -> auth mode "API key").
+    # Demo profile only. Permissions: read + alerts:write + rules:write + labels:report (no webhooks:write, no keys:admin).
+    ui-key: ${OCI_DEMO_UI_KEY:oci_demo_devui001_DemoOnlyAngularDevServerKeyNotSecret0001}
+  labels:
+    files:
+      - classpath:labels/demo-labels.csv
+  security:
+    key-environment: demo
