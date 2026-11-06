@@ -1,0 +1,6 @@
+**
+!frontend/**
+!deploy/nginx/**
+frontend/node_modules
+frontend/dist
+frontend/.angular

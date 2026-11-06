@@ -1,0 +1,78 @@
+apiVersion: openchain.io/rule/v1
+id: fund-splitting
+version: 1.0.0
+name: Fund splitting (more than 10 distinct recipients in 3 minutes)
+description: One sender transfers to more than 10 distinct recipients within a 3 minute window.
+author: openchain-community
+enabled: true
+tags: [generic, peel-chain, splitting, structuring]
+scope:
+  eventTypes: [TOKEN_TRANSFER, NATIVE_TRANSFER]
+conditions:
+  logic: AND
+  rules:
+    - field: transaction.amount
+      operator: GREATER_THAN
+      value: "0"
+  groups:
+    # "not failed": an absent field never matches a leaf, so NOT(success == false) also accepts
+    # events without success information, whereas success NOT_EQUALS false would reject them.
+    - logic: NOT
+      rules:
+        - field: transaction.success
+          operator: EQUALS
+          value: false
+aggregation:
+  window: { preset: 3m }
+  groupBy: [transaction.from]
+  function: DISTINCT_COUNT
+  field: transaction.to
+  operator: GREATER_THAN
+  threshold: 10
+severity: MEDIUM
+evidenceLevel: ANOMALY
+cooldown: 15m
+expectedConfidence: 0.4
+documentation: |
+  Counts distinct recipients per sender in a 3-minute sliding window (event time). Rapid fan-out is a classic
+  layering step ("splitting" / peel chains) but also matches payroll, airdrops and exchange hot-wallet payouts:
+  consider excluding known payout wallets with a NOT group in a derived rule.
+  Note: repeated payments to the same recipient count once.
+examples:
+  - name: successful transfer passes the filter
+    expect: MATCH
+    event:
+      type: TOKEN_TRANSFER
+      network: tron
+      fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: TRecipient1, transaction.amount: "10", transaction.success: true }
+  - name: failed transfer is ignored
+    expect: NO_MATCH
+    event:
+      type: TOKEN_TRANSFER
+      network: tron
+      fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: TRecipient1, transaction.amount: "10", transaction.success: false }
+tests:
+  - name: 11 distinct recipients in 100 seconds triggers
+    events:
+      - repeat: 11
+        every: 10s
+        type: TOKEN_TRANSFER
+        network: tron
+        fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: "TRecipient{{i}}", transaction.amount: "1000" }
+    expectTriggers: 1
+  - name: 30 payments to the same recipient do not trigger
+    events:
+      - repeat: 30
+        every: 5s
+        type: TOKEN_TRANSFER
+        network: tron
+        fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: TRecipientA, transaction.amount: "1000" }
+    expectTriggers: 0
+  - name: 11 recipients spread over 10 minutes do not trigger
+    events:
+      - repeat: 11
+        every: 1m
+        type: TOKEN_TRANSFER
+        network: tron
+        fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: "TRecipient{{i}}", transaction.amount: "1000" }
+    expectTriggers: 0

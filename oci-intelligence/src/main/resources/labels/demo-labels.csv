@@ -1,0 +1,8 @@
+# DEMO DATA ONLY. Every address below is FICTIONAL and generated for tests/demos.
+# It does not designate any real person, entity or wallet. Do not use as a real watch list.
+network,address,category,name,source,reliability,observedAt,evidenceLevel,reference
+ethereum,0xdemo00000000000000000000000000000000a001,SANCTIONED,DEMO fictional sanctioned entity A,demo-sanctions-list,1.0,2026-01-01T00:00:00Z,CONFIRMED_BY_SOURCE,demo://sanctions/A
+ethereum,0xdemo00000000000000000000000000000000a002,MIXER,DEMO fictional mixer,demo-community-feed,0.6,2026-01-01T00:00:00Z,RISK_SIGNAL,demo://feed/mixer
+ethereum,0xdemo00000000000000000000000000000000a003,PHISHING,DEMO fictional phishing report,demo-community-feed,0.4,2026-01-01T00:00:00Z,RISK_SIGNAL,demo://feed/phish
+ethereum,0xdemo00000000000000000000000000000000e001,EXCHANGE,DEMO fictional exchange hot wallet,demo-directory,0.9,2026-01-01T00:00:00Z,RISK_SIGNAL,
+tron,TDEMOxxxxxxxxxxxxxxxxxxxxxxxxxSAN1,SANCTIONED,DEMO fictional sanctioned entity B,demo-sanctions-list,1.0,2026-01-01T00:00:00Z,CONFIRMED_BY_SOURCE,demo://sanctions/B

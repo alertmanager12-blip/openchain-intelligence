@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openchain.io/schemas/rule/v1.json",
+  "title": "OpenChain Intelligence monitoring rule (openchain.io/rule/v1)",
+  "description": "Declarative, explainable monitoring rule. Pure data: no expressions, no scripts. The reference validator (io.openchain.alerting.rule.RuleValidator) additionally enforces the field catalog (unknown fields rejected), operator/type compatibility, regex safety and resource limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "id", "version", "name", "author", "severity"],
+  "properties": {
+    "apiVersion": { "const": "openchain.io/rule/v1" },
+    "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
+    "version": { "type": "string", "pattern": "^(0|[1-9]\\d{0,8})\\.(0|[1-9]\\d{0,8})\\.(0|[1-9]\\d{0,8})(?:-[0-9A-Za-z.-]{1,32})?$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "maxLength": 4096 },
+    "author": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "enabled": { "type": "boolean", "default": true },
+    "tags": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/slug" } },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Empty or missing lists mean any.",
+      "properties": {
+        "networks": { "type": "array", "items": { "enum": ["tron", "ethereum", "bsc", "polygon", "bitcoin", "solana"] } },
+        "eventTypes": { "type": "array", "items": { "$ref": "#/$defs/eventType" } }
+      }
+    },
+    "conditions": { "$ref": "#/$defs/group" },
+    "aggregation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window", "function", "operator", "threshold"],
+      "properties": {
+        "window": { "$ref": "#/$defs/window" },
+        "groupBy": {
+          "oneOf": [
+            { "$ref": "#/$defs/fieldName" },
+            { "type": "array", "maxItems": 3, "uniqueItems": true, "items": { "$ref": "#/$defs/fieldName" } }
+          ]
+        },
+        "function": { "enum": ["COUNT", "SUM", "DISTINCT_COUNT", "MAX", "RATIO_OF_BALANCE"] },
+        "field": { "$ref": "#/$defs/fieldName", "description": "Required except for COUNT; numeric for SUM, MAX, RATIO_OF_BALANCE." },
+        "balanceField": { "$ref": "#/$defs/fieldName", "description": "RATIO_OF_BALANCE only; default wallet.balance (balance before the transfer)." },
+        "operator": { "enum": ["GREATER_THAN", "GREATER_THAN_OR_EQUAL"] },
+        "threshold": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "sequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "within", "steps"],
+      "properties": {
+        "key": { "$ref": "#/$defs/fieldName" },
+        "within": { "$ref": "#/$defs/window" },
+        "steps": {
+          "type": "array", "minItems": 2, "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["name", "conditions"],
+            "properties": { "name": { "$ref": "#/$defs/slug" }, "conditions": { "$ref": "#/$defs/group" } }
+          }
+        }
+      }
+    },
+    "severity": { "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+    "evidenceLevel": {
+      "enum": ["ANOMALY", "RISK_SIGNAL", "CONFIRMED_BY_SOURCE"],
+      "default": "ANOMALY",
+      "description": "CONFIRMED_BY_SOURCE requires a condition on a source-backed field (e.g. wallet.sanctioned)."
+    },
+    "actions": {
+      "type": "array", "maxItems": 10,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["type", "connectorId"],
+        "properties": {
+          "type": { "enum": ["WEBHOOK", "SLACK", "DISCORD", "TELEGRAM", "EMAIL", "PUSH", "INTERNAL_EVENT"] },
+          "connectorId": { "$ref": "#/$defs/slug" },
+          "params": {
+            "type": "object", "maxProperties": 20,
+            "propertyNames": { "pattern": "^[a-zA-Z][a-zA-Z0-9_]{0,40}$" },
+            "additionalProperties": { "type": ["string", "number", "boolean"] }
+          }
+        }
+      }
+    },
+    "cooldown": { "$ref": "#/$defs/duration", "description": "Default 15m; max 7d; 0 disables grouping." },
+    "dedupKey": {
+      "type": "string", "maxLength": 512, "default": "{{rule.id}}:{{group.key}}",
+      "description": "Placeholders: {{rule.id}}, {{rule.version}}, {{group.key}}, {{network}}, {{event.<catalog field>}}."
+    },
+    "documentation": { "type": "string", "maxLength": 65536 },
+    "expectedConfidence": { "type": ["number", "string"], "description": "0..1" },
+    "examples": {
+      "type": "array", "maxItems": 50,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "expect", "event"],
+        "properties": {
+          "name": { "type": "string" },
+          "expect": { "enum": ["MATCH", "NO_MATCH"] },
+          "event": { "$ref": "#/$defs/testEvent" }
+        }
+      }
+    },
+    "tests": {
+      "type": "array", "maxItems": 50,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "events", "expectTriggers"],
+        "properties": {
+          "name": { "type": "string" },
+          "events": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/testEventStream" } },
+          "expectTriggers": { "type": "integer", "minimum": 0 },
+          "expectAlerts": { "type": "integer", "minimum": 0, "description": "Alerts after dedup/cooldown grouping." }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
+    "fieldName": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,40}(\\.[a-z][a-z0-9_]{0,40}){0,5}$", "description": "Must exist in the field catalog." },
+    "decimal": { "type": ["number", "string"], "description": "Exact decimal; strings recommended for large or fractional values." },
+    "eventType": { "enum": ["TOKEN_TRANSFER", "NATIVE_TRANSFER", "CONTRACT_CALL", "CONTRACT_ADMIN_CHANGE", "APPROVAL", "RISK_SCORE_CHANGED", "DETECTION_SIGNAL"] },
+    "duration": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[1-9]\\d{0,6}(s|m|h|d)$" },
+        {
+          "type": "object", "additionalProperties": false, "required": ["duration", "unit"],
+          "properties": {
+            "duration": { "type": "integer", "minimum": 0 },
+            "unit": { "enum": ["SECONDS", "MINUTES", "HOURS", "DAYS"] }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false, "required": ["preset"],
+          "properties": { "preset": { "type": "string", "pattern": "^[1-9]\\d{0,6}(s|m|h|d)$", "examples": ["1m", "5m", "15m", "1h", "24h"] } }
+        }
+      ]
+    },
+    "window": { "$ref": "#/$defs/duration", "description": "Sliding event-time window, 1s..7d. Presets: 1m, 5m, 15m, 1h, 24h." },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["logic"],
+      "description": "Max depth 5, max 50 leaf conditions per rule. NOT takes exactly one rule or group.",
+      "properties": {
+        "logic": { "enum": ["AND", "OR", "NOT"] },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/leaf" } },
+        "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } }
+      },
+      "anyOf": [{ "required": ["rules"] }, { "required": ["groups"] }]
+    },
+    "leaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator"],
+      "properties": {
+        "field": { "$ref": "#/$defs/fieldName" },
+        "operator": {
+          "enum": ["EQUALS", "NOT_EQUALS", "GREATER_THAN", "GREATER_THAN_OR_EQUAL", "LESS_THAN", "LESS_THAN_OR_EQUAL",
+                   "IN", "NOT_IN", "CONTAINS", "STARTS_WITH", "EXISTS", "BETWEEN", "MATCHES"]
+        },
+        "value": {
+          "description": "Scalar for comparisons; array for IN/NOT_IN (max 1000); [low, high] for BETWEEN; boolean (optional) for EXISTS; regex string (max 256 chars, no backreferences, no nested quantifiers) for MATCHES.",
+          "type": ["string", "number", "boolean", "array"],
+          "maxItems": 1000,
+          "items": { "type": ["string", "number", "boolean"] }
+        },
+        "ignoreCase": { "type": "boolean", "default": false }
+      }
+    },
+    "testEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": { "type": "string" },
+        "type": { "$ref": "#/$defs/eventType" },
+        "network": { "type": "string" },
+        "time": { "type": "string", "format": "date-time" },
+        "offset": { "type": "string", "description": "From 2026-01-01T00:00:00Z: 30s / 5m / 1h / ISO-8601 PT30S." },
+        "block": { "type": "integer" },
+        "fields": { "type": "object", "description": "Catalog fields only; values typed per catalog." }
+      }
+    },
+    "testEventStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eventId": { "type": "string", "description": "May contain {{i}} (repeat index)." },
+        "type": { "$ref": "#/$defs/eventType" },
+        "network": { "type": "string" },
+        "time": { "type": "string", "format": "date-time" },
+        "offset": { "type": "string" },
+        "block": { "type": "integer" },
+        "removed": { "type": "boolean", "description": "Chain reorg retraction of eventId." },
+        "repeat": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "every": { "type": "string", "description": "Spacing between repeated events." },
+        "fields": { "type": "object", "description": "String values may contain {{i}} (repeat index)." }
+      }
+    }
+  }
+}

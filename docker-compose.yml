@@ -1,0 +1,133 @@
+# OpenChain Intelligence — reference single-host deployment.
+#   docker compose up -d --build                         # postgres + app + frontend (demo mode)
+#   docker compose --profile observability up -d         # + otel-collector, prometheus, grafana
+# Secrets: copy deploy/.env.example to .env and change them. Demo mode MUST be disabled in production.
+name: openchain-intelligence
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *restart
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oci}
+      POSTGRES_USER: ${POSTGRES_USER:-oci}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oci-dev-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  app:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: openchain-intelligence/app:0.1.0-SNAPSHOT
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oci}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-oci}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-oci-dev-only}
+      OCI_DEMO_MODE: ${OCI_DEMO_MODE:-true}
+      OCI_ROLES: ${OCI_ROLES:-api,worker}
+      OCI_CRYPTO_MASTER_KEY: ${OCI_CRYPTO_MASTER_KEY:-}
+      OCI_SECURITY_API_KEY_PEPPER: ${OCI_SECURITY_API_KEY_PEPPER:-}
+      OCI_SECURITY_OIDC_ISSUER_URI: ${OCI_SECURITY_OIDC_ISSUER_URI:-}
+      SERVER_PORT: "8080"
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      OTEL_SERVICE_NAME: openchain-intelligence
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /actuator/health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n\" >&3 && grep -q UP <&3'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  frontend:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    image: openchain-intelligence/frontend:0.1.0-SNAPSHOT
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "4200:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # ---- optional observability stack: docker compose --profile observability up -d ----
+  otel-collector:
+    <<: *restart
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.130.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    <<: *restart
+    profiles: [observability]
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - app
+
+  grafana:
+    <<: *restart
+    profiles: [observability]
+    # Grafana is AGPL-3.0: it runs as a separate service and is not linked into or redistributed with OCI.
+    image: grafana/grafana-oss:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  promdata:
+  grafanadata:

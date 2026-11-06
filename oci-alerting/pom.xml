@@ -7,7 +7,22 @@
   <description>Programmable alerting engine (independent of detection)</description>
   <dependencies>
     <dependency><groupId>io.openchain</groupId><artifactId>oci-core</artifactId></dependency>
+    <!-- Jackson 3 (Apache-2.0): JSON tree parsing. YAML via snakeyaml-engine (Apache-2.0, YAML 1.2, no type tags constructed). -->
+    <dependency><groupId>tools.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
+    <dependency><groupId>tools.jackson.dataformat</groupId><artifactId>jackson-dataformat-yaml</artifactId></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><scope>test</scope></dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- community rule repository validated by RulesRepositoryTest -->
+          <systemPropertyVariables><oci.rules.dir>${project.basedir}/../rules</oci.rules.dir></systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>

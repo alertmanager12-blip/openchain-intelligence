@@ -1,0 +1,97 @@
+apiVersion: openchain.io/rule/v1
+id: suspicious-wallet
+version: 1.0.0
+name: High USDT volume from a newly active wallet
+description: A wallet younger than 30 days sends more than 100,000 USDT on TRON within one hour.
+author: openchain-community
+enabled: true
+tags: [tron, usdt, new-wallet, velocity]
+scope:
+  networks: [tron]
+  eventTypes: [TOKEN_TRANSFER]
+conditions:
+  logic: AND
+  rules:
+    - field: transaction.token.contract
+      operator: EQUALS
+      value: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+  groups:
+    - logic: OR
+      rules:
+        - field: wallet.age_days
+          operator: LESS_THAN
+          value: 30
+        - field: wallet.tx_count
+          operator: LESS_THAN
+          value: 10
+aggregation:
+  window: { duration: 1, unit: HOURS }
+  groupBy: [transaction.from]
+  function: SUM
+  field: transaction.amount
+  operator: GREATER_THAN
+  threshold: "100000"
+severity: HIGH
+evidenceLevel: RISK_SIGNAL
+cooldown: 1h
+expectedConfidence: 0.6
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+  - type: INTERNAL_EVENT
+    connectorId: internal-bus
+documentation: |
+  Sliding 1h window (event time) per sender over USDT transfers from wallets that are less than 30 days old or
+  have fewer than 10 known transactions. Fires when the summed amount exceeds 100,000 USDT.
+  Rationale: freshly created wallets moving large volumes quickly is a pattern seen in fund layering, but also in
+  legitimate new treasury/exchange wallets. It is a RISK_SIGNAL that warrants review, never a conclusion.
+  Requires the indexer to enrich events with wallet.age_days / wallet.tx_count.
+examples:
+  - name: transfer from a 3-day-old wallet passes the filter
+    expect: MATCH
+    event:
+      fields:
+        transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+        transaction.amount: "40000"
+        transaction.from: TNewWallet1111111111111111111111111
+        wallet.age_days: 3
+  - name: transfer from an old, busy wallet is filtered out
+    expect: NO_MATCH
+    event:
+      fields:
+        transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+        transaction.amount: "400000"
+        wallet.age_days: 900
+        wallet.tx_count: 12000
+tests:
+  - name: 3 x 40k USDT within an hour from a new wallet triggers once
+    events:
+      - repeat: 3
+        every: 15m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "40000"
+          transaction.from: TNewWallet1111111111111111111111111
+          wallet.age_days: 3
+    expectTriggers: 1
+    expectAlerts: 1
+  - name: same volume spread over 3 hours does not trigger
+    events:
+      - repeat: 3
+        every: 90m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "40000"
+          transaction.from: TNewWallet1111111111111111111111111
+          wallet.age_days: 3
+    expectTriggers: 0
+  - name: volume split across different senders does not trigger
+    events:
+      - repeat: 3
+        every: 1m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "40000"
+          transaction.from: "TSender{{i}}"
+          wallet.age_days: 3
+    expectTriggers: 0

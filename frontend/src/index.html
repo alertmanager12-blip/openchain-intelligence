@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OpenChain Intelligence</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Open source blockchain investigation, risk intelligence and monitoring console">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <script>
+    /* apply the persisted theme before first paint to avoid a flash */
+    try {
+      var p = localStorage.getItem('oci.theme');
+      var dark = p === 'dark' || ((!p || p === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

@@ -1,0 +1,5 @@
+**
+!pom.xml
+!oci-*/pom.xml
+!oci-*/src/**
+**/target

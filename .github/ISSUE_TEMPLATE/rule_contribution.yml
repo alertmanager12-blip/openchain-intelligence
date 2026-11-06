@@ -1,0 +1,46 @@
+name: Rule contribution
+description: Propose a detection rule or rule pack (oci.rules/v1)
+labels: [rule, triage]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Rule name
+      placeholder: usdt-burst-outflow
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Observable behaviour detected
+      description: Describe the on-chain pattern neutrally (behaviour, not intent).
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: Rule source (YAML)
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Test evidence
+      description: DRY_RUN stats on the demo dataset or public data (events, matches, suppressed). Public tx hashes as examples only.
+    validations:
+      required: true
+  - type: textarea
+    id: fp
+    attributes:
+      label: Known false positives
+      description: Legitimate activity that may match (exchanges, bridges, payroll...).
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence_level
+    attributes:
+      label: Evidence level of resulting alerts
+      options: [ANOMALY, RISK_SIGNAL, CONFIRMED_BY_SOURCE]
+    validations:
+      required: true

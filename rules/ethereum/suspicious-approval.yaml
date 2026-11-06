@@ -1,0 +1,98 @@
+apiVersion: openchain.io/rule/v1
+id: suspicious-approval
+version: 1.0.0
+name: Unlimited approval to a young or unverified contract
+description: An unlimited ERC-20 allowance granted to a contract spender that is less than 7 days old or unverified, excluding well-known routers.
+author: openchain-community
+enabled: true
+tags: [ethereum, approval, phishing, wallet-drainer]
+scope:
+  networks: [ethereum]
+  eventTypes: [APPROVAL]
+conditions:
+  logic: AND
+  rules:
+    - field: approval.unlimited
+      operator: EQUALS
+      value: true
+    - field: approval.spender_is_contract
+      operator: EQUALS
+      value: true
+  groups:
+    - logic: OR
+      rules:
+        - field: approval.spender_age_days
+          operator: LESS_THAN
+          value: 7
+        - field: approval.spender_verified
+          operator: EQUALS
+          value: false
+    - logic: NOT
+      rules:
+        - field: approval.spender
+          operator: IN
+          ignoreCase: true
+          value:
+            - "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"
+            - "0x1111111254eeb25477b68fb85ed929f73a960582"
+            - "0x000000000022d473030f116ddee9f6b43ac78ba3"
+severity: HIGH
+evidenceLevel: RISK_SIGNAL
+cooldown: 6h
+dedupKey: "{{rule.id}}:{{event.approval.owner}}:{{event.approval.spender}}"
+expectedConfidence: 0.5
+documentation: |
+  Unlimited allowances to freshly deployed or unverified contracts are the main vector of approval-phishing
+  "wallet drainer" kits. Known routers (Uniswap Universal Router, 1inch v5, Permit2) are excluded with a NOT group.
+  New legitimate protocols also start young and sometimes unverified: this is a RISK_SIGNAL prompting the owner to
+  review (and possibly revoke) the allowance, not evidence against the spender's operators.
+examples:
+  - name: unlimited approval to a 1-day-old contract matches
+    expect: MATCH
+    event:
+      fields:
+        approval.owner: "0xaaaa000000000000000000000000000000000001"
+        approval.spender: "0xbad0000000000000000000000000000000000bad"
+        approval.unlimited: true
+        approval.spender_is_contract: true
+        approval.spender_age_days: 1
+        approval.spender_verified: true
+  - name: unlimited approval to Permit2 is excluded (case-insensitive)
+    expect: NO_MATCH
+    event:
+      fields:
+        approval.spender: "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+        approval.unlimited: true
+        approval.spender_is_contract: true
+        approval.spender_verified: false
+  - name: bounded approval does not match
+    expect: NO_MATCH
+    event:
+      fields:
+        approval.spender: "0xbad0000000000000000000000000000000000bad"
+        approval.unlimited: false
+        approval.amount: "100"
+        approval.spender_is_contract: true
+        approval.spender_age_days: 1
+  - name: old verified contract does not match
+    expect: NO_MATCH
+    event:
+      fields:
+        approval.spender: "0x9999000000000000000000000000000000009999"
+        approval.unlimited: true
+        approval.spender_is_contract: true
+        approval.spender_age_days: 800
+        approval.spender_verified: true
+tests:
+  - name: same owner and spender within cooldown is one alert
+    events:
+      - repeat: 3
+        every: 1m
+        fields:
+          approval.owner: "0xaaaa000000000000000000000000000000000001"
+          approval.spender: "0xbad0000000000000000000000000000000000bad"
+          approval.unlimited: true
+          approval.spender_is_contract: true
+          approval.spender_verified: false
+    expectTriggers: 3
+    expectAlerts: 1

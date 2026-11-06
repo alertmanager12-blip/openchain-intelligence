@@ -1,0 +1,99 @@
+apiVersion: openchain.io/rule/v1
+id: wallet-draining
+version: 1.0.0
+name: Wallet drained (>80% of balance out in 2 minutes)
+description: Outgoing transfers from one wallet exceed 80% of its starting balance within a 2 minute window.
+author: openchain-community
+enabled: true
+tags: [generic, drain, account-takeover]
+scope:
+  eventTypes: [TOKEN_TRANSFER, NATIVE_TRANSFER]
+conditions:
+  logic: AND
+  rules:
+    - field: wallet.balance
+      operator: GREATER_THAN
+      value: "0"
+    - field: transaction.amount
+      operator: GREATER_THAN
+      value: "0"
+aggregation:
+  window: 2m
+  groupBy: [transaction.from, transaction.token.symbol]
+  function: RATIO_OF_BALANCE
+  field: transaction.amount
+  balanceField: wallet.balance
+  operator: GREATER_THAN
+  threshold: "0.8"
+severity: HIGH
+evidenceLevel: ANOMALY
+cooldown: 30m
+expectedConfidence: 0.5
+documentation: |
+  For each (sender, token), sums outgoing amounts in a 2-minute event-time window and divides by wallet.balance
+  of the earliest transfer in the window (the balance BEFORE the first outflow). Fires above 80%.
+  Typical of compromised keys / drainer scripts sweeping a wallet, but also of users consolidating funds or
+  migrating wallets. Exact decimal arithmetic; a zero or missing balance never triggers.
+examples:
+  - name: outgoing transfer with a known balance passes the filter
+    expect: MATCH
+    event:
+      type: TOKEN_TRANSFER
+      network: ethereum
+      fields:
+        transaction.from: "0xvictim0000000000000000000000000000000001"
+        transaction.token.symbol: USDC
+        transaction.amount: "500"
+        wallet.balance: "1000"
+  - name: transfer without balance enrichment is ignored
+    expect: NO_MATCH
+    event:
+      type: TOKEN_TRANSFER
+      network: ethereum
+      fields:
+        transaction.amount: "500"
+tests:
+  - name: 3 sweeps totalling 90% within 1 minute trigger
+    events:
+      - offset: 0s
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "400", wallet.balance: "1000" }
+      - offset: 20s
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "300", wallet.balance: "600" }
+      - offset: 40s
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "200", wallet.balance: "300" }
+    expectTriggers: 1
+  - name: 70% outflow does not trigger
+    events:
+      - offset: 0s
+        type: NATIVE_TRANSFER
+        network: tron
+        fields: { transaction.from: TVictim11111111111111111111111111, transaction.token.symbol: TRX, transaction.amount: "700", wallet.balance: "1000" }
+    expectTriggers: 0
+  - name: 85% drained slowly over 10 minutes does not trigger (no 2m window above 80%)
+    events:
+      - offset: 0s
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "450", wallet.balance: "1000" }
+      - offset: 10m
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "400", wallet.balance: "550" }
+    expectTriggers: 0
+  - name: a single sweep of 90% of the remaining balance triggers even after earlier outflows
+    events:
+      - offset: 0s
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "450", wallet.balance: "1000" }
+      - offset: 10m
+        type: TOKEN_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "500", wallet.balance: "550" }
+    expectTriggers: 1

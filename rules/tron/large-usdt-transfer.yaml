@@ -1,0 +1,86 @@
+apiVersion: openchain.io/rule/v1
+id: large-usdt-transfer
+version: 1.0.0
+name: Large USDT (TRC20) transfer
+description: A single USDT transfer on TRON of at least 1,000,000 USDT.
+author: openchain-community
+enabled: true
+tags: [tron, usdt, volume]
+scope:
+  networks: [tron]
+  eventTypes: [TOKEN_TRANSFER]
+conditions:
+  logic: AND
+  rules:
+    - field: transaction.token.contract
+      operator: EQUALS
+      value: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+    - field: transaction.amount
+      operator: GREATER_THAN_OR_EQUAL
+      value: "1000000"
+severity: MEDIUM
+evidenceLevel: ANOMALY
+cooldown: 30m
+dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+expectedConfidence: 0.95
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+documentation: |
+  Flags any USDT (official TRC20 contract TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t) transfer of 1M USDT or more.
+  This is a volume ANOMALY: large transfers are common for exchanges, OTC desks and treasuries and say nothing
+  about the legitimacy of the parties. Use it as context for investigations, or combine it with risk fields.
+  Matching is on the contract address (not the symbol) because token symbols can be spoofed by any contract.
+  Repeated large transfers from the same sender within 30 minutes are grouped into one alert.
+examples:
+  - name: 2.5M USDT transfer matches
+    expect: MATCH
+    event:
+      fields:
+        transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+        transaction.token.symbol: USDT
+        transaction.amount: "2500000.50"
+        transaction.from: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: exactly 1M USDT matches (inclusive threshold)
+    expect: MATCH
+    event:
+      fields:
+        transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+        transaction.amount: "1000000.000000"
+  - name: fake USDT contract with the same symbol does not match
+    expect: NO_MATCH
+    event:
+      fields:
+        transaction.token.contract: TFakeUsdtContract11111111111111111
+        transaction.token.symbol: USDT
+        transaction.amount: "5000000"
+  - name: 999,999.99 USDT does not match
+    expect: NO_MATCH
+    event:
+      fields:
+        transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+        transaction.amount: "999999.99"
+tests:
+  - name: two large transfers from the same sender are grouped
+    events:
+      - offset: 0s
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "1500000"
+          transaction.from: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+      - offset: 10m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "3000000"
+          transaction.from: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+    expectTriggers: 2
+    expectAlerts: 1
+  - name: small transfers never trigger
+    events:
+      - repeat: 50
+        every: 1m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "50000"
+          transaction.from: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+    expectTriggers: 0
