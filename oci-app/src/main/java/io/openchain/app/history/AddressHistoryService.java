@@ -211,6 +211,15 @@ public final class AddressHistoryService implements AutoCloseable {
             Thread.currentThread().interrupt();
             return p;
         } catch (RuntimeException e) {
+            if (e instanceof io.openchain.blockchain.transport.JsonRpcException j && j.historyUnavailable()) {
+                // the provider only serves recent blocks: keep what was loaded, stop going back (retrying cannot help)
+                Progress done = p.with(Status.TRUNCATED, PROVIDER_LIMIT + j.rpcMessage(), clock.instant());
+                apply(done);
+                store.save(done);
+                log.info("address history {}: provider history limit reached ({} event(s), covered from block {}): {}", id,
+                        done.eventsFound(), done.coveredFromBlock(), j.rpcMessage());
+                return done;
+            }
             String err = e.getClass().getSimpleName() + ": " + e.getMessage();
             p = p.with(Status.FAILED, err.length() > 500 ? err.substring(0, 500) : err, clock.instant());
             store.save(p);
@@ -233,6 +242,9 @@ public final class AddressHistoryService implements AutoCloseable {
     }
 
     /** Applies the stored events, THEN records the terminal status: a client never sees COMPLETE with half-applied data. */
+    /** lastError prefix of a run stopped by the provider's history limit (status TRUNCATED, not FAILED). */
+    static final String PROVIDER_LIMIT = "provider history limit: ";
+
     private Progress finish(Progress p, Status s) {
         Progress done = p.with(s, null, clock.instant());
         apply(done);
@@ -294,7 +306,10 @@ public final class AddressHistoryService implements AutoCloseable {
                 : p.coveredFromBlock() != null ? "since block " + number(java.math.BigDecimal.valueOf(p.coveredFromBlock())) : "for the recent blocks";
         StringBuilder sb = new StringBuilder("History: ").append(join(kinds)).append(' ').append(since).append(" (").append(source)
                 .append(", ").append(number(java.math.BigDecimal.valueOf(p.eventsFound()))).append(" event(s))");
-        if (p.status() == Status.TRUNCATED) {
+        if (p.status() == Status.TRUNCATED && p.lastError() != null && p.lastError().startsWith(PROVIDER_LIMIT)) {
+            sb.append("; the node only serves recent blocks, so older history is not loaded (it needs an archive node or a "
+                    + "provider plan with archive access, see the installation guide)");
+        } else if (p.status() == Status.TRUNCATED) {
             sb.append("; truncated at ").append(p.eventsFound() >= cfg.maxEvents() ? cfg.maxEvents() + " events" : cfg.maxPages() + " pages")
                     .append(": older history is not loaded");
         }

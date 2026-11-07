@@ -63,6 +63,19 @@ class HttpJsonTransportTest {
                 .isNotInstanceOf(JsonRpcException.class);
     }
 
+    @Test void historyLimitsOfNonArchiveNodesAreRecognised() {
+        // PublicNode (observed 2026-11-07), pruned nodes, geth state; a range or rate-limit error is not a history limit
+        assertThat(rpcError(-32602, "Archive requests require a personal token. Get one at: https://www.allnodes.com/publicnode").historyUnavailable()).isTrue();
+        assertThat(rpcError(4444, "pruned history unavailable: requested 10, earliest available 15500000").historyUnavailable()).isTrue();
+        assertThat(rpcError(-32000, "missing trie node abc (path ) state 0x12 is not available").historyUnavailable()).isTrue();
+        assertThat(rpcError(-32005, "query returned more than 10000 results").historyUnavailable()).isFalse();
+        assertThat(rpcError(-32005, "rate limit exceeded").historyUnavailable()).isFalse();
+    }
+
+    static JsonRpcException rpcError(int code, String message) {
+        return new JsonRpcException("node: " + message, "eth_getLogs", code, message, false);
+    }
+
     @Test void timeoutIsRetryable() {
         server.route("/slow", r -> { try { Thread.sleep(800); } catch (InterruptedException e) { } return Response.ok("{}"); });
         HttpJsonTransport t = new HttpJsonTransport(endpoint("stub", server.url(), fastResilience(2, 10))

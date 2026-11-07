@@ -102,6 +102,11 @@ like live data. **History never raises alerts** (rules are not evaluated for it)
   blocks, 1RPC 50 blocks, dRPC free plan under 100 blocks, PublicNode requires a token for archive ranges): the adapter
   halves the chunk automatically, but a small limit makes a long lookback slow; use your own node or a provider plan
   that accepts large ranges, or lower `max-blocks`. TRON: one TronGrid call per 200 events.
+- **Non-archive nodes:** a node that only serves recent blocks (PublicNode without a personal token: about the last
+  10,000-20,000 blocks, i.e. ~2 days on Ethereum, measured on 2026-11-07; pruned nodes) refuses older `eth_getLogs`.
+  The history then ends **TRUNCATED** at that limit, with the recent events kept and applied and the message "the node
+  only serves recent blocks…"; it is not retried at every analysis. For a longer lookback, use an archive node or a
+  provider plan with archive access (`OCI_CHAINS_ETHEREUM_URL`).
 - **Resumable and idempotent:** progress and found events are stored (PostgreSQL `address_history_progress` /
   `address_history_events` in JDBC mode, in memory otherwise). A restart re-applies finished histories without RPC and
   resumes unfinished ones from their cursor; a provider error marks the history FAILED with its progress kept, and the

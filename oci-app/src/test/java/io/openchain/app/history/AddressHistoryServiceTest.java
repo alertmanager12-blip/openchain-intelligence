@@ -46,6 +46,7 @@ class AddressHistoryServiceTest {
         final List<Long> blocks;
         final List<String> calls = new ArrayList<>();
         int failOnCall = -1;
+        long archiveBelow = -1;
         long head = 1_000;
 
         FakeSource(List<Long> blocks) { this.blocks = blocks; }
@@ -58,6 +59,11 @@ class AddressHistoryServiceTest {
         @Override public HistoryPage fetch(Address address, long from, long to, String cursor) {
             calls.add(from + ".." + to + "@" + cursor);
             if (calls.size() == failOnCall) throw new ProviderException("rate limited", true);
+            if (archiveBelow >= 0 && (cursor == null ? to : Long.parseLong(cursor)) < archiveBelow) {
+                // PublicNode (observed 2026-11-07) beyond ~10-20k blocks behind the head
+                throw new io.openchain.blockchain.transport.JsonRpcException("ethereum-primary: eth_getLogs RPC error -32602 Archive requests "
+                        + "require a personal token.", "eth_getLogs", -32602, "Archive requests require a personal token.", false);
+            }
             long upper = cursor == null ? to : Long.parseLong(cursor);
             long lower = Math.max(from, upper - 99);
             List<ChainEvent> events = new ArrayList<>();
@@ -144,6 +150,25 @@ class AddressHistoryServiceTest {
         assertThat(src.calls).containsExactly("701..1000@null", "701..1000@900", "701..1000@900", "701..1000@800");
         assertThat(store.load(id()).orElseThrow().status()).isEqualTo(Status.COMPLETE);
         assertThat(applied).singleElement().satisfies(b -> assertThat(b).extracting(ChainEvent::blockNumber).containsExactly(750L, 850L, 950L));
+    }
+
+    @Test void aNodeServingOnlyRecentBlocksEndsTruncatedWithTheRecentHistoryAppliedNotFailed() {
+        FakeSource src = new FakeSource(List.of(950L, 850L, 750L));
+        src.archiveBelow = 901; // the second page (blocks 801..900) is "archive"
+        AddressHistoryService s = service(OptionalLong.empty());
+        s.register(src, cfg(300, 100, 1_000));
+        s.ensure(ME);
+
+        Progress p = store.load(id()).orElseThrow();
+        assertThat(p.status()).isEqualTo(Status.TRUNCATED); // terminal: not retried at every analysis
+        assertThat(p.eventsFound()).isEqualTo(1);
+        assertThat(applied).singleElement().satisfies(b -> assertThat(b).extracting(ChainEvent::blockNumber).containsExactly(950L));
+        var coverage = s.coverage(ME);
+        assertThat(coverage.status()).isEqualTo("TRUNCATED");
+        assertThat(coverage.message()).contains("only serves recent blocks").contains("archive").doesNotContain("failed");
+
+        s.ensure(ME); // a new analysis does not hammer the node again
+        assertThat(src.calls).hasSize(2);
     }
 
     @Test void capsMarkTheHistoryTruncatedAndKeepTheNewestEvents() {

@@ -42,6 +42,18 @@ public final class JsonRpcException extends ProviderException {
     }
 
     /**
+     * True when the node refuses because the requested blocks are older than the history it serves (pruned or
+     * non-archive node, or a free tier limited to recent blocks). Observed: PublicNode {@code -32602 "Archive requests
+     * require a personal token"} beyond ~10-20k blocks; {@code 4444 "pruned history unavailable"}; geth "missing trie
+     * node" (state). Asking again, or for a smaller range, will not help.
+     */
+    public boolean historyUnavailable() {
+        if (rpcMessage == null) return false;
+        String m = rpcMessage.toLowerCase(Locale.ROOT);
+        return m.contains("archive") || m.contains("pruned") || m.contains("history unavailable") || m.contains("missing trie node");
+    }
+
+    /**
      * True when the node says it does not implement the method (as opposed to bad params, limits or transient
      * failures): standard codes -32601 / -32004, or the generic server error -32000 with an explicit
      * "not found / not supported / does not exist / not available" message (Geth-style and several gateways).
