@@ -15,6 +15,21 @@ trap cleanup EXIT
 echo "== starting stack"
 OCI_DEMO_MODE=true docker compose up -d --build --wait --wait-timeout 240 || fail "stack did not become healthy"
 
+echo "== console page is fully styled under the production CSP"
+# nginx sends script-src 'self': an inline <script> is blocked. Angular's critical-CSS inlining relied on one to switch
+# the stylesheet from media=print to all, so production pages rendered almost unstyled. Guard against both.
+index=$(curl -sf "$UI/") || fail "frontend index not served"
+python3 - "$index" <<'PY' || fail "index.html would be broken by the CSP (inline script or print-only stylesheet)"
+import re, sys
+html = sys.argv[1]
+inline = [s for s in re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', html, re.S) if s.strip()]
+assert not inline, f"{len(inline)} inline script(s) blocked by script-src 'self'"
+links = re.findall(r'<link[^>]*rel="stylesheet"[^>]*>', html)
+assert links, "no stylesheet link"
+assert not any('media="print"' in l for l in links), f"print-only stylesheet: {links}"
+print("   no inline script, stylesheet loaded for all media")
+PY
+
 echo "== unauthenticated request must be rejected"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$API/api/v1/alerts")
 [ "$code" = 401 ] || fail "expected 401 without API key, got $code"

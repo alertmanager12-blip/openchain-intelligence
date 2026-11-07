@@ -16,3 +16,4 @@ Format: [MADR](https://adr.github.io/madr/). New ADRs: copy the structure of an 
 | [0010](0010-authentication-oidc-api-keys.md) | Authentication: OIDC + API keys | accepted |
 | [0011](0011-angular-cytoscape-frontend.md) | Angular frontend + Cytoscape.js | accepted |
 | [0012](0012-licensing-policy.md) | Licensing policy | accepted |
+| [0020](0020-address-history-sources.md) | Address history: on-demand backfill through pluggable sources | accepted |

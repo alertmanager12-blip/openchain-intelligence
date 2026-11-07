@@ -58,7 +58,15 @@
                   "replace": "src/app/core/mock/mock-backend.interceptor.ts",
                   "with": "src/app/core/mock/mock-backend.interceptor.prod.ts"
                 }
-              ]
+              ],
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              }
             },
             "development": {
               "optimization": false,
