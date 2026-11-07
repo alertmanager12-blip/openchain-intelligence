@@ -1,11 +1,10 @@
-<div class="drawer-backdrop" (click)="closed.emit()" aria-hidden="true"></div>
-<aside #dialog class="drawer sheet" role="dialog" aria-modal="true" aria-labelledby="drawer-title" (keydown)="trap($event)">
+<div class="sheet">
   @let a = alert();
   <header class="sheet-head">
     <div class="row">
       <oci-severity [value]="a.severity" /><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span><oci-evidence [value]="a.evidenceLevel" />
       <span class="spacer"></span>
-      <button class="btn btn--sm btn--ghost btn--icon" type="button" (click)="closed.emit()" aria-label="Close alert details">
+      <button matIconButton type="button" mat-dialog-close aria-label="Close alert details">
         <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
     </div>
     <h2 id="drawer-title" tabindex="-1">{{ a.ruleName }}</h2>
@@ -25,21 +24,29 @@
     <div class="side">
       <section aria-labelledby="h-life">
         <h3 id="h-life">Lifecycle</h3>
-        <label>Reason, kept in history<input [value]="reason()" (input)="reason.set($any($event.target).value)" placeholder="Optional, for example known exchange rebalancing" /></label>
+        <mat-form-field>
+          <mat-label>Reason, kept in history</mat-label>
+          <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" placeholder="Optional, for example known exchange rebalancing" />
+        </mat-form-field>
         <div class="acts">
           @for (act of actions(a.status); track act.to) {
-            <button class="btn btn--sm" [class.btn--primary]="act.primary" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button>
+            @if (act.primary) { <button matButton="filled" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button> }
+            @else { <button matButton="outlined" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button> }
           }
         </div>
+        @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving" /> }
       </section>
 
       <section aria-labelledby="h-asg">
         <h3 id="h-asg">Assignee</h3>
         <form class="assign" (submit)="assign($event)" novalidate>
-          <label class="grow"><span class="sr-only">Assignee email</span><input type="email" [formField]="assignForm.assignee" placeholder="Email, or empty to unassign" /></label>
-          <button class="btn btn--sm" type="submit" [disabled]="busy()">Assign</button>
+          <mat-form-field class="grow">
+            <mat-label>Assignee email</mat-label>
+            <input matInput type="email" [formField]="assignForm.assignee" [ociInvalid]="assignForm.assignee().touched() && assignForm.assignee().invalid()" placeholder="Email, or empty to unassign" />
+            <mat-error>{{ assignForm.assignee().errors()[0]?.message }}</mat-error>
+          </mat-form-field>
+          <button matButton="outlined" type="submit" [disabled]="busy()">Assign</button>
         </form>
-        @if (assignForm.assignee().touched() && assignForm.assignee().invalid()) { <p class="field-error">{{ assignForm.assignee().errors()[0]?.message }}</p> }
       </section>
 
       @if (actionError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
@@ -61,10 +68,13 @@
           <div class="comment"><div class="small muted">{{ c.author }}, {{ ago(c.createdAt) }}</div><p>{{ c.body }}</p></div>
         } @empty { <p class="small muted">No comment yet. Write down what you checked so the next analyst does not repeat it.</p> }
         <form class="stack" (submit)="comment($event)" novalidate>
-          <label>Add a comment<textarea rows="3" [formField]="commentForm.body"></textarea></label>
-          <div><button class="btn btn--sm" type="submit" [disabled]="busy() || !commentModel().body.trim()">Post comment</button></div>
+          <mat-form-field>
+            <mat-label>Add a comment</mat-label>
+            <textarea matInput rows="3" [formField]="commentForm.body"></textarea>
+          </mat-form-field>
+          <div><button matButton="outlined" type="submit" [disabled]="busy() || !commentModel().body.trim()">Post comment</button></div>
         </form>
       </section>
     </div>
   </div>
-</aside>
+</div>

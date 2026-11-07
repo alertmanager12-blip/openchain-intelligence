@@ -1,4 +1,6 @@
-.lookup { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 16px 20px; }
+.lookup { padding: 16px 20px 12px; }
+.lookup .net { flex: 0 1 180px; }
+td.gone { display: none; }
 .primary { display: grid; gap: 12px; padding: 12px 12px 14px; }
 .score { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 20px 40px; align-items: center; padding: 22px 24px; }
 @media (max-width: 900px) { .score { grid-template-columns: minmax(0, 1fr); } }

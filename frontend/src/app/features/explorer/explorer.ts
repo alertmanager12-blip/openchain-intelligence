@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { NETWORKS, NetworkId } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
 import { apiResource } from '../../shared/api-resource';
-import { formatUnits, timeAgo } from '../../shared/format';
+import { formatUnits, timeAgo, netLabel } from '../../shared/format';
+import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { UI, sentence } from '../../shared/ui';
 
@@ -20,23 +20,25 @@ const EXAMPLES: { family: string; example: string }[] = [
 
 @Component({
   selector: 'oci-explorer',
-  imports: [FormsModule, RouterLink, PageHeader, ...UI],
+  imports: [RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
       <oci-page-header heading="Explorer" lede="Look up an address or a transaction. The network is detected from the format; EVM formats are shared, so confirm the network when asked." />
 
-      <form class="panel-raised search" (submit)="$event.preventDefault(); submit()">
-        <label class="grow">Address or transaction hash
-          <input name="q" class="mono" [ngModel]="text()" (ngModelChange)="text.set($event)" placeholder="0x…, T…, bc1… or a base58 address" autocomplete="off" spellcheck="false" />
-        </label>
-        <label>Network
-          <select name="net" [ngModel]="net()" (ngModelChange)="net.set($event)">
-            <option [ngValue]="null">Detect ({{ det().candidates[0] ?? 'none' }})</option>
-            @for (n of networks; track n) { <option [ngValue]="n" class="cap">{{ n }}</option> }
-          </select>
-        </label>
-        <button class="btn btn--primary" type="submit" [disabled]="det().kind === 'unknown'">Search</button>
+      <form class="panel-raised search fields" (submit)="$event.preventDefault(); submit()">
+        <mat-form-field class="grow">
+          <mat-label>Address or transaction hash</mat-label>
+          <input matInput name="q" class="mono" [value]="text()" (input)="text.set($any($event.target).value)" placeholder="0x…, T…, bc1… or a base58 address" autocomplete="off" spellcheck="false" />
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Network</mat-label>
+          <mat-select [value]="net()" (valueChange)="net.set($event)">
+            <mat-option [value]="null">Detect ({{ det().candidates[0] ?? 'none' }})</mat-option>
+            @for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+        <button matButton="filled" type="submit" [disabled]="det().kind === 'unknown'">Search</button>
         @if (text().trim()) { <p class="small full" [class.warn]="det().kind === 'unknown'" [class.muted]="det().kind !== 'unknown'">{{ det().reason }}</p> }
       </form>
 
@@ -47,7 +49,7 @@ const EXAMPLES: { family: string; example: string }[] = [
               <div class="section-head">
                 <h2 id="h-tx">Transaction</h2>
                 <oci-net [value]="a.transaction.network" />
-                <span class="act"><a class="btn btn--sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Trace the sender</a></span>
+                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Trace the sender</a></span>
               </div>
               <p class="hash"><span class="mono">{{ a.transaction.hash }}</span><oci-copy [value]="a.transaction.hash" label="Copy transaction hash" /></p>
 
@@ -104,8 +106,8 @@ const EXAMPLES: { family: string; example: string }[] = [
     </div>
   `,
   styles: `
-    .search { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-    .full { flex-basis: 100%; margin: 0; }
+    .search { padding-bottom: 14px; }
+    .full { flex-basis: 100%; margin: -4px 0 0; }
     .hash { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; color: var(--ink-2); }
     .parties { margin-top: 4px; }
     .transfers { list-style: none; margin: 0; padding: 0; display: grid; }
@@ -128,6 +130,7 @@ export class ExplorerPage {
   readonly network = input<NetworkId>();
 
   readonly networks = NETWORKS;
+  readonly netLabel = netLabel;
   readonly examples = EXAMPLES;
   readonly text = signal('');
   readonly net = signal<NetworkId | null>(null);

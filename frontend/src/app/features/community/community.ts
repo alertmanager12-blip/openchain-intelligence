@@ -1,6 +1,5 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { FormField, form, minLength, required, submit, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
@@ -9,7 +8,8 @@ import { EvidenceLevel, Label, NETWORKS, NetworkId } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
-import { timeAgo } from '../../shared/format';
+import { timeAgo, netLabel } from '../../shared/format';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
 import { UI, sentence } from '../../shared/ui';
@@ -33,7 +33,7 @@ function reliabilityText(r: number): string {
 
 @Component({
   selector: 'oci-community',
-  imports: [FormsModule, FormField, DatePipe, PageHeader, ...UI],
+  imports: [FormField, DatePipe, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
@@ -48,42 +48,57 @@ function reliabilityText(r: number): string {
               @if (pending()) { <span><strong>{{ pending() }}</strong> of your reports waiting for review</span> }
             </p></div>
           <div class="toolbar">
-            <label class="grow">Filter<input type="search" [ngModel]="t.filter()" (ngModelChange)="t.filter.set($event)" placeholder="Address, name, category or source" /></label>
-            <label>Network<select [ngModel]="net()" (ngModelChange)="net.set($event)"><option value="">All networks</option>@for (n of networks; track n) { <option [value]="n" class="cap">{{ n }}</option> }</select></label>
+            <mat-form-field class="grow">
+              <mat-label>Filter</mat-label>
+              <input matInput type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" placeholder="Address, name, category or source" />
+            </mat-form-field>
+            <mat-form-field class="netf">
+              <mat-label>Network</mat-label>
+              <mat-select [value]="net()" (valueChange)="net.set($event)"><mat-option value="">All networks</mat-option>@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
+            </mat-form-field>
             <span class="small muted count" aria-live="polite">{{ t.view().length }} shown</span>
           </div>
           <oci-state [loading]="labels.loading()" [error]="labels.error()" [hasData]="!!labels.value()" [empty]="t.view().length === 0" skeleton="table" [skeletonColumns]="[10, 80, 70, 50, 60, 50]"
             emptyText="No label matches. Clear the filter or choose all networks." (retry)="labels.reload()">
-            <div class="table-wrap"><table>
-              <thead><tr>
-                <th scope="col" class="x"><span class="sr-only">Details</span></th>
-                <th scope="col">Address</th>
-                <th scope="col" [attr.aria-sort]="t.aria('category')"><button type="button" (click)="t.sort('category')">Label {{ t.icon('category') }}</button></th>
-                <th scope="col" [attr.aria-sort]="t.aria('source')"><button type="button" (click)="t.sort('source')">Source {{ t.icon('source') }}</button></th>
-                <th scope="col" class="right" [attr.aria-sort]="t.aria('rel')"><button type="button" (click)="t.sort('rel')">Reliability {{ t.icon('rel') }}</button></th>
-                <th scope="col" [attr.aria-sort]="t.aria('ev')"><button type="button" (click)="t.sort('ev')">Evidence {{ t.icon('ev') }}</button></th>
-              </tr></thead>
-              <tbody>
-                @for (l of t.view(); track l.id) {
-                  <tr>
-                    <td class="x"><button class="expander" type="button" [attr.aria-expanded]="open() === l.id" [attr.aria-controls]="'ld-' + l.id" [attr.aria-label]="'Details of ' + l.name" (click)="toggle(l.id)">
-                      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
-                    <td><oci-addr [address]="l.address" [network]="l.network" /><div class="sub"><oci-net [value]="l.network" /></div></td>
-                    <td><span class="strong">{{ l.name }}</span><div class="sub"><span class="chip">{{ l.category }}</span></div></td>
-                    <td class="small">{{ l.source }}</td>
-                    <td class="right nowrap"><span class="rel" aria-hidden="true"><span [style.width.%]="l.reliability * 100"></span></span>{{ pct(l.reliability) }}%</td>
-                    <td><oci-evidence [value]="l.evidenceLevel" /></td>
-                  </tr>
+            <div class="table-wrap"><table mat-table [dataSource]="t.view()" multiTemplateDataRows [trackBy]="byId" matSort matSortActive="rel" matSortDirection="desc" matSortDisableClear (matSortChange)="t.onSort($event)">
+              <ng-container matColumnDef="x">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
+                <td mat-cell *matCellDef="let l" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open() === l.id" [attr.aria-controls]="'ld-' + l.id" [attr.aria-label]="'Details of ' + l.name" (click)="toggle(l.id)">
+                  <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
+              </ng-container>
+              <ng-container matColumnDef="address">
+                <th mat-header-cell *matHeaderCellDef scope="col">Address</th>
+                <td mat-cell *matCellDef="let l"><oci-addr [address]="l.address" [network]="l.network" /><div class="sub"><oci-net [value]="l.network" /></div></td>
+              </ng-container>
+              <ng-container matColumnDef="category">
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="category" sortActionDescription="Sort by label">Label</th>
+                <td mat-cell *matCellDef="let l"><span class="strong">{{ l.name }}</span><div class="sub"><span class="chip">{{ l.category }}</span></div></td>
+              </ng-container>
+              <ng-container matColumnDef="source">
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="source" sortActionDescription="Sort by source">Source</th>
+                <td mat-cell *matCellDef="let l" class="small">{{ l.source }}</td>
+              </ng-container>
+              <ng-container matColumnDef="rel">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="rel" arrowPosition="before" sortActionDescription="Sort by reliability">Reliability</th>
+                <td mat-cell *matCellDef="let l" class="right nowrap"><span class="rel" aria-hidden="true"><span [style.width.%]="l.reliability * 100"></span></span>{{ pct(l.reliability) }}%</td>
+              </ng-container>
+              <ng-container matColumnDef="ev">
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="ev" sortActionDescription="Sort by evidence">Evidence</th>
+                <td mat-cell *matCellDef="let l"><oci-evidence [value]="l.evidenceLevel" /></td>
+              </ng-container>
+              <ng-container matColumnDef="detail">
+                <td mat-cell *matCellDef="let l" [attr.colspan]="cols.length" [id]="'ld-' + l.id">
                   @if (open() === l.id) {
-                    <tr class="detail-row" [id]="'ld-' + l.id"><td colspan="6">
-                      <div class="detail">
-                        <dl class="kv"><dt>Address</dt><dd class="mono">{{ l.address }}</dd><dt>Label id</dt><dd class="mono">{{ l.id }}</dd><dt>Added</dt><dd>{{ l.createdAt | date: 'yyyy-MM-dd' : 'UTC' }}, {{ ago(l.createdAt) }}</dd></dl>
-                        <p class="ink-2">{{ relText(l.reliability) }}</p>
-                      </div>
-                    </td></tr>
+                    <div class="detail">
+                      <dl class="kv"><dt>Address</dt><dd class="mono">{{ l.address }}</dd><dt>Label id</dt><dd class="mono">{{ l.id }}</dd><dt>Added</dt><dd>{{ l.createdAt | date: 'yyyy-MM-dd' : 'UTC' }}, {{ ago(l.createdAt) }}</dd></dl>
+                      <p class="ink-2">{{ relText(l.reliability) }}</p>
+                    </div>
                   }
-                }
-              </tbody>
+                </td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="cols"></tr>
+              <tr mat-row *matRowDef="let l; columns: cols"></tr>
+              <tr mat-row *matRowDef="let l; columns: ['detail']" class="detail-row" [class.open]="open() === l.id"></tr>
             </table></div>
           </oci-state>
         </section>
@@ -92,18 +107,34 @@ function reliabilityText(r: number): string {
           <section class="card" aria-labelledby="h-report">
             <h2 id="h-report">Report an address</h2>
             <form class="stack" (submit)="$event.preventDefault(); send()" novalidate>
-              <label>Address<input class="mono" [formField]="report.address" autocomplete="off" spellcheck="false" [attr.aria-invalid]="showErr(report.address) || null" />
-                @for (e of errs(report.address); track $index) { <span class="field-error">{{ e }}</span> }</label>
+              <mat-form-field>
+                <mat-label>Address</mat-label>
+                <input matInput class="mono" [formField]="report.address" autocomplete="off" spellcheck="false" [ociInvalid]="showErr(report.address)" />
+                <mat-error>{{ errs(report.address).join(' ') }}</mat-error>
+              </mat-form-field>
               <div class="pair">
-                <label>Network<select [formField]="report.network">@for (n of networks; track n) { <option [value]="n">{{ n }}</option> }</select></label>
-                <label>Category<select [formField]="report.category">@for (c of categories; track c) { <option [value]="c">{{ c }}</option> }</select></label>
+                <mat-form-field>
+                  <mat-label>Network</mat-label>
+                  <mat-select [formField]="report.network">@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Category</mat-label>
+                  <mat-select [formField]="report.category">@for (c of categories; track c) { <mat-option [value]="c">{{ c }}</mat-option> }</mat-select>
+                </mat-form-field>
               </div>
-              <label>What did you observe?<textarea rows="4" [formField]="report.description" placeholder="Facts only: what happened, when, which transactions." [attr.aria-invalid]="showErr(report.description) || null"></textarea>
-                @for (e of errs(report.description); track $index) { <span class="field-error">{{ e }}</span> } @empty { <span class="hint">At least 20 characters. {{ model().description.trim().length }} so far.</span> }</label>
-              <label>Reference<input [formField]="report.reference" placeholder="URL, transaction hash or case id" /></label>
+              <mat-form-field>
+                <mat-label>What did you observe?</mat-label>
+                <textarea matInput rows="4" [formField]="report.description" placeholder="Facts only: what happened, when, which transactions." [ociInvalid]="showErr(report.description)"></textarea>
+                <mat-error>{{ errs(report.description).join(' ') }}</mat-error>
+                <mat-hint>At least 20 characters. {{ model().description.trim().length }} so far.</mat-hint>
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>Reference</mat-label>
+                <input matInput [formField]="report.reference" placeholder="URL, transaction hash or case id" />
+              </mat-form-field>
               <p class="small muted">Do not include personal data about individuals. Reports are reviewed and may be rejected.</p>
               @if (submitError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-              <div><button class="btn btn--primary" type="submit" [disabled]="busy()">{{ busy() ? 'Submitting…' : 'Submit report' }}</button></div>
+              <div><button matButton="filled" type="submit" [disabled]="busy()">{{ busy() ? 'Submitting…' : 'Submit report' }}</button></div>
             </form>
           </section>
           <section class="card" aria-labelledby="h-mine">
@@ -126,19 +157,24 @@ function reliabilityText(r: number): string {
     .rel { display: inline-block; width: 44px; height: 5px; border-radius: 3px; background: var(--well); box-shadow: var(--shadow-inset); vertical-align: middle; margin-right: 8px; overflow: hidden; }
     .rel span { display: block; height: 100%; background: var(--ink-2); }
     .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stack mat-form-field { width: 100%; }
+    .netf { width: 180px; }
+    .toolbar .grow { flex: 1 1 240px; }
     .reps { list-style: none; margin: 0; padding: 0; display: grid; }
     .reps li { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
     .reps li:last-child { border-bottom: 0; }
-    textarea { resize: vertical; }
   `,
 })
 export class CommunityPage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
   readonly networks = NETWORKS;
+  readonly netLabel = netLabel;
   readonly categories = CATEGORIES;
   readonly net = signal<NetworkId | ''>('');
   readonly open = signal<string | null>(null);
+  readonly cols = ['x', 'address', 'category', 'source', 'rel', 'ev'];
+  readonly byId = (_: number, l: Label) => l.id;
   readonly busy = signal(false);
   readonly submitError = signal<ApiError | null>(null);
   readonly ago = timeAgo;

@@ -1,6 +1,9 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { Type } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatDialogHarness } from '@angular/material/dialog/testing';
+import { MatTabGroupHarness } from '@angular/material/tabs/testing';
 import { provideRouter } from '@angular/router';
 import { authInterceptor, errorInterceptor } from '../core/interceptors';
 import { fakeAddress } from '../core/mock/mock-db';
@@ -27,13 +30,17 @@ describe('pages (mock mode smoke test)', () => {
     TestBed.inject(SettingsService).update({ mock: true });
   });
 
-  async function render<T>(cmp: Type<T>, inputs: Record<string, unknown> = {}): Promise<HTMLElement> {
+  async function mount<T>(cmp: Type<T>, inputs: Record<string, unknown> = {}): Promise<ComponentFixture<T>> {
     const f = TestBed.createComponent(cmp);
     for (const [k, v] of Object.entries(inputs)) f.componentRef.setInput(k, v);
     await f.whenStable();
     await new Promise((r) => setTimeout(r, 450));
     await f.whenStable();
-    return f.nativeElement as HTMLElement;
+    return f;
+  }
+
+  async function render<T>(cmp: Type<T>, inputs: Record<string, unknown> = {}): Promise<HTMLElement> {
+    return (await mount(cmp, inputs)).nativeElement as HTMLElement;
   }
 
   const addr = fakeAddress('ethereum', 3);
@@ -48,7 +55,7 @@ describe('pages (mock mode smoke test)', () => {
     ['simulator', SimulatorPage, {}, 'Run dry run'],
     ['integrations', IntegrationsPage, {}, 'SOC webhook'],
     ['community', CommunityPage, {}, 'Demo'],
-    ['settings', SettingsPage, {}, 'oci_demo_'],
+    ['settings', SettingsPage, {}, 'Users and roles'],
   ];
 
   for (const [name, cmp, inputs, expected] of cases) {
@@ -59,9 +66,25 @@ describe('pages (mock mode smoke test)', () => {
     });
   }
 
+  it('lists the API keys in the settings tab of the same name', async () => {
+    const f = await mount(SettingsPage);
+    const tabs = await TestbedHarnessEnvironment.loader(f).getHarness(MatTabGroupHarness);
+    expect((await Promise.all((await tabs.getTabs()).map((t) => t.getLabel())))).toEqual(['Connection', 'Appearance', 'API keys', 'Users and roles']);
+    await tabs.selectTab({ label: 'API keys' });
+    await new Promise((r) => setTimeout(r, 300));
+    await f.whenStable();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('oci_demo_');
+    expect((f.nativeElement as HTMLElement).querySelector('.state--error')).toBeNull();
+  });
+
   it('opens an alert from a deep link and explains why it fired', async () => {
-    const el = await render(AlertsPage, { id: 'al_0001' });
-    const sheet = el.querySelector('[role="dialog"]');
+    const f = await mount(AlertsPage, { id: 'al_0001' });
+    // the alert opens in a MatDialog (rendered in the overlay container), labelled by its title
+    const dialog = await TestbedHarnessEnvironment.documentRootLoader(f).getHarness(MatDialogHarness);
+    const labelledBy = await dialog.getAriaLabelledby();
+    expect(document.getElementById(labelledBy!)?.textContent).toBeTruthy();
+    const sheet = document.querySelector('mat-dialog-container[role="dialog"]');
+    expect(sheet?.getAttribute('aria-modal')).toBe('true');
     expect(sheet?.textContent).toContain('Why this alert fired');
     expect(sheet?.textContent).toContain('Measured values');
     expect(sheet?.querySelectorAll('table.cond tbody tr').length).toBeGreaterThan(0);

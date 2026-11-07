@@ -1,78 +1,121 @@
 <div class="page">
   <oci-page-header heading="Settings" lede="How this console connects to the backend, how it looks, and who can use it." />
 
-  <div class="layout">
-    <oci-tab-list class="nav" [tabs]="sections" [(selected)]="section" prefix="set" label="Settings sections" [vertical]="true" />
-
-    <div class="panels">
-      <section role="tabpanel" id="panel-set-connection" aria-labelledby="tab-set-connection" [hidden]="section() !== 'connection'" class="card stack">
-        <h2>Connection</h2>
+  <mat-tab-group class="sections" aria-label="Settings sections" [(selectedIndex)]="section">
+    <mat-tab label="Connection">
+      <section class="card stack" aria-labelledby="h-conn">
+        <h2 id="h-conn">Connection</h2>
         @if (allowMock) {
           <div class="switch-row">
-            <button class="switch" type="button" role="switch" [attr.aria-checked]="conn().mock" aria-labelledby="mock-l" (click)="toggleMock()"></button>
-            <span id="mock-l">Use mock data <span class="hint">Fictitious, in memory, no backend. Development builds only.</span></span>
+            <mat-slide-toggle hideIcon [checked]="conn().mock" (change)="toggleMock()" aria-describedby="mock-h">Use mock data</mat-slide-toggle>
+            <span id="mock-h" class="hint">Fictitious, in memory, no backend. Development builds only.</span>
           </div>
         }
-        <label>Authentication<select [ngModel]="conn().authMode" (ngModelChange)="setMode($event)">
-          <option value="none">None (development)</option><option value="bearer">Bearer token (OIDC)</option><option value="apiKey">API key</option>
-        </select></label>
+        <mat-form-field class="auth">
+          <mat-label>Authentication</mat-label>
+          <mat-select [value]="conn().authMode" (valueChange)="setMode($event)">
+            <mat-option value="none">None (development)</mat-option><mat-option value="bearer">Bearer token (OIDC)</mat-option><mat-option value="apiKey">API key</mat-option>
+          </mat-select>
+        </mat-form-field>
         @if (conn().authMode !== 'none') {
-          <label>{{ conn().authMode === 'bearer' ? 'Access token' : 'API key' }}
-            <input type="password" autocomplete="off" [ngModel]="conn().token" (ngModelChange)="settings.update({ token: $event })" />
-            <span class="hint">Stored in this browser only and sent to /api requests only.</span></label>
+          <mat-form-field class="token">
+            <mat-label>{{ conn().authMode === 'bearer' ? 'Access token' : 'API key' }}</mat-label>
+            <input matInput type="password" autocomplete="off" [value]="conn().token" (input)="settings.update({ token: $any($event.target).value })" />
+            <mat-hint>Stored in this browser only and sent to /api requests only.</mat-hint>
+          </mat-form-field>
         }
       </section>
+    </mat-tab>
 
-      <section role="tabpanel" id="panel-set-appearance" aria-labelledby="tab-set-appearance" [hidden]="section() !== 'appearance'" class="card stack">
-        <h2>Appearance</h2>
-        <div class="seg" role="radiogroup" aria-label="Theme" (keydown)="themeKey($event)">
-          @for (p of themes; track p) { <button type="button" role="radio" [attr.aria-checked]="theme.pref() === p" [attr.tabindex]="theme.pref() === p ? 0 : -1" (click)="theme.pref.set(p)">{{ sentence(p) }}</button> }
-        </div>
+    <mat-tab label="Appearance">
+      <section class="card stack" aria-labelledby="h-app">
+        <h2 id="h-app">Appearance</h2>
+        <mat-radio-group class="themes" aria-labelledby="h-theme" [value]="theme.pref()" (change)="theme.pref.set($event.value)">
+          <span id="h-theme" class="legend">Theme</span>
+          @for (p of themes; track p) { <mat-radio-button [value]="p">{{ sentence(p) }}</mat-radio-button> }
+        </mat-radio-group>
         <p class="hint">System follows your operating system preference.</p>
       </section>
+    </mat-tab>
 
-      <section role="tabpanel" id="panel-set-keys" aria-labelledby="tab-set-keys" [hidden]="section() !== 'keys'" class="card card--flush">
-        <div class="card-head"><h2>API keys</h2></div>
+    <mat-tab label="API keys">
+      <section class="card card--flush" aria-labelledby="h-keys">
+        <div class="card-head"><h2 id="h-keys">API keys</h2></div>
         <form class="key-form" (submit)="createKey($event)" novalidate>
-          <label class="grow">Name<input [formField]="keyForm.name" placeholder="CI pipeline" />
-            @if (keyForm.name().touched() && keyForm.name().invalid()) { <span class="field-error">{{ keyForm.name().errors()[0]?.message }}</span> }</label>
+          <mat-form-field class="name">
+            <mat-label>Name</mat-label>
+            <input matInput [formField]="keyForm.name" [ociInvalid]="keyForm.name().touched() && keyForm.name().invalid()" placeholder="CI pipeline" />
+            <mat-error>{{ keyForm.name().errors()[0]?.message }}</mat-error>
+          </mat-form-field>
           <fieldset><legend>Scopes</legend><div class="row scopes">
-            @for (s of scopes; track s) { <label class="check"><input type="checkbox" [checked]="keyModel().scopes.includes(s)" (change)="toggleScope(s)" />{{ s }}</label> }
-          </div>@if (keyForm.scopes().invalid()) { <span class="field-error">{{ keyForm.scopes().errors()[0]?.message }}</span> }</fieldset>
-          <div><button class="btn btn--primary" type="submit">Create key</button></div>
+            @for (s of scopes; track s) { <mat-checkbox [checked]="keyModel().scopes.includes(s)" (change)="toggleScope(s)"><span class="mono">{{ s }}</span></mat-checkbox> }
+          </div>@if (keyForm.scopes().invalid()) { <span class="field-error" role="alert">{{ keyForm.scopes().errors()[0]?.message }}</span> }</fieldset>
+          <div><button matButton="filled" type="submit">Create key</button></div>
         </form>
         @if (newSecret(); as s) {
           <div class="note note--warn secret" role="alert"><strong>Copy this key now. It will not be shown again.</strong><code class="mono">{{ s }}</code>
-            <div><button class="btn btn--sm" type="button" (click)="newSecret.set(null)">I stored it</button></div></div>
+            <div><button matButton="outlined" class="sm" type="button" (click)="newSecret.set(null)">I stored it</button></div></div>
         }
         @if (keyError(); as e) { <p class="field-error pad" role="alert">{{ e.title }}: {{ e.detail }}</p> }
         <oci-state [loading]="keys.loading()" [error]="keys.error()" [hasData]="!!keys.value()" [empty]="(keys.value() ?? []).length === 0" skeleton="table" [skeletonRows]="2"
           emptyText="No API key yet. Create one above for scripts and CI pipelines." (retry)="keys.reload()">
-          <div class="table-wrap"><table>
-            <thead><tr><th scope="col">Name</th><th scope="col">Key</th><th scope="col">Scopes</th><th scope="col">Last used</th><th scope="col" class="right"><span class="sr-only">Actions</span></th></tr></thead>
-            <tbody>@for (k of keys.value() ?? []; track k.id) {
-              <tr [class.revoked]="k.revoked"><td class="strong">{{ k.name }}</td><td class="mono small">{{ k.prefix }}…</td>
-                <td><div class="chips">@for (s of k.scopes; track s) { <span class="chip">{{ s }}</span> }</div></td><td class="small muted">{{ ago(k.lastUsedAt) }}</td>
-                <td class="right">@if (k.revoked) { <span class="small muted">Revoked</span> } @else { <span class="row-actions"><button class="btn btn--sm btn--danger" type="button" (click)="revoke(k)" [attr.aria-label]="'Revoke ' + k.name">Revoke</button></span> }</td></tr>
-            }</tbody>
+          <div class="table-wrap"><table mat-table [dataSource]="keys.value() ?? []" [trackBy]="byId">
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef scope="col">Name</th>
+              <td mat-cell *matCellDef="let k" class="strong">{{ k.name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="key">
+              <th mat-header-cell *matHeaderCellDef scope="col">Key</th>
+              <td mat-cell *matCellDef="let k" class="mono small">{{ k.prefix }}…</td>
+            </ng-container>
+            <ng-container matColumnDef="scopes">
+              <th mat-header-cell *matHeaderCellDef scope="col">Scopes</th>
+              <td mat-cell *matCellDef="let k"><div class="chips">@for (s of k.scopes; track s) { <span class="chip">{{ s }}</span> }</div></td>
+            </ng-container>
+            <ng-container matColumnDef="used">
+              <th mat-header-cell *matHeaderCellDef scope="col">Last used</th>
+              <td mat-cell *matCellDef="let k" class="small muted">{{ ago(k.lastUsedAt) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right"><span class="sr-only">Actions</span></th>
+              <td mat-cell *matCellDef="let k" class="right">@if (k.revoked) { <span class="small muted">Revoked</span> } @else { <span class="row-actions"><button matButton class="sm danger" type="button" (click)="revoke(k)" [attr.aria-label]="'Revoke ' + k.name">Revoke</button></span> }</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="keyCols"></tr>
+            <tr mat-row *matRowDef="let k; columns: keyCols" [class.revoked]="k.revoked"></tr>
           </table></div>
         </oci-state>
       </section>
+    </mat-tab>
 
-      <section role="tabpanel" id="panel-set-users" aria-labelledby="tab-set-users" [hidden]="section() !== 'users'" class="card card--flush">
-        <div class="card-head"><h2>Users and roles</h2></div>
+    <mat-tab label="Users and roles">
+      <section class="card card--flush" aria-labelledby="h-users">
+        <div class="card-head"><h2 id="h-users">Users and roles</h2></div>
         <dl class="roles"><div><dt>Admin</dt><dd>manages users, keys and connectors.</dd></div><div><dt>Analyst</dt><dd>triages alerts and edits rules.</dd></div><div><dt>Viewer</dt><dd>reads only.</dd></div></dl>
         <oci-state [loading]="users.loading()" [error]="users.error()" [hasData]="!!users.value()" skeleton="table" [skeletonRows]="3" (retry)="users.reload()">
-          <div class="table-wrap"><table>
-            <thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col" class="right">Last login</th></tr></thead>
-            <tbody>@for (u of users.value() ?? []; track u.id) {
-              <tr><td><span class="strong">{{ u.name }}</span><div class="sub">{{ u.email }}</div></td>
-                <td><label><span class="sr-only">Role of {{ u.email }}</span><select [ngModel]="u.role" (ngModelChange)="setRole(u, $event)">@for (r of roles; track r) { <option [value]="r">{{ sentence(r) }}</option> }</select></label></td>
-                <td class="small right muted">{{ ago(u.lastLoginAt) }}</td></tr>
-            }</tbody>
+          <div class="table-wrap"><table mat-table [dataSource]="users.value() ?? []" [trackBy]="byId">
+            <ng-container matColumnDef="user">
+              <th mat-header-cell *matHeaderCellDef scope="col">User</th>
+              <td mat-cell *matCellDef="let u"><span class="strong">{{ u.name }}</span><div class="sub">{{ u.email }}</div></td>
+            </ng-container>
+            <ng-container matColumnDef="role">
+              <th mat-header-cell *matHeaderCellDef scope="col">Role</th>
+              <td mat-cell *matCellDef="let u">
+                <mat-form-field class="role">
+                  <mat-select [value]="u.role" (valueChange)="setRole(u, $event)" [aria-label]="'Role of ' + u.email">
+                    @for (r of roles; track r) { <mat-option [value]="r">{{ sentence(r) }}</mat-option> }
+                  </mat-select>
+                </mat-form-field>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="login">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right">Last login</th>
+              <td mat-cell *matCellDef="let u" class="small right muted">{{ ago(u.lastLoginAt) }}</td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="userCols"></tr>
+            <tr mat-row *matRowDef="let u; columns: userCols"></tr>
           </table></div>
         </oci-state>
       </section>
-    </div>
-  </div>
+    </mat-tab>
+  </mat-tab-group>
 </div>

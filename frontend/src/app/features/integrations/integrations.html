@@ -16,24 +16,36 @@
       </div>
       <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="(list.value() ?? []).length === 0" skeleton="table" [skeletonRows]="3"
         emptyText="No connector yet. Add one with the form to start delivering alerts." (retry)="list.reload()">
-        <div class="table-wrap"><table>
-          <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Target</th><th scope="col">Last delivery</th><th scope="col" class="right"><span class="sr-only">Actions</span></th></tr></thead>
-          <tbody>@for (w of list.value() ?? []; track w.id) {
-            <tr>
-              <td><span class="strong">{{ w.name }}</span><div class="sub mono">{{ w.id }}</div></td>
-              <td>{{ typeLabel(w.type) }}</td>
-              <td class="mono small target" [attr.title]="'Target hidden. Ends in ' + w.target.slice(-4)">{{ mask(w.target) }}</td>
-              <td>
-                @if (w.lastDeliveryStatus) { <span class="status" [class.st-ok]="w.lastDeliveryStatus === 'OK'" [class.st-failed]="w.lastDeliveryStatus === 'FAILED'">{{ w.lastDeliveryStatus === 'OK' ? 'Delivered' : 'Failed' }}</span><div class="sub">{{ ago(w.lastDeliveryAt) }}</div> }
-                @else { <span class="status st-none muted">Never</span> }
-                @if (lastTest()?.id === w.id) { <div class="sub" [class.ok]="lastTest()!.ok" [class.bad]="!lastTest()!.ok">{{ lastTest()!.message }}</div> }
-              </td>
-              <td class="right nowrap"><span class="row-actions">
-                <button class="btn btn--sm" type="button" (click)="test(w)" [disabled]="testing() === w.id" [attr.aria-label]="'Send test to ' + w.name">{{ testing() === w.id ? 'Sending' : 'Send test' }}</button>
-                <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove(w)" [attr.aria-label]="'Delete ' + w.name">Delete</button>
-              </span></td>
-            </tr>
-          }</tbody>
+        <div class="table-wrap"><table mat-table [dataSource]="list.value() ?? []" [trackBy]="byId">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef scope="col">Name</th>
+            <td mat-cell *matCellDef="let w"><span class="strong">{{ w.name }}</span><div class="sub mono">{{ w.id }}</div></td>
+          </ng-container>
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef scope="col">Type</th>
+            <td mat-cell *matCellDef="let w">{{ typeLabel(w.type) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="target">
+            <th mat-header-cell *matHeaderCellDef scope="col">Target</th>
+            <td mat-cell *matCellDef="let w" class="mono small target" [matTooltip]="'Target hidden. Ends in ' + w.target.slice(-4)">{{ mask(w.target) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="last">
+            <th mat-header-cell *matHeaderCellDef scope="col">Last delivery</th>
+            <td mat-cell *matCellDef="let w">
+              @if (w.lastDeliveryStatus) { <span class="status" [class.st-ok]="w.lastDeliveryStatus === 'OK'" [class.st-failed]="w.lastDeliveryStatus === 'FAILED'">{{ w.lastDeliveryStatus === 'OK' ? 'Delivered' : 'Failed' }}</span><div class="sub">{{ ago(w.lastDeliveryAt) }}</div> }
+              @else { <span class="status st-none muted">Never</span> }
+              @if (lastTest()?.id === w.id) { <div class="sub" [class.ok]="lastTest()!.ok" [class.bad]="!lastTest()!.ok">{{ lastTest()!.message }}</div> }
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right"><span class="sr-only">Actions</span></th>
+            <td mat-cell *matCellDef="let w" class="right nowrap"><span class="row-actions">
+              <button matButton="outlined" class="sm" type="button" (click)="test(w)" [disabled]="testing() === w.id" [attr.aria-label]="'Send test to ' + w.name">{{ testing() === w.id ? 'Sending' : 'Send test' }}</button>
+              <button matButton class="sm danger" type="button" (click)="remove(w)" [attr.aria-label]="'Delete ' + w.name">Delete</button>
+            </span></td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="cols"></tr>
+          <tr mat-row *matRowDef="let w; columns: cols"></tr>
         </table></div>
       </oci-state>
     </section>
@@ -41,23 +53,29 @@
     <section class="card" aria-labelledby="h-add">
       <h2 id="h-add">Add a connector</h2>
       <form class="stack" (submit)="create($event)" novalidate>
-        <div class="seg types" role="radiogroup" aria-label="Connector type">
-          @for (t of types; track t.type) { <button type="button" role="radio" [attr.aria-checked]="type() === t.type" [disabled]="t.available === false" (click)="type.set(t.type)">{{ t.label }}</button> }
-        </div>
+        <mat-button-toggle-group class="types" aria-label="Connector type" [value]="type()" (change)="type.set($event.value)">
+          @for (t of types; track t.type) { <mat-button-toggle [value]="t.type" [disabled]="t.available === false">{{ t.label }}</mat-button-toggle> }
+        </mat-button-toggle-group>
         <p class="hint">{{ meta().help }}</p>
         <p class="hint unavailable">Email is not available yet: the server has no mail transport. Use a webhook to your mail relay meanwhile.</p>
-        <label>Name<input [formField]="connector.name" placeholder="SOC on-call" />
-          @if (connector.name().touched() && connector.name().invalid()) { <span class="field-error">{{ connector.name().errors()[0]?.message }}</span> }</label>
-        <label>{{ meta().target }}<input class="mono" [formField]="connector.target" [placeholder]="meta().placeholder" />
-          @if (connector.target().touched() && connector.target().invalid()) { <span class="field-error">{{ connector.target().errors()[0]?.message }}</span> }</label>
+        <mat-form-field>
+          <mat-label>Name</mat-label>
+          <input matInput [formField]="connector.name" [ociInvalid]="connector.name().touched() && connector.name().invalid()" placeholder="SOC on-call" />
+          <mat-error>{{ connector.name().errors()[0]?.message }}</mat-error>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>{{ meta().target }}</mat-label>
+          <input matInput class="mono" [formField]="connector.target" [ociInvalid]="connector.target().touched() && connector.target().invalid()" [placeholder]="meta().placeholder" />
+          <mat-error>{{ connector.target().errors()[0]?.message }}</mat-error>
+        </mat-form-field>
         @if (createError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-        <div><button class="btn btn--primary" type="submit" [disabled]="busy()">Create connector</button></div>
+        <div><button matButton="filled" type="submit" [disabled]="busy()">Create connector</button></div>
       </form>
       @if (secret(); as s) {
         <div class="note note--warn secret" role="alert">
           <strong>Copy the signing secret now. It will not be shown again.</strong>
           <code class="mono">{{ s }}</code>
-          <div class="row"><button class="btn btn--sm" type="button" (click)="copy(s)">Copy secret</button><button class="btn btn--sm btn--ghost" type="button" (click)="secret.set(null)">I stored it</button></div>
+          <div class="row"><button matButton="outlined" class="sm" type="button" (click)="copy(s)">Copy secret</button><button matButton class="sm" type="button" (click)="secret.set(null)">I stored it</button></div>
         </div>
       }
     </section>

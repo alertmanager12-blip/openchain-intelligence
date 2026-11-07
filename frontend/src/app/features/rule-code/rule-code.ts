@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButton } from '@angular/material/button';
+import { MatProgressBar } from '@angular/material/progress-bar';
 import { Observable } from 'rxjs';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
@@ -13,27 +15,28 @@ import { StoredRules } from './stored-rules';
 /** Rules as code: a YAML editor with local and server validation, import / export, and the stored rules. */
 @Component({
   selector: 'oci-rule-code',
-  imports: [FormsModule, PageHeader, StoredRules],
+  imports: [FormsModule, MatButton, MatProgressBar, PageHeader, StoredRules],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
       <oci-page-header heading="Rules as code" lede="Version rules next to your code. The YAML is plain data, with no anchors, tags or expressions, and the server validates it before storing it.">
-        <button class="btn" type="button" (click)="fileInput.click()">Import a file</button>
+        <button matButton="outlined" type="button" (click)="fileInput.click()">Import a file</button>
         <input #fileInput type="file" accept=".yaml,.yml,text/yaml" class="sr-only" (change)="importFile($event)" aria-label="Import YAML file" />
-        <button class="btn" type="button" (click)="exportAll()" [disabled]="busy()">Export all rules</button>
+        <button matButton="outlined" type="button" (click)="exportAll()" [disabled]="busy()">Export all rules</button>
       </oci-page-header>
 
       <section class="panel-raised readout-panel" aria-labelledby="h-val">
         <div class="card-head"><h2 id="h-val">Validation</h2>
           <div class="row act">
-            <button class="btn btn--primary" type="button" (click)="validate()" [disabled]="busy()">Validate on server</button>
-            <button class="btn" type="button" (click)="importText()" [disabled]="busy() || local().errors.length > 0">Save to server</button>
+            <button matButton="filled" type="button" (click)="validate()" [disabled]="busy()">Validate on server</button>
+            <button matButton="outlined" type="button" (click)="importText()" [disabled]="busy() || local().errors.length > 0">Save to server</button>
           </div></div>
         <p class="status-line">
           <span id="yaml-status" aria-live="polite" [class.bad]="local().errors.length > 0">Local check <strong>{{ local().errors.length === 0 ? 'no issue' : local().errors.length + (local().errors.length === 1 ? ' issue' : ' issues') }}</strong></span>
           <span [class.bad]="server() && !server()!.valid">Server validation <strong>@if (server(); as r) { {{ r.valid ? 'valid' : r.errors.length + (r.errors.length === 1 ? ' error' : ' errors') }} } @else { not run yet }</strong></span>
           <span><strong>{{ local().docs }}</strong> {{ local().docs === 1 ? 'rule' : 'rules' }} in this file, <strong>{{ lineCount() }}</strong> lines</span>
         </p>
+        @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Waiting for the server" /> }
         @if (shownErrors().length) {
           <ul class="errs">@for (e of shownErrors(); track $index) { <li><span class="mono">{{ where(e) }}</span> {{ e.message }}</li> }</ul>
         }
@@ -68,7 +71,7 @@ import { StoredRules } from './stored-rules';
     .editor-card { padding: 0; overflow: hidden; }
     .editor { display: flex; background: var(--surface); }
     .gutter { margin: 0; padding: 12px 8px; min-width: 44px; text-align: right; color: var(--muted); background: var(--surface-2); border-right: 1px solid var(--line-soft); font: 13px/1.6 var(--mono); user-select: none; overflow: hidden; }
-    .editor textarea { border: 0; border-radius: 0; box-shadow: none; padding: 12px 14px; min-height: 520px; flex: 1; }
+    .editor textarea { min-height: 520px; flex: 1; }
     .editor textarea:focus { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
     .errs { margin: 0; padding-left: 18px; font-size: 14px; color: var(--danger); display: grid; gap: 4px; }
     .ref p { color: var(--ink-2); }

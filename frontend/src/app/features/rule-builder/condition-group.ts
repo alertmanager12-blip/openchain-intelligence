@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { FieldDef, FieldType } from '../../core/models';
 import {
   Condition, ConditionGroup, ConditionValue, OPERATORS_BY_TYPE, OPERATOR_LABELS, Operator, availabilityNote, newCondition, newGroup,
 } from '../../core/rules/rule-model';
+import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 
 /** Label category ids as written in wallet.labels / counterparty.labels by the backend. */
 const LABEL_CATEGORIES = ['sanctioned', 'mixer', 'scam', 'phishing', 'ransomware', 'stolen-funds', 'darknet-market', 'flagged-community', 'exchange', 'bridge', 'defi-protocol', 'other'];
@@ -28,19 +30,19 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
  */
 @Component({
   selector: 'oci-condition-group',
-  imports: [FormsModule],
+  imports: [FormsModule, MatButtonToggleModule, ...MAT_BUTTONS, ...MAT_FORM],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="group" [class.nested]="depth() > 1" role="group" [attr.aria-label]="(group().match === 'all' ? 'All' : group().match === 'any' ? 'Any' : 'None') + ' of the following conditions'">
       <div class="row head">
         <span class="kw">{{ depth() === 1 ? 'When' : 'Group' }}</span>
-        <div class="seg" role="radiogroup" aria-label="Group logic">
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'all'" [attr.aria-pressed]="group().match === 'all'" (click)="setMatch('all')">All match</button>
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'any'" [attr.aria-pressed]="group().match === 'any'" (click)="setMatch('any')">Any matches</button>
-          <button type="button" role="radio" [attr.aria-checked]="group().match === 'not'" [attr.aria-pressed]="group().match === 'not'" (click)="setMatch('not')">None matches</button>
-        </div>
+        <mat-button-toggle-group aria-label="Group logic" [value]="group().match" (change)="setMatch($event.value)">
+          <mat-button-toggle value="all">All match</mat-button-toggle>
+          <mat-button-toggle value="any">Any matches</mat-button-toggle>
+          <mat-button-toggle value="not">None matches</mat-button-toggle>
+        </mat-button-toggle-group>
         <span class="spacer"></span>
-        @if (removable()) { <button class="btn btn--sm btn--ghost btn--danger" type="button" (click)="remove.emit()" aria-label="Remove group">Remove group</button> }
+        @if (removable()) { <button matButton class="sm danger" type="button" (click)="remove.emit()" aria-label="Remove group">Remove group</button> }
       </div>
 
       @for (ch of group().children; track ch.id; let i = $index; let first = $first) {
@@ -49,47 +51,50 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
           <oci-condition-group [group]="ch" [catalog]="catalog()" [depth]="depth() + 1" [removable]="true" [errors]="errors()" [path]="childPath(i)" (changed)="changed.emit()" (remove)="removeAt(i)" />
         } @else {
           <div class="cond" [class.invalid]="hasError(childPath(i))">
-            <label class="f">Field
-              <select [ngModel]="ch.field" (ngModelChange)="setField(ch, $event)">
-                @for (f of catalog(); track f.path) { <option [value]="f.path" [title]="f.description">{{ f.path }} ({{ f.type }}){{ note(f.available) }}</option> }
-              </select>
-            </label>
-            <label class="o">Operator
-              <select [ngModel]="ch.op" (ngModelChange)="setOp(ch, $event)">
-                @for (op of ops(ch); track op) { <option [value]="op">{{ opLabel[op] }}</option> }
-              </select>
-            </label>
+            <mat-form-field class="f">
+              <mat-label>Field</mat-label>
+              <mat-select [value]="ch.field" (valueChange)="setField(ch, $event)" panelWidth="auto" [ociInvalid]="hasError(childPath(i))">
+                @for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span> <span class="muted small">{{ f.type }}{{ note(f.available) }}</span></mat-option> }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field class="o">
+              <mat-label>Operator</mat-label>
+              <mat-select [value]="ch.op" (valueChange)="setOp(ch, $event)">
+                @for (op of ops(ch); track op) { <mat-option [value]="op">{{ opLabel[op] }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
             <div class="v">
               @switch (inputKind(ch)) {
-                @case ('none') { <span class="small muted">no value needed</span> }
+                @case ('none') { <span class="small muted none">no value needed</span> }
                 @case ('bool') {
-                  <label>Value<select [ngModel]="ch.value" (ngModelChange)="set(ch, $event)"><option [ngValue]="true">true</option><option [ngValue]="false">false</option></select></label>
+                  <mat-form-field><mat-label>Value</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)"><mat-option [value]="true">true</mat-option><mat-option [value]="false">false</mat-option></mat-select></mat-form-field>
                 }
                 @case ('enum') {
-                  <label>Value<select [ngModel]="ch.value" (ngModelChange)="set(ch, $event)">@for (o of def(ch)?.options ?? []; track o) { <option [value]="o">{{ o }}</option> }</select></label>
+                  <mat-form-field><mat-label>Value</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of def(ch)?.options ?? []; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
                 }
                 @case ('label') {
-                  <label>Category<select [ngModel]="ch.value" (ngModelChange)="set(ch, $event)">@for (o of labelCats; track o) { <option [value]="o">{{ o }}</option> }</select></label>
+                  <mat-form-field><mat-label>Category</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of labelCats; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
                 }
                 @case ('list') {
-                  <label>Values (comma separated)<input [ngModel]="listText(ch)" (ngModelChange)="setList(ch, $event)" [placeholder]="def(ch)?.options?.join(', ') ?? 'a, b, c'" /></label>
+                  <mat-form-field><mat-label>Values (comma separated)</mat-label><input matInput [ngModel]="listText(ch)" (ngModelChange)="setList(ch, $event)" [placeholder]="def(ch)?.options?.join(', ') ?? 'a, b, c'" /></mat-form-field>
                 }
                 @case ('range') {
-                  <div class="row nowrap">
-                    <label>Min<input [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 0)" (ngModelChange)="setRange(ch, 0, $event)" /></label>
-                    <label>Max<input [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 1)" (ngModelChange)="setRange(ch, 1, $event)" /></label>
+                  <div class="range">
+                    <mat-form-field><mat-label>Min</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 0)" (ngModelChange)="setRange(ch, 0, $event)" /></mat-form-field>
+                    <mat-form-field><mat-label>Max</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 1)" (ngModelChange)="setRange(ch, 1, $event)" /></mat-form-field>
                   </div>
                 }
                 @case ('number') {
-                  <label>Value<input type="number" [ngModel]="ch.value" (ngModelChange)="set(ch, $event === null || $event === '' ? null : +$event)" /></label>
+                  <mat-form-field><mat-label>Value</mat-label><input matInput type="number" [ngModel]="ch.value" (ngModelChange)="set(ch, $event === null || $event === '' ? null : +$event)" /></mat-form-field>
                 }
                 @default {
-                  <label>Value<input [attr.inputmode]="def(ch)?.type === 'amount' ? 'decimal' : null" [ngModel]="ch.value" (ngModelChange)="set(ch, $event)"
-                    [placeholder]="def(ch)?.type === 'amount' ? 'exact decimal, e.g. 100000.50' : def(ch)?.type === 'timestamp' ? '2026-01-31T00:00:00Z' : ''" /></label>
+                  <mat-form-field><mat-label>Value</mat-label><input matInput [attr.inputmode]="def(ch)?.type === 'amount' ? 'decimal' : null" [ngModel]="ch.value" (ngModelChange)="set(ch, $event)"
+                    [placeholder]="def(ch)?.type === 'amount' ? 'exact decimal, e.g. 100000.50' : def(ch)?.type === 'timestamp' ? '2026-01-31T00:00:00Z' : ''" /></mat-form-field>
                 }
               }
             </div>
-            <button class="btn btn--sm btn--ghost x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" [attr.aria-label]="'Remove condition ' + (i + 1)">Remove</button>
+            <button matIconButton class="x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" [attr.aria-label]="'Remove condition ' + (i + 1)" matTooltip="Remove condition">
+              <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
             @for (e of errorsFor(childPath(i)); track $index) { <p class="field-error full">{{ e }}</p> }
             @if (def(ch); as d) { <p class="small muted full">{{ d.description }}</p> }
           </div>
@@ -97,22 +102,25 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
       }
       @if (hasOwnError()) { <p class="field-error">{{ ownErrors().join('; ') }}</p> }
       <div class="row add">
-        <button class="btn btn--sm" type="button" (click)="addCondition()">Add condition</button>
-        @if (depth() < maxDepth) { <button class="btn btn--sm" type="button" (click)="addGroup()">Add group</button> }
+        <button matButton="outlined" class="sm" type="button" (click)="addCondition()">Add condition</button>
+        @if (depth() < maxDepth) { <button matButton="outlined" class="sm" type="button" (click)="addGroup()">Add group</button> }
       </div>
     </div>
   `,
   styles: `
-    .group { border: 1px solid var(--line); border-radius: var(--r-well); padding: 12px 14px; display: grid; gap: 10px; background: var(--surface); }
+    .group { border: 1px solid var(--line); border-radius: var(--r-well); padding: 12px 14px; display: grid; gap: 8px; background: var(--surface); }
     .nested { background: var(--surface-2); border-left: 3px solid var(--accent); }
+    .head { gap: 12px; }
     .kw { font: 600 15px var(--font-display); color: var(--ink); min-width: 48px; }
     .joiner { font: 600 13px var(--font-display); color: var(--accent); padding-left: 12px; }
-    .cond { display: grid; grid-template-columns: minmax(160px, 1.3fr) minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto; gap: 8px; align-items: end; padding: 8px 0 10px; border-bottom: 1px solid var(--line-soft); }
+    .cond { display: grid; grid-template-columns: minmax(180px, 1.3fr) minmax(130px, 0.8fr) minmax(160px, 1.4fr) auto; gap: 0 10px; align-items: start; padding: 10px 0 8px; border-bottom: 1px solid var(--line-soft); }
     .cond.invalid { border-bottom-color: var(--risk-critical); }
-    .cond select, .cond input { width: 100%; }
-    .full { grid-column: 1 / -1; margin: 0; }
-    .x { align-self: end; }
-    @media (max-width: 720px) { .cond { grid-template-columns: minmax(0, 1fr); } }
+    .cond mat-form-field { width: 100%; }
+    .range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .none { display: block; padding-top: 14px; }
+    .full { grid-column: 1 / -1; margin: 2px 0 0; }
+    .x { margin-top: 4px; }
+    @media (max-width: 720px) { .cond { grid-template-columns: minmax(0, 1fr) auto; } .cond .o, .cond .v { grid-column: 1; } .x { grid-row: 1; grid-column: 2; } }
   `,
 })
 export class ConditionGroupEditor {

@@ -36,8 +36,8 @@
           </dl>
         </div>
         <div class="row actions">
-          <a class="btn btn--primary" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
-          <a class="btn" [routerLink]="['/risk', network(), address()]">Open risk breakdown</a>
+          <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
+          <a matButton="outlined" [routerLink]="['/risk', network(), address()]">Open risk breakdown</a>
         </div>
       </section>
 
@@ -50,85 +50,146 @@
       }
 
       <section class="tabs-wrap" aria-label="Wallet records">
-        <oci-tab-list [tabs]="tabs()" [(selected)]="tab" prefix="w" label="Wallet records" />
+        <mat-tab-group [(selectedIndex)]="tabIndex" aria-label="Wallet records" mat-stretch-tabs="false" mat-align-tabs="start">
+          <mat-tab>
+            <ng-template mat-tab-label>Transactions<span class="count">{{ tabs()[0].count }}</span></ng-template>
+            <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="txs().length > 0" [empty]="!txPage.loading() && txs().length === 0"
+              emptyText="No transaction indexed for this wallet yet." skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
+              <div class="table-wrap"><table mat-table [dataSource]="txs()" [trackBy]="byHash">
+                <ng-container matColumnDef="hash">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Hash</th>
+                  <td mat-cell *matCellDef="let t" class="nowrap"><a class="mono nowrap" [routerLink]="['/explorer']" [queryParams]="{ q: t.hash, network: t.network }" [matTooltip]="t.hash">{{ short(t.hash) }}</a></td>
+                </ng-container>
+                <ng-container matColumnDef="when">
+                  <th mat-header-cell *matHeaderCellDef scope="col">When</th>
+                  <td mat-cell *matCellDef="let t" class="nowrap small muted">{{ ago(t.timestamp) }}</td>
+                </ng-container>
+                <ng-container matColumnDef="dir">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Direction</th>
+                  <td mat-cell *matCellDef="let t"><span class="dir" [class.out]="t.from === address()">{{ t.from === address() ? 'Out' : 'In' }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="cp">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Counterparty</th>
+                  <td mat-cell *matCellDef="let t">@let other = t.from === address() ? t.to : t.from; @if (other) { <oci-addr [address]="other" [network]="t.network" /> }</td>
+                </ng-container>
+                <ng-container matColumnDef="value">
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Value</th>
+                  <td mat-cell *matCellDef="let t" class="right nowrap">{{ units(t.value, t.nativeDecimals ?? 18, 4) }} <span class="muted">{{ t.nativeSymbol }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="status">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Status</th>
+                  <td mat-cell *matCellDef="let t">@if (t.success) { Confirmed } @else { <span class="warn">Failed</span> }</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="txCols"></tr>
+                <tr mat-row *matRowDef="let t; columns: txCols"></tr>
+              </table></div>
+              <!-- Cursor paging: the server returns no total, so "load more" instead of a paginator with an invented length. -->
+              @if (nextCursor()) { <div class="more"><button matButton="outlined" type="button" (click)="loadMore()" [disabled]="txPage.loading()">{{ txPage.loading() ? 'Loading' : 'Load more transactions' }}</button></div> }
+            </oci-state>
+          </mat-tab>
 
-        <div role="tabpanel" id="panel-w-tx" aria-labelledby="tab-w-tx" [hidden]="tab() !== 'tx'" tabindex="0">
-          <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="txs().length > 0" [empty]="!txPage.loading() && txs().length === 0"
-            emptyText="No transaction indexed for this wallet yet." skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
-            <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Hash</th><th scope="col">When</th><th scope="col">Direction</th><th scope="col">Counterparty</th><th scope="col" class="right">Value</th><th scope="col">Status</th></tr></thead>
-              <tbody>@for (t of txs(); track t.hash) {
-                <tr>
-                  <td><a class="mono" [routerLink]="['/explorer']" [queryParams]="{ q: t.hash, network: t.network }" [attr.title]="t.hash">{{ short(t.hash) }}</a></td>
-                  <td class="nowrap small muted">{{ ago(t.timestamp) }}</td>
-                  <td><span class="dir" [class.out]="t.from === address()">{{ t.from === address() ? 'Out' : 'In' }}</span></td>
-                  <td>@let other = t.from === address() ? t.to : t.from; @if (other) { <oci-addr [address]="other" [network]="t.network" /> }</td>
-                  <td class="right nowrap">{{ units(t.value, t.nativeDecimals ?? 18, 4) }} <span class="muted">{{ t.nativeSymbol }}</span></td>
-                  <td>@if (t.success) { Confirmed } @else { <span class="warn">Failed</span> }</td>
-                </tr>
-              }</tbody>
+          <mat-tab>
+            <ng-template mat-tab-label>Counterparties<span class="count">{{ tabs()[1].count }}</span></ng-template>
+            <mat-form-field class="filter">
+              <mat-label>Filter</mat-label>
+              <input matInput type="search" [value]="cp.filter()" (input)="cp.filter.set($any($event.target).value)" placeholder="Address, label or token" />
+            </mat-form-field>
+            <div class="table-wrap"><table mat-table [dataSource]="cp.view()" [trackBy]="byCp" matSort matSortActive="txCount" matSortDirection="desc" matSortDisableClear (matSortChange)="cp.onSort($event)">
+              <ng-container matColumnDef="address">
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="address" sortActionDescription="Sort by address">Address</th>
+                <td mat-cell *matCellDef="let c"><oci-addr [address]="c.address" [network]="network()" />@if (c.label) { <div class="sub">{{ c.label }}</div> }</td>
+              </ng-container>
+              <ng-container matColumnDef="direction">
+                <th mat-header-cell *matHeaderCellDef scope="col">Direction</th>
+                <td mat-cell *matCellDef="let c">{{ sentence(c.direction) }}</td>
+              </ng-container>
+              <ng-container matColumnDef="txCount">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="txCount" arrowPosition="before" sortActionDescription="Sort by transactions">Transactions</th>
+                <td mat-cell *matCellDef="let c" class="right">{{ c.txCount }}</td>
+              </ng-container>
+              <ng-container matColumnDef="in">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="in" arrowPosition="before" sortActionDescription="Sort by amount in">In</th>
+                <td mat-cell *matCellDef="let c" class="right nowrap">{{ units(c.rawIn, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
+              </ng-container>
+              <ng-container matColumnDef="out">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="out" arrowPosition="before" sortActionDescription="Sort by amount out">Out</th>
+                <td mat-cell *matCellDef="let c" class="right nowrap">{{ units(c.rawOut, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
+              </ng-container>
+              <ng-container matColumnDef="risk">
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="risk" sortActionDescription="Sort by risk">Risk</th>
+                <td mat-cell *matCellDef="let c"><oci-risk [value]="c.riskLevel" /></td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="cpCols"></tr>
+              <tr mat-row *matRowDef="let c; columns: cpCols"></tr>
+              <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell muted" [attr.colspan]="cpCols.length">No counterparty matches the filter. Clear it to see all.</td></tr>
             </table></div>
-            @if (nextCursor()) { <div class="more"><button class="btn" type="button" (click)="loadMore()" [disabled]="txPage.loading()">{{ txPage.loading() ? 'Loading' : 'Load more transactions' }}</button></div> }
-          </oci-state>
-        </div>
+          </mat-tab>
 
-        <div role="tabpanel" id="panel-w-cp" aria-labelledby="tab-w-cp" [hidden]="tab() !== 'cp'" tabindex="0">
-          <div class="filter"><label>Filter<input type="search" [ngModel]="cp.filter()" (ngModelChange)="cp.filter.set($event)" placeholder="Address, label or token" /></label></div>
-          <div class="table-wrap"><table>
-            <thead><tr>
-              <th scope="col" [attr.aria-sort]="cp.aria('address')"><button type="button" (click)="cp.sort('address')">Address {{ cp.icon('address') }}</button></th>
-              <th scope="col">Direction</th>
-              <th scope="col" class="right" [attr.aria-sort]="cp.aria('txCount')"><button type="button" (click)="cp.sort('txCount')">Transactions {{ cp.icon('txCount') }}</button></th>
-              <th scope="col" class="right" [attr.aria-sort]="cp.aria('in')"><button type="button" (click)="cp.sort('in')">In {{ cp.icon('in') }}</button></th>
-              <th scope="col" class="right" [attr.aria-sort]="cp.aria('out')"><button type="button" (click)="cp.sort('out')">Out {{ cp.icon('out') }}</button></th>
-              <th scope="col" [attr.aria-sort]="cp.aria('risk')"><button type="button" (click)="cp.sort('risk')">Risk {{ cp.icon('risk') }}</button></th>
-            </tr></thead>
-            <tbody>
-              @for (c of cp.view(); track c.address + c.token.symbol) {
-                <tr>
-                  <td><oci-addr [address]="c.address" [network]="network()" />@if (c.label) { <div class="sub">{{ c.label }}</div> }</td>
-                  <td>{{ sentence(c.direction) }}</td><td class="right">{{ c.txCount }}</td>
-                  <td class="right nowrap">{{ units(c.rawIn, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
-                  <td class="right nowrap">{{ units(c.rawOut, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
-                  <td><oci-risk [value]="c.riskLevel" /></td>
-                </tr>
-              } @empty { <tr><td colspan="6" class="muted">No counterparty matches the filter. Clear it to see all.</td></tr> }
-            </tbody>
-          </table></div>
-        </div>
+          <mat-tab>
+            <ng-template mat-tab-label>Exposure@if (tabs()[2].count !== undefined) { <span class="count">{{ tabs()[2].count }}</span> }</ng-template>
+            <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="expRows().length === 0" emptyText="No exposure to labelled categories was found." skeleton="table" (retry)="exp.reload()">
+              <p class="small muted">Share of volume connected to labelled categories. Indirect exposure (2 hops or more) is weaker evidence than direct exposure.</p>
+              <div class="table-wrap"><table mat-table [dataSource]="expRows()">
+                <ng-container matColumnDef="category">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Category</th>
+                  <td mat-cell *matCellDef="let x" class="strong">{{ x.category }}</td>
+                </ng-container>
+                <ng-container matColumnDef="hops">
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Hops</th>
+                  <td mat-cell *matCellDef="let x" class="right">{{ x.hops }}</td>
+                </ng-container>
+                <ng-container matColumnDef="share">
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Share of volume</th>
+                  <td mat-cell *matCellDef="let x" class="right nowrap"><span class="share" aria-hidden="true"><span [style.width.%]="x.share * 100"></span></span> {{ pct(x.share) }}%</td>
+                </ng-container>
+                <ng-container matColumnDef="via">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Via</th>
+                  <td mat-cell *matCellDef="let x"><oci-addr [address]="x.counterparty" [network]="network()" /></td>
+                </ng-container>
+                <ng-container matColumnDef="evidence">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                  <td mat-cell *matCellDef="let x"><oci-evidence [value]="x.evidenceLevel" /></td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="expCols"></tr>
+                <tr mat-row *matRowDef="let x; columns: expCols"></tr>
+              </table></div>
+            </oci-state>
+          </mat-tab>
 
-        <div role="tabpanel" id="panel-w-exp" aria-labelledby="tab-w-exp" [hidden]="tab() !== 'exp'" tabindex="0">
-          <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="expRows().length === 0" emptyText="No exposure to labelled categories was found." skeleton="table" (retry)="exp.reload()">
-            <p class="small muted">Share of volume connected to labelled categories. Indirect exposure (2 hops or more) is weaker evidence than direct exposure.</p>
-            <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Category</th><th scope="col" class="right">Hops</th><th scope="col" class="right">Share of volume</th><th scope="col">Via</th><th scope="col">Evidence</th></tr></thead>
-              <tbody>@for (x of expRows(); track $index) {
-                <tr><td class="strong">{{ x.category }}</td><td class="right">{{ x.hops }}</td>
-                  <td class="right nowrap"><span class="share" aria-hidden="true"><span [style.width.%]="x.share * 100"></span></span> {{ pct(x.share) }}%</td>
-                  <td><oci-addr [address]="x.counterparty" [network]="network()" /></td><td><oci-evidence [value]="x.evidenceLevel" /></td></tr>
-              }</tbody>
-            </table></div>
-          </oci-state>
-        </div>
+          <mat-tab>
+            <ng-template mat-tab-label>Signals<span class="count">{{ tabs()[3].count }}</span></ng-template>
+            @if (a.signals.length) {
+              <div class="table-wrap"><table mat-table [dataSource]="a.signals">
+                <ng-container matColumnDef="signal">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
+                  <td mat-cell *matCellDef="let s"><span class="strong">{{ sentence(s.type) }}</span><div class="sub">{{ s.evidence[0]?.description }} <span class="mono">{{ s.detectorId }}</span></div></td>
+                </ng-container>
+                <ng-container matColumnDef="severity">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Severity</th>
+                  <td mat-cell *matCellDef="let s"><oci-severity [value]="s.severity" /></td>
+                </ng-container>
+                <ng-container matColumnDef="evidence">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                  <td mat-cell *matCellDef="let s"><oci-evidence [value]="s.evidenceLevel" /></td>
+                </ng-container>
+                <ng-container matColumnDef="detected">
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Detected</th>
+                  <td mat-cell *matCellDef="let s" class="right small nowrap muted">{{ ago(s.detectedAt) }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="sigCols"></tr>
+                <tr mat-row *matRowDef="let s; columns: sigCols"></tr>
+              </table></div>
+            } @else { <p class="muted">No signal on this wallet.</p> }
+          </mat-tab>
 
-        <div role="tabpanel" id="panel-w-sig" aria-labelledby="tab-w-sig" [hidden]="tab() !== 'sig'" tabindex="0">
-          @if (a.signals.length) {
-            <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Signal</th><th scope="col">Severity</th><th scope="col">Evidence</th><th scope="col" class="right">Detected</th></tr></thead>
-              <tbody>@for (s of a.signals; track s.id) {
-                <tr><td><span class="strong">{{ sentence(s.type) }}</span><div class="sub">{{ s.evidence[0]?.description }} <span class="mono">{{ s.detectorId }}</span></div></td>
-                  <td><oci-severity [value]="s.severity" /></td><td><oci-evidence [value]="s.evidenceLevel" /></td>
-                  <td class="right small nowrap muted">{{ ago(s.detectedAt) }}</td></tr>
-              }</tbody>
-            </table></div>
-          } @else { <p class="muted">No signal on this wallet.</p> }
-        </div>
-
-        <div role="tabpanel" id="panel-w-prof" aria-labelledby="tab-w-prof" [hidden]="tab() !== 'prof'" tabindex="0">
-          @defer (on idle) {
-            <oci-wallet-profile [a]="a" />
-          } @placeholder { <div class="skel ph" aria-hidden="true"></div> }
-        </div>
+          <mat-tab label="Balances and activity">
+            <ng-template matTabContent>
+              @defer (on idle) {
+                <oci-wallet-profile [a]="a" />
+              } @placeholder { <div class="skel ph" aria-hidden="true"></div> }
+            </ng-template>
+          </mat-tab>
+        </mat-tab-group>
       </section>
     }
   </oci-state>

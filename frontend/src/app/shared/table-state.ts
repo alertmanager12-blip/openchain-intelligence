@@ -1,8 +1,9 @@
 import { Signal, computed, signal } from '@angular/core';
+import { Sort } from '@angular/material/sort';
 
 export type SortDir = 'asc' | 'desc';
 
-/** Client-side filter + sort over a signal of rows. Accessors keep sorting type-aware (raw amounts as BigInt). */
+/** Client-side filter + sort over a signal of rows, driven by a matSort header (onSort). Accessors keep sorting type-aware (raw amounts as BigInt). */
 export class TableState<T> {
   readonly sortKey = signal<string | null>(null);
   readonly sortDir = signal<SortDir>('asc');
@@ -39,19 +40,9 @@ export class TableState<T> {
     return out;
   });
 
-  sort(key: string): void {
-    if (this.sortKey() === key) this.sortDir.update((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else {
-      this.sortKey.set(key);
-      this.sortDir.set('desc');
-    }
-  }
-
-  aria(key: string): 'ascending' | 'descending' | 'none' {
-    return this.sortKey() !== key ? 'none' : this.sortDir() === 'asc' ? 'ascending' : 'descending';
-  }
-
-  icon(key: string): string {
-    return this.sortKey() !== key ? '' : this.sortDir() === 'asc' ? '↑' : '↓';
+  /** From a matSort (matSortChange); a cleared sort falls back to no ordering. */
+  onSort(e: Sort): void {
+    this.sortKey.set(e.direction ? e.active : null);
+    this.sortDir.set(e.direction || 'asc');
   }
 }

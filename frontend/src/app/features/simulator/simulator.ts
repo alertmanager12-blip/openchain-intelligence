@@ -1,12 +1,13 @@
 import { KeyValuePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { MatProgressBar } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { Rule, RuleTestRequest } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { shortHash, timeAgo } from '../../shared/format';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { NetworkChip, StateComponent } from '../../shared/ui';
 
@@ -23,7 +24,7 @@ function readDraft(): string | null {
 
 @Component({
   selector: 'oci-simulator',
-  imports: [FormsModule, RouterLink, KeyValuePipe, PageHeader, NetworkChip, StateComponent],
+  imports: [RouterLink, KeyValuePipe, PageHeader, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, NetworkChip, StateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
@@ -31,14 +32,21 @@ function readDraft(): string | null {
 
       <section class="panel-raised run" aria-labelledby="h-run">
         <h2 id="h-run" class="sr-only">Dry run</h2>
-        <form class="row form" (submit)="$event.preventDefault(); run()">
-          <label class="grow">Rule<select name="rule" [ngModel]="ruleId()" (ngModelChange)="ruleId.set($event)">
-            @if (draftYaml) { <option [value]="draftKey">Unsaved draft from the builder</option> }
-            @for (r of rules(); track r.id) { <option [value]="r.id">{{ r.name }} ({{ r.enabled ? 'enabled' : 'disabled' }})</option> }
-          </select></label>
-          <label>Period<select name="p" [ngModel]="days()" (ngModelChange)="days.set(+$event)">@for (p of periods; track p.v) { <option [value]="p.v">{{ p.l }}</option> }</select></label>
-          <button class="btn btn--primary" type="submit" [disabled]="!ruleId() || res.loading()">{{ res.loading() ? 'Running…' : 'Run dry run' }}</button>
+        <form class="fields" (submit)="$event.preventDefault(); run()">
+          <mat-form-field class="grow">
+            <mat-label>Rule</mat-label>
+            <mat-select [value]="ruleId()" (valueChange)="ruleId.set($event)">
+              @if (draftYaml) { <mat-option [value]="draftKey">Unsaved draft from the builder</mat-option> }
+              @for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ r.name }} <span class="muted">({{ r.enabled ? 'enabled' : 'disabled' }})</span></mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>Period</mat-label>
+            <mat-select [value]="days()" (valueChange)="days.set($event)">@for (p of periods; track p.v) { <mat-option [value]="p.v">{{ p.l }}</mat-option> }</mat-select>
+          </mat-form-field>
+          <button matButton="filled" type="submit" [disabled]="!ruleId() || res.loading()">{{ res.loading() ? 'Running…' : 'Run dry run' }}</button>
         </form>
+        @if (res.loading()) { <mat-progress-bar mode="indeterminate" aria-label="Replaying events" /> }
 
         @if (res.status() === 'idle') {
           <p class="empty-run">Choose a rule and a period, then run it to see how many events it would have matched and how many alerts it would have raised.</p>
@@ -66,25 +74,40 @@ function readDraft(): string | null {
       @if (res.value(); as r) {
         <section class="section" aria-labelledby="h-m">
           <div class="section-head"><h2 id="h-m">Matched events</h2><p>A sample of the events the rule matched. Expand a row to see the fields it was evaluated on.</p></div>
-          <div class="table-wrap"><table>
-            <thead><tr><th scope="col"><span class="sr-only">Details</span></th><th scope="col">Event</th><th scope="col">Network</th><th scope="col">When</th><th scope="col">Summary</th></tr></thead>
-            <tbody>
-              @for (m of r.matches; track m.eventId) {
-                <tr>
-                  <td class="x"><button type="button" class="expander" [attr.aria-expanded]="open().has(m.eventId)" [attr.aria-controls]="'ev-' + $index" (click)="toggle(m.eventId)" [attr.aria-label]="'Fields of event ' + m.eventId">
-                    <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
-                  <td class="mono small nowrap" [attr.title]="m.eventId">{{ short(m.eventId) }}</td>
-                  <td><oci-net [value]="m.network" /></td>
-                  <td class="small nowrap">{{ ago(m.eventTime) }}</td>
-                  <td>{{ m.summary }}</td>
-                </tr>
+          <div class="table-wrap"><table mat-table [dataSource]="r.matches" multiTemplateDataRows [trackBy]="byEvent">
+            <ng-container matColumnDef="x">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
+              <td mat-cell *matCellDef="let m; let i = dataIndex" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open().has(m.eventId)" [attr.aria-controls]="'ev-' + i"
+                (click)="toggle(m.eventId)" [attr.aria-label]="'Fields of event ' + m.eventId">
+                <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
+            </ng-container>
+            <ng-container matColumnDef="event">
+              <th mat-header-cell *matHeaderCellDef scope="col">Event</th>
+              <td mat-cell *matCellDef="let m" class="mono small nowrap" [matTooltip]="m.eventId">{{ short(m.eventId) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="network">
+              <th mat-header-cell *matHeaderCellDef scope="col">Network</th>
+              <td mat-cell *matCellDef="let m"><oci-net [value]="m.network" /></td>
+            </ng-container>
+            <ng-container matColumnDef="when">
+              <th mat-header-cell *matHeaderCellDef scope="col">When</th>
+              <td mat-cell *matCellDef="let m" class="small nowrap">{{ ago(m.eventTime) }}</td>
+            </ng-container>
+            <ng-container matColumnDef="summary">
+              <th mat-header-cell *matHeaderCellDef scope="col">Summary</th>
+              <td mat-cell *matCellDef="let m">{{ m.summary }}</td>
+            </ng-container>
+            <ng-container matColumnDef="detail">
+              <td mat-cell *matCellDef="let m; let i = dataIndex" [attr.colspan]="cols.length" [id]="'ev-' + i">
                 @if (open().has(m.eventId)) {
-                  <tr class="detail-row" [id]="'ev-' + $index"><td colspan="5">
-                    <dl class="kv fields">@for (f of m.fields | keyvalue; track f.key) { <dt class="mono">{{ f.key }}</dt><dd [class.mono]="isHex(f.value)">{{ text(f.value) }}</dd> }</dl>
-                  </td></tr>
+                  <dl class="kv fields">@for (f of m.fields | keyvalue; track f.key) { <dt class="mono">{{ f.key }}</dt><dd [class.mono]="isHex(f.value)">{{ text(f.value) }}</dd> }</dl>
                 }
-              } @empty { <tr><td colspan="5"><div class="empty"><strong>No event matched in this period.</strong><span>Try a longer period or loosen a condition.</span></div></td></tr> }
-            </tbody>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="cols"></tr>
+            <tr mat-row *matRowDef="let m; columns: cols"></tr>
+            <tr mat-row *matRowDef="let m; columns: ['detail']" class="detail-row" [class.open]="open().has(m.eventId)"></tr>
+            <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell" [attr.colspan]="cols.length"><div class="empty"><strong>No event matched in this period.</strong><span>Try a longer period or loosen a condition.</span></div></td></tr>
           </table></div>
         </section>
       }
@@ -92,10 +115,10 @@ function readDraft(): string | null {
   `,
   styles: `
     .run { display: grid; gap: 16px; }
-    .form { align-items: flex-end; gap: 12px; }
+    mat-progress-bar { margin-top: -8px; }
     .empty-run { margin: 0; color: var(--ink-2); padding: 14px 16px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--shadow-inset); }
-    .fields { padding-left: 32px; font-size: 13px; }
-    @media (max-width: 720px) { .fields { padding-left: 0; } }
+    dl.fields { padding-left: 40px; font-size: 13px; }
+    @media (max-width: 720px) { dl.fields { padding-left: 0; } }
   `,
 })
 export class SimulatorPage {
@@ -125,6 +148,8 @@ export class SimulatorPage {
   private nonce = 0;
 
   readonly open = signal(new Set<string>());
+  readonly cols = ['x', 'event', 'network', 'when', 'summary'];
+  readonly byEvent = (_: number, m: { eventId: string }) => m.eventId;
   readonly ago = timeAgo;
   readonly n = (v: number) => v.toLocaleString('en-US');
   readonly short = (id: string) => shortHash(id, 22, 6);

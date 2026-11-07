@@ -3,5 +3,6 @@
 .unavailable { margin-top: -6px; }
 .hint { margin: 0; }
 .target { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.types button { padding: 4px 10px; }
+.types { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; }
+.types ::ng-deep .mat-button-toggle-label-content { padding: 0 4px; }
 .card-head .status-line { flex-basis: 100%; }

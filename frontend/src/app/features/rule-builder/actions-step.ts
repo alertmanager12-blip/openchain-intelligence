@@ -1,46 +1,59 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButton } from '@angular/material/button';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { RuleValidationError } from '../../core/models';
 import { ACTION_TYPES, ActionType, RuleDraft } from '../../core/rules/rule-model';
+import { MAT_FORM } from '../../shared/material';
 import { sentence } from '../../shared/ui';
 
 /** Step 4: what happens on a match (alert, connectors), cooldown and the enabled flag. */
 @Component({
   selector: 'oci-actions-step',
-  imports: [FormsModule],
+  imports: [FormsModule, MatButton, MatSlideToggle, ...MAT_FORM],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <ul class="acts">
       @for (a of draft().actions; track $index; let i = $index) {
         <li>
-          <label>Action<select [ngModel]="a.type" (ngModelChange)="setAction(i, { type: $event })" [name]="'at' + i">@for (t of actionTypes; track t) { <option [value]="t">{{ actionLabel(t) }}</option> }</select></label>
+          <mat-form-field class="type">
+            <mat-label>Action</mat-label>
+            <mat-select [value]="a.type" (valueChange)="setAction(i, { type: $event })">@for (t of actionTypes; track t) { <mat-option [value]="t">{{ actionLabel(t) }}</mat-option> }</mat-select>
+          </mat-form-field>
           @if (a.type !== 'alert') {
-            <label class="grow">Connector id<input class="mono" [name]="'tg' + i" [ngModel]="a.target" (ngModelChange)="setAction(i, { target: $event })" placeholder="wh-ops" [attr.aria-invalid]="err('actions[' + i + '].target') ? true : null" /></label>
+            <mat-form-field class="grow">
+              <mat-label>Connector id</mat-label>
+              <input matInput class="mono" [name]="'tg' + i" [ngModel]="a.target" (ngModelChange)="setAction(i, { target: $event })" placeholder="wh-ops" [ociInvalid]="!!err('actions[' + i + '].target')" />
+              @if (err('actions[' + i + '].target'); as m) { <mat-error>{{ m }}</mat-error> }
+            </mat-form-field>
           } @else { <p class="grow hint">Creates an alert in the Alerts list.</p> }
-          <button class="btn btn--sm btn--ghost" type="button" (click)="remove(i)" [attr.aria-label]="'Remove action ' + (i + 1)">Remove</button>
-          @if (err('actions[' + i + '].target'); as m) { <span class="field-error full">{{ m }}</span> }
+          <button matButton class="sm danger" type="button" (click)="remove(i)" [attr.aria-label]="'Remove action ' + (i + 1)">Remove</button>
         </li>
       }
     </ul>
     @if (err('actions'); as m) { <span class="field-error">{{ m }}</span> }
-    <div><button class="btn btn--sm" type="button" (click)="add()">Add action</button></div>
+    <div><button matButton="outlined" class="sm" type="button" (click)="add()">Add action</button></div>
     <div class="grid two">
-      <label>Cooldown<input name="cd" [ngModel]="draft().cooldown" (ngModelChange)="patch.emit({ cooldown: $event })" placeholder="15m" [attr.aria-invalid]="err('cooldown') ? true : null" />
-        @if (err('cooldown'); as m) { <span class="field-error">{{ m }}</span> } @else { <span class="hint">Suppresses repeated alerts for the same rule and subject during this period.</span> }</label>
+      <mat-form-field>
+        <mat-label>Cooldown</mat-label>
+        <input matInput name="cd" [ngModel]="draft().cooldown" (ngModelChange)="patch.emit({ cooldown: $event })" placeholder="15m" [ociInvalid]="!!err('cooldown')" />
+        @if (err('cooldown'); as m) { <mat-error>{{ m }}</mat-error> } @else { <mat-hint>Suppresses repeated alerts for the same rule and subject during this period.</mat-hint> }
+      </mat-form-field>
       <div class="en">
-        <button type="button" class="switch" role="switch" [attr.aria-checked]="draft().enabled" (click)="patch.emit({ enabled: !draft().enabled })" aria-labelledby="en-l"></button>
-        <span id="en-l">{{ draft().enabled ? 'Enabled when saved' : 'Saved disabled' }}</span>
+        <mat-slide-toggle hideIcon [checked]="draft().enabled" (change)="patch.emit({ enabled: !draft().enabled })">{{ draft().enabled ? 'Enabled when saved' : 'Saved disabled' }}</mat-slide-toggle>
       </div>
     </div>
   `,
   styles: `
     :host { display: grid; gap: 16px; }
     .acts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-    .acts li { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; padding-bottom: 10px; border-bottom: 1px solid var(--line-soft); }
-    .acts .hint { margin: 0 0 8px; }
-    .full { flex-basis: 100%; }
-    .two { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 24px; align-items: end; }
-    .en { display: flex; gap: 10px; align-items: center; min-height: 36px; }
+    .acts li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: flex-start; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+    .acts .type { flex: 0 1 220px; }
+    .acts .grow { flex: 1 1 220px; }
+    .acts p.grow { margin: 14px 0 0; }
+    .acts button { margin-top: 6px; }
+    .two { grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .en { display: flex; gap: 10px; align-items: center; min-height: 44px; }
     @media (max-width: 640px) { .two { grid-template-columns: minmax(0, 1fr); } }
   `,
 })

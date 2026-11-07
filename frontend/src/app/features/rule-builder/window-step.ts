@@ -1,29 +1,50 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { FieldDef, RuleValidationError } from '../../core/models';
 import { AGGREGATES, RuleDraft, WindowSpec } from '../../core/rules/rule-model';
+import { MAT_FORM } from '../../shared/material';
 
 /** Step 3: optional time-window aggregation ("sum of amount per sender over 1h > 1,000,000"). */
 @Component({
   selector: 'oci-window-step',
-  imports: [FormsModule],
+  imports: [FormsModule, MatSlideToggle, ...MAT_FORM],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="toggle">
-      <button type="button" class="switch" role="switch" [attr.aria-checked]="!!draft().window" (click)="toggle()" aria-labelledby="win-l"></button>
-      <div><span id="win-l" class="strong">Aggregate over a time window</span>
-        <p class="hint">Fires when the aggregate of matching events over the window crosses the threshold. Leave it off to alert on every single matching event.</p></div>
+      <mat-slide-toggle hideIcon [checked]="!!draft().window" (change)="toggle()" aria-describedby="win-h">Aggregate over a time window</mat-slide-toggle>
+      <p class="hint" id="win-h">Fires when the aggregate of matching events over the window crosses the threshold. Leave it off to alert on every single matching event.</p>
     </div>
     @if (draft().window; as w) {
       <div class="grid win">
-        <label>Aggregate<select name="agg" [ngModel]="w.aggregate" (ngModelChange)="set({ aggregate: $event })">@for (a of aggregates; track a) { <option [value]="a">{{ aggLabel(a) }}</option> }</select></label>
+        <mat-form-field>
+          <mat-label>Aggregate</mat-label>
+          <mat-select [value]="w.aggregate" (valueChange)="set({ aggregate: $event })">@for (a of aggregates; track a) { <mat-option [value]="a">{{ aggLabel(a) }}</mat-option> }</mat-select>
+        </mat-form-field>
         @if (w.aggregate !== 'count') {
-          <label>Of field<select name="wf" [ngModel]="w.field" (ngModelChange)="set({ field: $event })">@for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }}</option> }</select></label>
+          <mat-form-field>
+            <mat-label>Of field</mat-label>
+            <mat-select [value]="w.field" (valueChange)="set({ field: $event })">@for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span></mat-option> }</mat-select>
+          </mat-form-field>
         }
-        <label>Per<select name="gb" [ngModel]="w.groupBy[0] ?? ''" (ngModelChange)="set({ groupBy: $event ? [$event, ...w.groupBy.slice(1)] : [] })"><option value="">Whole rule</option>@for (f of catalog(); track f.path) { <option [value]="f.path">{{ f.path }}</option> }</select></label>
-        <label>Over<input name="wd" [ngModel]="w.duration" (ngModelChange)="set({ duration: $event })" placeholder="1h" [attr.aria-invalid]="err('window.duration') ? true : null" /></label>
-        <label>Is<select name="wo" [ngModel]="w.op" (ngModelChange)="set({ op: $event })"><option value="gt">greater than</option><option value="gte">at least</option></select></label>
-        <label>Threshold<input name="wv" inputmode="decimal" [ngModel]="w.value" (ngModelChange)="set({ value: $event })" [attr.aria-invalid]="err('window.value') ? true : null" /></label>
+        <mat-form-field>
+          <mat-label>Per</mat-label>
+          <mat-select [value]="w.groupBy[0] ?? ''" (valueChange)="set({ groupBy: $event ? [$event, ...w.groupBy.slice(1)] : [] })">
+            <mat-option value="">Whole rule</mat-option>@for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span></mat-option> }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Over</mat-label>
+          <input matInput name="wd" [ngModel]="w.duration" (ngModelChange)="set({ duration: $event })" placeholder="1h" [ociInvalid]="!!err('window.duration')" />
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Is</mat-label>
+          <mat-select [value]="w.op" (valueChange)="set({ op: $event })"><mat-option value="gt">greater than</mat-option><mat-option value="gte">at least</mat-option></mat-select>
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>Threshold</mat-label>
+          <input matInput name="wv" inputmode="decimal" [ngModel]="w.value" (ngModelChange)="set({ value: $event })" [ociInvalid]="!!err('window.value')" />
+        </mat-form-field>
       </div>
       <p class="well sentence">{{ summary(w) }}</p>
       @for (m of errsUnder(); track $index) { <span class="field-error">{{ m }}</span> }
@@ -31,10 +52,9 @@ import { AGGREGATES, RuleDraft, WindowSpec } from '../../core/rules/rule-model';
   `,
   styles: `
     :host { display: grid; gap: 16px; }
-    .toggle { display: flex; gap: 12px; align-items: flex-start; }
-    .toggle .switch { margin-top: 2px; }
-    .toggle p { margin: 2px 0 0; }
-    .win { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+    .toggle { display: grid; gap: 2px; }
+    .toggle p { margin: 0 0 0 60px; }
+    .win { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 4px 16px; }
     .sentence { margin: 0; font-size: 15px; }
   `,
 })

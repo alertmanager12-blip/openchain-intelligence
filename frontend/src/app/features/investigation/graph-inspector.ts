@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { MatButton } from '@angular/material/button';
 import { RouterLink } from '@angular/router';
 import { GraphEdge, GraphNode } from '../../core/models';
 import { formatUnits, shortHash } from '../../shared/format';
@@ -8,7 +9,7 @@ import { UI } from '../../shared/ui';
 /** Details of the selected wallet or transfer, with the actions available on it. */
 @Component({
   selector: 'oci-graph-inspector',
-  imports: [RouterLink, DatePipe, ...UI],
+  imports: [RouterLink, DatePipe, MatButton, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { 'aria-live': 'polite' },
   template: `
@@ -21,9 +22,9 @@ import { UI } from '../../shared/ui';
         <dt>Label</dt><dd>{{ n.label ?? 'None' }}</dd>
       </dl>
       <div class="acts">
-        <button class="btn btn--primary btn--sm" type="button" (click)="expand.emit(n)" [disabled]="expanding()">{{ expanding() ? 'Expanding…' : 'Expand counterparties' }}</button>
-        @if (n.depth > 0) { <button class="btn btn--sm" type="button" (click)="highlight.emit(n)">Highlight path from root</button> }
-        <a class="btn btn--sm" [routerLink]="['/wallets', n.network, n.address]">Open wallet</a>
+        <button matButton="filled" class="sm" type="button" (click)="expand.emit(n)" [disabled]="expanding()">{{ expanding() ? 'Expanding…' : 'Expand counterparties' }}</button>
+        @if (n.depth > 0) { <button matButton="outlined" class="sm" type="button" (click)="highlight.emit(n)">Highlight path from root</button> }
+        <a matButton="outlined" class="sm" [routerLink]="['/wallets', n.network, n.address]">Open wallet</a>
       </div>
       @if (pathInfo()) { <p class="small ink-2" role="status">{{ pathInfo() }}</p> }
       <p class="small muted">A connection to a flagged wallet does not mean shared intent.</p>

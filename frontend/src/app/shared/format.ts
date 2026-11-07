@@ -32,3 +32,16 @@ export function formatAge(seconds: number): string {
   if (seconds < 86400) return `${Math.round(seconds / 3600)} h`;
   return `${Math.round(seconds / 86400)} d`;
 }
+
+/** "FALSE_POSITIVE" -> "False positive": enum values are shown in sentence case. */
+export function sentence(v: string): string {
+  const t = v.replace(/_/g, ' ').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+const NET_LABELS: Record<string, string> = { ethereum: 'Ethereum', tron: 'TRON', bsc: 'BSC', polygon: 'Polygon', bitcoin: 'Bitcoin', solana: 'Solana' };
+
+/** Display name of a network id ("bsc" -> "BSC"), for option lists and select triggers. */
+export function netLabel(n: string): string {
+  return NET_LABELS[n] ?? n;
+}

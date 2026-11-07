@@ -1,4 +1,5 @@
-.sheet { width: min(1120px, calc(100vw - 16px)); padding: 0; gap: 0; grid-template-rows: auto 1fr; align-content: stretch; box-shadow: var(--shadow-overlay), var(--shadow-raised); }
+:host { display: block; height: 100%; overflow-y: auto; background: var(--surface); color: var(--ink); }
+.sheet { display: grid; grid-template-rows: auto 1fr; min-height: 100%; }
 .sheet-head { padding: 16px 24px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 2; border-radius: var(--r-panel) var(--r-panel) 0 0; }
 .sheet-head h2 { font-size: 26px; margin: 12px 0 4px; }
 .sheet-head h2:focus { outline: none; }
@@ -13,6 +14,11 @@
 .side section { display: grid; gap: 8px; }
 @media (max-width: 860px) { .sheet-body { grid-template-columns: minmax(0, 1fr); } .side { border-left: 0; border-top: 1px solid var(--line); } }
 .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.assign { display: flex; gap: 8px; align-items: center; }
+.assign { display: flex; gap: 8px; align-items: flex-start; }
+.assign .grow { flex: 1; }
+.assign button { margin-top: 4px; }
+.side mat-form-field { width: 100%; }
 .comment { border-left: 2px solid var(--line); padding-left: 10px; }
 .comment p { margin: 2px 0 0; }
+.sheet-head .row button { margin: -6px -10px -6px 0; }
+@media (max-width: 600px) { .sheet-head, .why, .side { padding-left: 16px; padding-right: 16px; } }

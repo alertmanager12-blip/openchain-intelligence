@@ -1,13 +1,13 @@
-.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; max-width: 1080px; }
-.nav { position: sticky; top: 80px; }
-@media (max-width: 800px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; } .nav { position: static; } }
-.panels { min-width: 0; }
-[role='tabpanel'] { padding-top: 20px; }
-.card--flush[role='tabpanel'] { padding-top: 0; }
-.switch-row { display: flex; gap: 12px; align-items: flex-start; }
-.switch-row .hint { display: block; }
+.sections { max-width: 1080px; }
+.switch-row { display: grid; gap: 2px; }
+.switch-row .hint { padding-left: 60px; }
+.auth { width: min(320px, 100%); }
+.token { width: min(520px, 100%); }
+.themes { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; }
+.legend { font-size: 13px; font-weight: 500; color: var(--ink-2); flex-basis: 100%; }
 .key-form { display: grid; gap: 14px; padding: 16px 20px 20px; border-bottom: 1px solid var(--line-soft); }
-.scopes { gap: 8px 18px; }
+.key-form .name { width: min(420px, 100%); }
+.scopes { gap: 0 8px; }
 .secret { display: grid; gap: 8px; margin: 16px 20px; }
 .secret code { word-break: break-all; }
 .pad { padding: 0 20px; }
@@ -17,3 +17,4 @@
 .roles div { display: flex; gap: 4px; }
 .roles dt { font-weight: 600; color: var(--ink); }
 .roles dd { margin: 0; }
+.role { width: 160px; --mat-form-field-container-height: 36px; --mat-form-field-container-vertical-padding: 6px; }

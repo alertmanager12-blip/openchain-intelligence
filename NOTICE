@@ -25,6 +25,8 @@ their own licences, including:
     https://rxjs.dev
   - Angular (MIT)
     https://angular.dev
+  - Angular Material and Angular CDK (MIT)
+    https://material.angular.dev
   - Cytoscape.js (MIT)
     https://js.cytoscape.org
 

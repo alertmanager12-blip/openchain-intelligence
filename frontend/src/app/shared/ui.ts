@@ -1,16 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { MatButton } from '@angular/material/button';
+import { MatTooltip } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { ApiError } from '../core/api-error';
 import { EvidenceLevel, NetworkId, RiskLevel, Severity } from '../core/models';
 import { RiskGauge } from './risk-gauge';
-import { shortHash } from './format';
+import { netLabel, sentence, shortHash } from './format';
 import { Skeleton, SkeletonKind } from './skeleton';
 
-/** "FALSE_POSITIVE" -> "False positive": enum values are shown in sentence case. */
-export function sentence(v: string): string {
-  const t = v.replace(/_/g, ' ').toLowerCase();
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
+/** Re-exported for the pages: sentence() lives in format.ts so the app shell can use it without loading these components. */
+export { sentence };
 
 /**
  * Loading / error / empty wrapper. Content is projected only when there is something to show.
@@ -18,7 +17,7 @@ export function sentence(v: string): string {
  */
 @Component({
   selector: 'oci-state',
-  imports: [Skeleton],
+  imports: [Skeleton, MatButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (error(); as e) {
@@ -26,7 +25,7 @@ export function sentence(v: string): string {
         <strong>{{ e.title }}</strong>
         @if (e.detail) { <p>{{ e.detail }}</p> }
         @for (f of e.fieldErrors; track $index) { <p class="mono small">{{ f.field }}: {{ f.message }}</p> }
-        @if (e.retryable || retryAlways()) { <button class="btn btn--sm" type="button" (click)="retry.emit()">Retry</button> }
+        @if (e.retryable || retryAlways()) { <button matButton="outlined" class="sm" type="button" (click)="retry.emit()">Retry</button> }
       </div>
     } @else if (loading() && !hasData()) {
       <oci-skeleton [kind]="skeleton()" [rows]="skeletonRows()" [columns]="skeletonColumns()" [label]="loadingText()" [style.--cols]="gridCols()" />
@@ -70,8 +69,10 @@ const EVIDENCE_HELP: Record<EvidenceLevel, string> = {
 
 @Component({
   selector: 'oci-evidence',
+  imports: [MatTooltip],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<span class="badge ev-{{ value().toLowerCase() }}" [attr.title]="help()">{{ text() }}</span>`,
+  // Hover shows the explanation; matTooltip also registers it as the badge's aria-describedby text for screen readers.
+  template: `<span class="badge ev-{{ value().toLowerCase() }}" [matTooltip]="help()">{{ text() }}</span>`,
 })
 export class EvidenceBadge {
   readonly value = input.required<EvidenceLevel>();
@@ -93,10 +94,11 @@ export class RiskBadge {
 @Component({
   selector: 'oci-net',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<span class="chip net net-{{ value() }}">{{ value() }}</span>`,
+  template: `<span class="chip net net-{{ value() }}">{{ label() }}</span>`,
 })
 export class NetworkChip {
   readonly value = input.required<NetworkId>();
+  readonly label = computed(() => netLabel(this.value()));
 }
 
 /** Address rendered as a link to its wallet page, shortened with the full value in title. */
@@ -116,8 +118,9 @@ export class AddressLink {
 /** Copies a value to the clipboard and confirms it for a moment (announced politely). */
 @Component({
   selector: 'oci-copy',
+  imports: [MatButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<button class="btn btn--sm btn--ghost" type="button" (click)="copy()" [attr.aria-label]="done() ? 'Copied' : label()">
+  template: `<button matButton class="sm" type="button" (click)="copy()" [attr.aria-label]="done() ? 'Copied' : label()">
       <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
       <span aria-live="polite">{{ done() ? 'Copied' : 'Copy' }}</span></button>`,
 })

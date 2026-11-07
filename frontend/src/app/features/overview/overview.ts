@@ -5,6 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { ALERT_STATUSES, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { shortHash, timeAgo } from '../../shared/format';
+import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { RISK_THRESHOLDS, levelLabel } from '../../shared/risk-gauge';
 import { UI, sentence } from '../../shared/ui';
@@ -15,7 +16,7 @@ const LAG_WARN = 200;
 
 @Component({
   selector: 'oci-overview',
-  imports: [RouterLink, PageHeader, ActivityChart, ...UI],
+  imports: [RouterLink, PageHeader, ActivityChart, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './overview.html',
   styleUrl: './overview.scss',
@@ -47,6 +48,11 @@ export class OverviewPage {
   readonly statuses = ALERT_STATUSES;
   readonly lagWarn = LAG_WARN;
   readonly openNet = signal<string | null>(null);
+  readonly recentCols = ['alert', 'score', 'created'];
+  readonly netCols = ['x', 'network', 'health', 'head', 'lag', 'latency', 'checked'];
+  readonly signalCols = ['signal', 'evidence', 'address', 'detected'];
+  readonly byId = (_: number, r: { id: string }) => r.id;
+  readonly byNetwork = (_: number, r: NetworkStatus) => r.network;
 
   readonly openAlerts = computed(() => this.dash.value()?.totals.openAlerts ?? null);
   readonly openUrgent = computed(() => {

@@ -1,12 +1,18 @@
 <div class="page">
   <oci-page-header heading="Wallet risk" lede="Every score is the sum of explained contributions, each with its source, confidence and age. A score helps you prioritise; it is never a verdict about a person." />
 
-  <form class="card lookup" (submit)="$event.preventDefault(); submit()">
-    <label class="grow">Address<input name="a" class="mono" [ngModel]="addrInput()" (ngModelChange)="addrInput.set($event)" placeholder="Address to score" autocomplete="off" spellcheck="false" /></label>
-    <label>Network<select name="n" [ngModel]="netInput()" (ngModelChange)="netInput.set($event)">
-      @for (n of networks; track n) { <option [ngValue]="n">{{ n }}</option> }
-    </select></label>
-    <button class="btn btn--primary" type="submit" [disabled]="!addrInput().trim()">Score wallet</button>
+  <form class="card lookup fields" (submit)="$event.preventDefault(); submit()">
+    <mat-form-field class="grow">
+      <mat-label>Address</mat-label>
+      <input matInput name="a" class="mono" [value]="addrInput()" (input)="addrInput.set($any($event.target).value)" placeholder="Address to score" autocomplete="off" spellcheck="false" />
+    </mat-form-field>
+    <mat-form-field class="net">
+      <mat-label>Network</mat-label>
+      <mat-select [value]="netInput()" (valueChange)="netInput.set($event)">
+        @for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <button matButton="filled" type="submit" [disabled]="!addrInput().trim()">Score wallet</button>
   </form>
 
   @if (address() && network()) {
@@ -28,43 +34,62 @@
           <div class="row actions">
             <span class="small addr"><oci-addr [address]="r.address" [network]="r.network" [full]="true" /></span>
             <span class="spacer"></span>
-            <a class="btn" [routerLink]="['/wallets', r.network, r.address]">Open wallet</a>
-            <a class="btn" [routerLink]="['/investigation']" [queryParams]="{ address: r.address, network: r.network }">Trace fund flows</a>
+            <a matButton="outlined" [routerLink]="['/wallets', r.network, r.address]">Open wallet</a>
+            <a matButton="outlined" [routerLink]="['/investigation']" [queryParams]="{ address: r.address, network: r.network }">Trace fund flows</a>
           </div>
         </section>
 
         <section class="section" aria-labelledby="h-c">
           <div class="section-head"><h2 id="h-c">Contributions</h2><p>Expand a row for the explanation, the source and the weight.</p></div>
-          <div class="table-wrap"><table>
-            <thead><tr>
-              <th scope="col" class="x"><span class="sr-only">Details</span></th>
-              <th scope="col">Factor</th>
-              <th scope="col" [attr.aria-sort]="t.aria('ev')"><button type="button" (click)="t.sort('ev')">Evidence {{ t.icon('ev') }}</button></th>
-              <th scope="col" class="right" [attr.aria-sort]="t.aria('points')"><button type="button" (click)="t.sort('points')">Points {{ t.icon('points') }}</button></th>
-              <th scope="col" class="right" [attr.aria-sort]="t.aria('confidence')"><button type="button" (click)="t.sort('confidence')">Confidence {{ t.icon('confidence') }}</button></th>
-              <th scope="col" class="right" [attr.aria-sort]="t.aria('age')"><button type="button" (click)="t.sort('age')">Age {{ t.icon('age') }}</button></th>
-            </tr></thead>
-            <tbody>
-              @for (c of t.view(); track c.factor) {
-                <tr>
-                  <td class="x"><button class="expander" type="button" [attr.aria-expanded]="open() === c.factor" [attr.aria-controls]="'rc-' + $index" [attr.aria-label]="'Details of ' + sentence(c.factor)" (click)="toggle(c.factor)">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
-                  <td><span class="strong">{{ sentence(c.factor) }}</span><div class="sub">{{ c.source }}</div></td>
-                  <td><oci-evidence [value]="c.evidenceLevel" /></td>
-                  <td class="right pts" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
-                  <td class="right nowrap"><span class="conf" aria-hidden="true"><span [style.width.%]="c.confidence * 100"></span></span> {{ (c.confidence * 100).toFixed(0) }}%</td>
-                  <td class="right nowrap">{{ age(c.ageSeconds) }}</td>
-                </tr>
+          <div class="table-wrap"><table mat-table [dataSource]="t.view()" multiTemplateDataRows [trackBy]="byFactor" matSort matSortActive="points" matSortDirection="desc" matSortDisableClear (matSortChange)="t.onSort($event)">
+            <ng-container matColumnDef="x">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
+              <td mat-cell *matCellDef="let c; let i = dataIndex" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open() === c.factor" [attr.aria-controls]="'rc-' + i"
+                [attr.aria-label]="'Details of ' + sentence(c.factor)" (click)="toggle(c.factor)">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
+              <td mat-footer-cell *matFooterCellDef></td>
+            </ng-container>
+            <ng-container matColumnDef="factor">
+              <th mat-header-cell *matHeaderCellDef scope="col">Factor</th>
+              <td mat-cell *matCellDef="let c"><span class="strong">{{ sentence(c.factor) }}</span><div class="sub">{{ c.source }}</div></td>
+              <td mat-footer-cell *matFooterCellDef colspan="2">Score, sum clamped to 0 to 100</td>
+            </ng-container>
+            <ng-container matColumnDef="ev">
+              <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="ev" sortActionDescription="Sort by evidence">Evidence</th>
+              <td mat-cell *matCellDef="let c"><oci-evidence [value]="c.evidenceLevel" /></td>
+              <td mat-footer-cell *matFooterCellDef class="gone"></td>
+            </ng-container>
+            <ng-container matColumnDef="points">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="points" arrowPosition="before" sortActionDescription="Sort by points">Points</th>
+              <td mat-cell *matCellDef="let c" class="right pts" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
+              <td mat-footer-cell *matFooterCellDef class="right pts">{{ r.score }}</td>
+            </ng-container>
+            <ng-container matColumnDef="confidence">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="confidence" arrowPosition="before" sortActionDescription="Sort by confidence">Confidence</th>
+              <td mat-cell *matCellDef="let c" class="right nowrap"><span class="conf" aria-hidden="true"><span [style.width.%]="c.confidence * 100"></span></span> {{ (c.confidence * 100).toFixed(0) }}%</td>
+              <td mat-footer-cell *matFooterCellDef colspan="2"></td>
+            </ng-container>
+            <ng-container matColumnDef="age">
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="age" arrowPosition="before" sortActionDescription="Sort by age">Age</th>
+              <td mat-cell *matCellDef="let c" class="right nowrap">{{ age(c.ageSeconds) }}</td>
+              <td mat-footer-cell *matFooterCellDef class="gone"></td>
+            </ng-container>
+            <ng-container matColumnDef="detail">
+              <td mat-cell *matCellDef="let c; let i = dataIndex" [attr.colspan]="cols.length" [id]="'rc-' + i">
                 @if (open() === c.factor) {
-                  <tr class="detail-row" [id]="'rc-' + $index"><td colspan="6"><div class="detail">
+                  <div class="detail">
                     <p class="expl">{{ c.explanation }}</p>
                     <dl class="kv"><dt>Source</dt><dd>{{ c.source }}</dd><dt>Weight</dt><dd>{{ c.weight.toFixed(2) }}</dd>
                       @if (c.signalId) { <dt>Signal</dt><dd class="mono">{{ c.signalId }}</dd> }</dl>
-                  </div></td></tr>
+                  </div>
                 }
-              } @empty { <tr><td colspan="6" class="muted">No contribution: nothing notable was observed.</td></tr> }
-            </tbody>
-            <tfoot><tr><td></td><td colspan="2">Score, sum clamped to 0 to 100</td><td class="right pts">{{ r.score }}</td><td colspan="2"></td></tr></tfoot>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="cols"></tr>
+            <tr mat-row *matRowDef="let c; columns: cols"></tr>
+            <tr mat-row *matRowDef="let c; columns: ['detail']" class="detail-row" [class.open]="open() === c.factor"></tr>
+            <tr mat-footer-row *matFooterRowDef="cols"></tr>
+            <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell muted" [attr.colspan]="cols.length">No contribution: nothing notable was observed.</td></tr>
           </table></div>
           <dl class="legend" aria-label="Evidence levels">
             <div><dt><oci-evidence value="ANOMALY" /></dt><dd>Statistically unusual behaviour. Not a risk claim.</dd></div>

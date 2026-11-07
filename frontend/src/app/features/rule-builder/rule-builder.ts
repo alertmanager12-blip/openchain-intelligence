@@ -1,7 +1,11 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { MatProgressBar } from '@angular/material/progress-bar';
+import { MatStepperModule } from '@angular/material/stepper';
 import { Router, RouterLink } from '@angular/router';
-import { catchError, of } from 'rxjs';
+import { catchError, map, of } from 'rxjs';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EventTypeDef, Rule } from '../../core/models';
@@ -9,71 +13,90 @@ import { AVAILABLE_EVENT_TYPES, DEFAULT_FIELDS, EVENT_TYPES, RuleDraft, emptyRul
 import { ruleToYaml, validateDraft, yamlToRule } from '../../core/rules/rule-yaml';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
+import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { ActionsStep } from './actions-step';
 import { ConditionGroupEditor } from './condition-group';
-import { RuleStepNav, STEPS, StepId, stepOfPath } from './rule-steps';
+import { STEPS, StepId, stepOfPath } from './rule-steps';
 import { ScopeStep } from './scope-step';
 import { WindowStep } from './window-step';
 
 /**
- * Rule builder as a stepper (Scope, Conditions, Window, Actions, Review). The draft stays a mutable RuleDraft
+ * Rule builder as a mat-stepper (Scope, Conditions, Window, Actions, Review), non-linear, with the issue count per step. The draft stays a mutable RuleDraft
  * edited with ngModel: the recursive condition tree is mutated in place by oci-condition-group, which does not
  * map onto Signal Forms without rewriting core/rules.
  */
 @Component({
   selector: 'oci-rule-builder',
-  imports: [FormsModule, RouterLink, PageHeader, RuleStepNav, ScopeStep, WindowStep, ActionsStep, ConditionGroupEditor],
+  imports: [RouterLink, PageHeader, MatStepperModule, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ScopeStep, WindowStep, ActionsStep, ConditionGroupEditor],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Steps report their issues (error state) but stay reachable in any order (linear=false).
+  providers: [{ provide: STEPPER_GLOBAL_OPTIONS, useValue: { showError: true, displayDefaultIndicatorType: false } }],
   template: `
     <div class="page">
       <oci-page-header heading="Rule builder" lede="Compose a rule without code. Rules are declarative data checked against a fixed set of operators, so nothing you type is ever executed.">
-        <label class="open">Open a rule<select [ngModel]="loadedId()" (ngModelChange)="loadRule($event)">
-          <option value="">New rule</option>@for (r of rules(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
-        </select></label>
+        <mat-form-field class="open">
+          <mat-label>Open a rule</mat-label>
+          <mat-select [value]="loadedId()" (valueChange)="loadRule($event)">
+            <mat-option value="">New rule</mat-option>@for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ r.name }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
       </oci-page-header>
-
-      <oci-rule-step-nav [(current)]="step" [issues]="issues()" />
 
       <div class="layout" [class.review]="step() === 'review'">
         <form class="panel-raised main" (submit)="$event.preventDefault(); next()" novalidate [attr.aria-labelledby]="'h-step'">
-          <!-- the step bar above already shows the step number, title and hint -->
           <h2 id="h-step" class="sr-only">Step {{ index() + 1 }}: {{ current().label }}</h2>
-
-          @switch (step()) {
-            @case ('scope') { <oci-scope-step [draft]="d()" [errors]="errors()" [eventTypes]="eventTypes()" [idLocked]="!!loadedId()" (patch)="patch($event)" /> }
-            @case ('conditions') {
-              <p class="hint lead">Conditions are checked on each event in scope. Group them with all, any or none, up to four levels deep.</p>
-              <oci-condition-group [group]="d().when" [catalog]="catalog()" [errors]="errors()" (changed)="touch()" />
+          <mat-stepper [linear]="false" [selectedIndex]="index()" (selectionChange)="step.set(steps[$event.selectedIndex].id)" [orientation]="narrow() ? 'vertical' : 'horizontal'"
+            aria-label="Rule builder steps" animationDuration="0">
+            <!-- step icons: the number, or the number in the error colour when the step has issues (no icon font) -->
+            <ng-template matStepperIcon="edit" let-index="index">{{ index + 1 }}</ng-template>
+            <ng-template matStepperIcon="done" let-index="index">{{ index + 1 }}</ng-template>
+            <ng-template matStepperIcon="error" let-index="index">{{ index + 1 }}</ng-template>
+            @for (s of steps; track s.id) {
+              <mat-step [hasError]="!!issues()[s.id]" [errorMessage]="issueText(s.id)" [aria-label]="stepAria(s.id, $index)" [completed]="false">
+                <ng-template matStepLabel>{{ s.label }}@if (issues()[s.id]; as c) { <span class="iss" aria-hidden="true">{{ c }}</span> }</ng-template>
+                <ng-template matStepContent>
+                  <div class="step-body">
+                    <p class="step-hint">{{ s.hint }}</p>
+                    @switch (s.id) {
+                      @case ('scope') { <oci-scope-step [draft]="d()" [errors]="errors()" [eventTypes]="eventTypes()" [idLocked]="!!loadedId()" (patch)="patch($event)" /> }
+                      @case ('conditions') {
+                        <p class="hint lead">Conditions are checked on each event in scope. Group them with all, any or none, up to four levels deep.</p>
+                        <oci-condition-group [group]="d().when" [catalog]="catalog()" [errors]="errors()" (changed)="touch()" />
+                      }
+                      @case ('window') { <oci-window-step [draft]="d()" [catalog]="catalog()" [errors]="errors()" (patch)="patch($event)" /> }
+                      @case ('actions') { <oci-actions-step [draft]="d()" [errors]="errors()" (patch)="patch($event)" /> }
+                      @case ('review') {
+                        <div class="well verdict" role="status">
+                          @if (errors().length === 0) { <strong class="ok">Ready to save.</strong> <span>The rule passes every local check. The server validates it again when you save.</span> }
+                          @else { <strong class="bad">{{ errors().length === 1 ? '1 issue to fix' : errors().length + ' issues to fix' }}</strong> <span>before this rule can be saved.</span> }
+                        </div>
+                        @if (errors().length) {
+                          <ul class="errs">@for (e of errors(); track $index) {
+                            <li><span class="mono">{{ e.path }}</span> {{ e.message }} <button matButton class="sm" type="button" (click)="step.set(stepOf(e.path))">Fix in {{ stepLabel(e.path) }}</button></li>
+                          }</ul>
+                        }
+                        <pre class="code yaml-full" aria-label="Rule YAML">{{ yaml() }}</pre>
+                        @if (saveError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+                      }
+                    }
+                    <div class="foot">
+                      @if (index() > 0) { <button matButton="outlined" type="button" (click)="back()">Back</button> }
+                      <span class="spacer"></span>
+                      @if (step() === 'review') {
+                        <button matButton="outlined" type="button" (click)="copy()">Copy YAML</button>
+                        <button matButton="outlined" type="button" (click)="simulate()" [disabled]="errors().length > 0">Run simulation</button>
+                        <button matButton="filled" type="button" (click)="save()" [disabled]="errors().length > 0 || saving()">{{ saving() ? 'Saving…' : loadedId() ? 'Save changes' : 'Create rule' }}</button>
+                      } @else {
+                        <button matButton="filled" type="submit">{{ step() === 'actions' ? 'Review rule' : 'Next: ' + nextLabel() }}</button>
+                      }
+                    </div>
+                    @if (saving()) { <mat-progress-bar mode="indeterminate" aria-label="Saving the rule" /> }
+                  </div>
+                </ng-template>
+              </mat-step>
             }
-            @case ('window') { <oci-window-step [draft]="d()" [catalog]="catalog()" [errors]="errors()" (patch)="patch($event)" /> }
-            @case ('actions') { <oci-actions-step [draft]="d()" [errors]="errors()" (patch)="patch($event)" /> }
-            @case ('review') {
-              <div class="well verdict" role="status">
-                @if (errors().length === 0) { <strong class="ok">Ready to save.</strong> <span>The rule passes every local check. The server validates it again when you save.</span> }
-                @else { <strong class="bad">{{ errors().length === 1 ? '1 issue to fix' : errors().length + ' issues to fix' }}</strong> <span>before this rule can be saved.</span> }
-              </div>
-              @if (errors().length) {
-                <ul class="errs">@for (e of errors(); track $index) {
-                  <li><span class="mono">{{ e.path }}</span> {{ e.message }} <button type="button" class="btn btn--sm btn--ghost" (click)="step.set(stepOf(e.path))">Fix in {{ stepLabel(e.path) }}</button></li>
-                }</ul>
-              }
-              <pre class="code yaml-full" aria-label="Rule YAML">{{ yaml() }}</pre>
-              @if (saveError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-            }
-          }
-
-          <div class="foot">
-            @if (index() > 0) { <button class="btn" type="button" (click)="back()">Back</button> }
-            <span class="spacer"></span>
-            @if (step() === 'review') {
-              <button class="btn" type="button" (click)="copy()">Copy YAML</button>
-              <button class="btn" type="button" (click)="simulate()" [disabled]="errors().length > 0">Run simulation</button>
-              <button class="btn btn--primary" type="button" (click)="save()" [disabled]="errors().length > 0 || saving()">{{ saving() ? 'Saving…' : loadedId() ? 'Save changes' : 'Create rule' }}</button>
-            } @else {
-              <button class="btn btn--primary" type="submit">{{ step() === 'actions' ? 'Review rule' : 'Next: ' + nextLabel() }}</button>
-            }
-          </div>
+          </mat-stepper>
         </form>
 
         @if (step() !== 'review') {
@@ -88,12 +111,15 @@ import { WindowStep } from './window-step';
     </div>
   `,
   styles: `
-    .open { min-width: 220px; }
+    .open { width: 260px; }
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 24px; align-items: start; }
     .layout.review { grid-template-columns: minmax(0, 1fr); }
     @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-    .main { display: grid; gap: 20px; }
-    .lead { margin: -8px 0 0; }
+    .main { padding: 4px 20px 20px; }
+    .step-body { display: grid; gap: 18px; padding-top: 18px; }
+    .step-hint { margin: 0 0 -6px; font: 600 13px var(--font-display); color: var(--muted); letter-spacing: 0.01em; }
+    .lead { margin: 0; }
+    .iss { display: inline-block; margin-left: 8px; font: 600 12px/20px var(--font); color: var(--danger); background: color-mix(in srgb, var(--risk-critical) var(--tint), var(--surface)); padding: 0 7px; border-radius: 10px; vertical-align: 1px; }
     .foot { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--line-soft); }
     .side { position: sticky; top: 76px; display: grid; gap: 8px; }
     .act { margin-left: auto; }
@@ -102,6 +128,17 @@ import { WindowStep } from './window-step';
     .verdict { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
     .errs { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
     .errs li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--danger); }
+    /* the stepper sits on the raised panel: flat header, numbered discs in the instrument style */
+    mat-stepper { background: transparent; }
+    :host ::ng-deep .mat-horizontal-stepper-header-container { margin: 0 -20px; padding: 0 8px; border-bottom: 1px solid var(--line-soft); }
+    :host ::ng-deep .mat-horizontal-content-container { padding: 0; }
+    :host ::ng-deep .mat-step-icon { font: 600 14px var(--font-display); box-shadow: var(--shadow-inset); }
+    :host ::ng-deep .mat-step-icon-selected { box-shadow: none; }
+    :host ::ng-deep .mat-step-icon-state-error { background: color-mix(in srgb, var(--risk-critical) var(--tint), var(--surface)); color: var(--danger); box-shadow: none; }
+    :host ::ng-deep .mat-step-label-error .mat-step-sub-label-error { display: none; }
+    :host ::ng-deep .mat-horizontal-stepper-header { padding: 0 14px; }
+    :host ::ng-deep .mat-stepper-horizontal-line { min-width: 12px; }
+    @media (max-width: 720px) { .main { padding: 8px 8px 16px; } .open { width: 100%; } }
   `,
 })
 export class RuleBuilderPage {
@@ -111,7 +148,10 @@ export class RuleBuilderPage {
   /** ?rule=<id> opens that stored rule (links from Rules as code). */
   readonly rule = input<string>();
 
+  readonly steps = STEPS;
   readonly step = signal<StepId>('scope');
+  /** Vertical stepper on narrow screens: five horizontal headers do not fit 390px. */
+  readonly narrow = toSignal(inject(BreakpointObserver).observe('(max-width: 720px)').pipe(map((s) => s.matches)), { initialValue: false });
   readonly index = computed(() => STEPS.findIndex((s) => s.id === this.step()));
   readonly current = computed(() => STEPS[this.index()]);
   readonly nextLabel = computed(() => STEPS[this.index() + 1]?.label.toLowerCase() ?? '');
@@ -153,6 +193,17 @@ export class RuleBuilderPage {
       this.openedParam = id;
       untracked(() => this.loadRule(id));
     });
+  }
+
+  issueText(id: StepId): string {
+    const n = this.issues()[id] ?? 0;
+    return n === 1 ? '1 issue' : `${n} issues`;
+  }
+
+  /** Accessible name of a step header: its number, label and issue count. */
+  stepAria(id: StepId, i: number): string {
+    const n = this.issues()[id];
+    return `${i + 1}. ${STEPS[i].label}${n ? ', ' + this.issueText(id) : ''}`;
   }
 
   stepLabel(path: string): string {

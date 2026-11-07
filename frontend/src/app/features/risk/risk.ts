@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { EvidenceLevel, NETWORKS, NetworkId, RiskContribution } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
 import { apiResource } from '../../shared/api-resource';
-import { formatAge, timeAgo } from '../../shared/format';
+import { formatAge, timeAgo, netLabel } from '../../shared/format';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
 import { UI, sentence } from '../../shared/ui';
@@ -14,7 +14,7 @@ const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL:
 
 @Component({
   selector: 'oci-risk-page',
-  imports: [FormsModule, RouterLink, PageHeader, ...UI],
+  imports: [RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './risk.html',
   styleUrl: './risk.scss',
@@ -26,6 +26,7 @@ export class RiskPage {
   readonly address = input<string>();
 
   readonly networks = NETWORKS;
+  readonly netLabel = netLabel;
   /** Form fields follow the route and stay editable. */
   readonly addrInput = linkedSignal(() => this.address() ?? '');
   readonly netInput = linkedSignal<NetworkId>(() => this.network() ?? 'ethereum');
@@ -37,6 +38,8 @@ export class RiskPage {
   readonly age = formatAge;
   readonly sentence = sentence;
   readonly open = signal<string | null>(null);
+  readonly cols = ['x', 'factor', 'ev', 'points', 'confidence', 'age'];
+  readonly byFactor = (_: number, c: RiskContribution) => c.factor;
 
   readonly t = new TableState<RiskContribution>(
     computed(() => this.risk.value()?.contributions ?? []),

@@ -1,5 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, Injector, inject, signal } from '@angular/core';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog } from '@angular/material/dialog';
+import { MatRadioModule } from '@angular/material/radio';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTabsModule } from '@angular/material/tabs';
 import { FormField, form, required, submit, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
@@ -10,17 +14,17 @@ import { ThemePref, ThemeService } from '../../core/theme.service';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { timeAgo } from '../../shared/format';
+import { confirmAction } from '../../shared/confirm-dialog';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
-import { TabDef, TabList } from '../../shared/tab-list';
 import { UI, sentence } from '../../shared/ui';
 import { environment } from '../../../environments/environment';
 
 const SCOPES = ['rules:read', 'rules:write', 'alerts:read', 'alerts:write', 'wallets:read', 'labels:write'];
-type Section = 'connection' | 'appearance' | 'keys' | 'users';
 
 @Component({
   selector: 'oci-settings',
-  imports: [FormsModule, FormField, PageHeader, TabList, ...UI],
+  imports: [FormField, PageHeader, MatTabsModule, MatSlideToggleModule, MatRadioModule, MatCheckboxModule, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
@@ -39,10 +43,13 @@ export class SettingsPage {
   readonly sentence = sentence;
   readonly ago = timeAgo;
 
-  readonly section = signal<Section>('connection');
-  readonly sections: TabDef<Section>[] = [
-    { id: 'connection', label: 'Connection' }, { id: 'appearance', label: 'Appearance' }, { id: 'keys', label: 'API keys' }, { id: 'users', label: 'Users and roles' },
-  ];
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+  /** Selected tab: Connection, Appearance, API keys, Users and roles. */
+  readonly section = signal(0);
+  readonly keyCols = ['name', 'key', 'scopes', 'used', 'actions'];
+  readonly userCols = ['user', 'role', 'login'];
+  readonly byId = (_: number, r: { id: string }) => r.id;
 
   /** Bumped when the data source changes (mock toggle) so both lists reload. */
   private readonly source = signal(0);
@@ -56,16 +63,6 @@ export class SettingsPage {
   });
   readonly newSecret = signal<string | null>(null);
   readonly keyError = signal<ApiError | null>(null);
-
-  themeKey(e: KeyboardEvent): void {
-    const i = this.themes.indexOf(this.theme.pref());
-    const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-    if (!d) return;
-    e.preventDefault();
-    const next = (i + d + this.themes.length) % this.themes.length;
-    this.theme.pref.set(this.themes[next]);
-    (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button')[next]?.focus();
-  }
 
   toggleMock(): void {
     this.settings.update({ mock: !this.conn().mock });
@@ -109,8 +106,9 @@ export class SettingsPage {
     });
   }
 
-  revoke(k: ApiKey): void {
-    if (!confirm(`Revoke key "${k.name}"? Clients using it will be rejected immediately.`)) return;
+  async revoke(k: ApiKey): Promise<void> {
+    const ok = await confirmAction(this.dialog, this.injector, { title: `Revoke key "${k.name}"?`, message: 'Clients using it will be rejected immediately. This cannot be undone.', confirm: 'Revoke key', danger: true });
+    if (!ok) return;
     this.api.revokeApiKey(k.id).subscribe({
       next: (x) => {
         this.keys.update((l) => (l ?? []).map((y) => (y.id === x.id ? x : y)));

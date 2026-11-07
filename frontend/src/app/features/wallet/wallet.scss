@@ -12,7 +12,10 @@
 @media (max-width: 900px) { .score dl.facts { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
 .actions { padding: 0 8px; }
 .tabs-wrap { min-width: 0; }
-.filter { margin-bottom: 12px; max-width: 360px; }
+.filter { margin-bottom: 4px; width: min(360px, 100%); }
+.count { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--well); padding: 1px 7px; border-radius: 10px; font-variant-numeric: tabular-nums; }
+.tabs-wrap ::ng-deep .mdc-tab--active .count { color: var(--accent); background: var(--accent-tint); }
+.tabs-wrap ::ng-deep .mat-mdc-tab-header { margin-bottom: 4px; }
 .more { padding: 16px 0 0; }
 .dir { font-weight: 500; }
 .dir.out { color: var(--accent); }

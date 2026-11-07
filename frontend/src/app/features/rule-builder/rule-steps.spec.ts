@@ -1,5 +1,7 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatStepperHarness } from '@angular/material/stepper/testing';
 import { provideRouter } from '@angular/router';
 import { authInterceptor, errorInterceptor } from '../../core/interceptors';
 import { mockBackendInterceptor } from '../../core/mock/mock-backend.interceptor';
@@ -29,15 +31,31 @@ describe('rule builder stepper', () => {
     await f.whenStable();
     const page = f.componentInstance;
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('[aria-current="step"]')?.textContent).toContain('Scope');
+    const stepper = await TestbedHarnessEnvironment.loader(f).getHarness(MatStepperHarness);
+    expect(await Promise.all((await stepper.getSteps()).map((s) => s.getLabel()))).toEqual([
+      expect.stringContaining('Scope'), expect.stringContaining('Conditions'), expect.stringContaining('Window'), expect.stringContaining('Actions'), expect.stringContaining('Review'),
+    ]);
+    const [selected] = await stepper.getSteps({ selected: true });
+    expect(await selected.getLabel()).toContain('Scope');
 
     page.patch({ name: '' });
     await f.whenStable();
     expect(page.issues().scope).toBeGreaterThan(0);
-    expect(el.querySelector('[aria-current="step"] .iss')).not.toBeNull();
+    const header = el.querySelector('[role="tab"][aria-selected="true"]');
+    expect(header?.querySelector('.iss')).not.toBeNull();
+    expect(header?.getAttribute('aria-label')).toMatch(/^1\. Scope, \d+ issues?$/);
+
+    // the header selects its step (non-linear stepper); the step left behind shows its error state
+    const [conditions] = await stepper.getSteps({ label: /Conditions/ });
+    await conditions.select();
+    expect(page.step()).toBe('conditions');
+    const [scope] = await stepper.getSteps({ label: /Scope/ });
+    expect(await scope.isSelected()).toBe(false);
+    expect(await scope.hasErrors()).toBe(true);
 
     page.step.set('review');
     await f.whenStable();
+    expect(await (await stepper.getSteps({ selected: true }))[0].getLabel()).toContain('Review');
     expect(el.textContent).toContain('issue');
     expect(el.querySelector('pre[aria-label="Rule YAML"]')?.textContent).toContain('apiVersion: openchain.io/rule/v1');
 

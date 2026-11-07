@@ -1,20 +1,22 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, Injector, computed, effect, inject, input, linkedSignal, untracked } from '@angular/core';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { ApiService } from '../../core/api.service';
 import { ALERT_STATUSES, Alert, AlertStatus, SEVERITIES, Severity } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { timeAgo } from '../../shared/format';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
 import { UI, sentence } from '../../shared/ui';
-import { AlertDetail } from './alert-detail';
+import { AlertDetail, AlertDetailData } from './alert-detail';
 
 const SEV_RANK: Record<Severity, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
 const ACTIVE: AlertStatus[] = ['OPEN', 'ACKNOWLEDGED', 'INVESTIGATING'];
 
 @Component({
   selector: 'oci-alerts',
-  imports: [FormsModule, PageHeader, AlertDetail, ...UI],
+  imports: [PageHeader, MatChipsModule, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './alerts.html',
   styleUrl: './alerts.scss',
@@ -59,17 +61,42 @@ export class AlertsPage {
     { key: 'created', dir: 'desc' },
   );
   readonly counts = computed(() => this.summary.value()?.alerts ?? null);
+  readonly cols = ['severity', 'alert', 'status', 'evidence', 'assignee', 'created'];
+  readonly byId = (_: number, a: Alert) => a.id;
 
-  private returnFocus: HTMLElement | null = null;
+  /** The alert dialog (MatDialog): open while an alert is selected; focus returns to the row on close. */
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+  private ref: MatDialogRef<AlertDetail> | null = null;
+  private destroyed = false;
 
-  open(a: Alert): void {
-    this.returnFocus = document.activeElement as HTMLElement | null;
-    this.selectedId.set(a.id);
+  constructor() {
+    effect(() => {
+      const open = !!this.selected();
+      untracked(() => {
+        if (open && !this.ref) {
+          const data: AlertDetailData = { alert: this.selected, updated: (a) => this.onUpdated(a) };
+          this.ref = this.dialog.open(AlertDetail, {
+            data, injector: this.injector, panelClass: 'alert-sheet', width: '1120px', maxWidth: 'calc(100vw - 16px)', height: 'calc(100vh - 16px)', position: { top: '8px', right: '8px' },
+            ariaLabelledBy: 'drawer-title', autoFocus: 'first-heading', ariaModal: true,
+          });
+          this.ref.afterClosed().subscribe(() => {
+            this.ref = null;
+            if (!this.destroyed) this.selectedId.set(null);
+          });
+        } else if (!open && this.ref) {
+          this.ref.close();
+        }
+      });
+    });
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.ref?.close();
+    });
   }
 
-  close(): void {
-    this.selectedId.set(null);
-    this.returnFocus?.focus?.();
+  open(a: Alert): void {
+    this.selectedId.set(a.id);
   }
 
   filterStatus(s: AlertStatus | ''): void {

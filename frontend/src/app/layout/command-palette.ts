@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, model, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, TemplateRef, computed, effect, inject, model, signal, untracked, viewChild } from '@angular/core';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { NetworkId, Severity } from '../core/models';
@@ -20,15 +21,15 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
 
 /**
  * Command palette (Ctrl+K / ⌘K): search an address or transaction hash (the network is detected from the format),
- * jump to a page or to a recent alert. ARIA combobox with a listbox popup (aria-activedescendant).
+ * jump to a page or to a recent alert. A MatDialog holding an ARIA combobox with a listbox popup (aria-activedescendant).
  */
 @Component({
   selector: 'oci-command-palette',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (open()) {
-      <div class="scrim" (click)="close()" aria-hidden="true"></div>
-      <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette" (keydown)="key($event)">
+    <!-- Rendered in a MatDialog (overlay, focus trap, backdrop, Escape, focus restoration, role="dialog" + aria-modal). -->
+    <ng-template #dialogTpl>
+      <div class="palette" (keydown)="key($event)">
         <div class="field">
           <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
           <input #input type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="palette-list" spellcheck="false" autocomplete="off"
@@ -55,22 +56,21 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
         </div>
         <div class="foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span></div>
       </div>
-    }
+    </ng-template>
   `,
   styles: `
-    .scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); }
-    .palette { position: fixed; z-index: 81; top: min(14vh, 120px); left: 50%; transform: translateX(-50%); width: min(640px, calc(100vw - 24px));
-      background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--shadow-overlay); overflow: hidden; animation: pop 0.14s var(--ease); }
-    @keyframes pop { from { opacity: 0; transform: translateX(-50%) scale(0.98); } }
+    .palette { background: var(--surface); animation: pop 0.14s var(--ease); }
+    @keyframes pop { from { opacity: 0; transform: scale(0.98); } }
     .field { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
     .ico { width: 18px; height: 18px; color: var(--muted); flex: none; }
-    input { flex: 1; border: 0; box-shadow: none; background: transparent; font-size: 17px; padding: 4px 0; min-width: 0; }
-    input:focus { box-shadow: none; outline: none; }
+    input { flex: 1; border: 0; background: transparent; font: inherit; font-size: 17px; color: var(--ink); padding: 4px 0; min-width: 0; }
+    input:focus { outline: none; }
+    input::placeholder { color: var(--muted); }
     .det { margin: 0; padding: 8px 16px; font-size: 13px; color: var(--ink-2); background: var(--surface-2); border-bottom: 1px solid var(--line-soft); }
     .det.bad { color: var(--warn); }
     .list { max-height: min(56vh, 440px); overflow-y: auto; padding: 6px; }
     .g { font: 600 12px var(--font-display); color: var(--muted); padding: 10px 10px 4px; letter-spacing: 0.02em; }
-    .opt { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-control); cursor: pointer; min-width: 0; }
+    .opt { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-control); cursor: pointer; min-width: 0; color: var(--ink); }
     .opt[aria-selected='true'] { background: var(--accent-tint); }
     .l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .h { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
@@ -83,10 +83,11 @@ export class CommandPalette {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
   readonly open = model(false);
-  private readonly input = viewChild<ElementRef<HTMLInputElement>>('input');
+  private readonly dialog = inject(MatDialog);
+  private readonly tpl = viewChild.required<TemplateRef<unknown>>('dialogTpl');
+  private ref: MatDialogRef<unknown> | null = null;
   readonly q = signal('');
   readonly active = signal(0);
-  private returnFocus: HTMLElement | null = null;
 
   /** Recent alerts, fetched only while the palette is open. */
   private readonly alerts = apiResource({ params: () => (this.open() ? { limit: 6 } : undefined), stream: (p) => this.api.alerts(p) });
@@ -132,16 +133,32 @@ export class CommandPalette {
   });
   readonly activeId = computed(() => this.options()[Math.min(this.active(), this.options().length - 1)]?.id ?? null);
 
+  private destroyed = false;
+
   constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      this.ref?.close();
+    });
     effect(() => {
-      if (!this.open()) return;
+      const open = this.open();
       untracked(() => {
-        this.returnFocus = document.activeElement as HTMLElement | null;
-        this.q.set('');
-        this.active.set(0);
+        if (open && !this.ref) {
+          this.q.set('');
+          this.active.set(0);
+          this.ref = this.dialog.open(this.tpl(), {
+            ariaLabel: 'Command palette', panelClass: 'palette-panel', width: '640px', maxWidth: 'calc(100vw - 24px)',
+            position: { top: 'min(14vh, 120px)' }, autoFocus: 'input', restoreFocus: true, ariaModal: true,
+          });
+          this.ref.afterClosed().subscribe(() => {
+            this.ref = null;
+            if (!this.destroyed) this.open.set(false);
+          });
+        } else if (!open && this.ref) {
+          this.ref.close();
+        }
       });
     });
-    effect(() => this.input()?.nativeElement.focus());
   }
 
   setQuery(v: string): void {
@@ -155,13 +172,13 @@ export class CommandPalette {
   }
 
   choose(o: PaletteOption): void {
-    this.close(false);
+    this.close();
     o.run();
   }
 
-  close(restoreFocus = true): void {
-    this.open.set(false);
-    if (restoreFocus) this.returnFocus?.focus?.();
+  /** Closing the dialog returns focus to where it was (MatDialog restoreFocus). */
+  close(): void {
+    this.ref?.close();
   }
 
   key(e: KeyboardEvent): void {
@@ -173,7 +190,7 @@ export class CommandPalette {
       e.preventDefault();
       const o = this.options()[this.active()];
       if (o) this.choose(o);
-    } else if (e.key === 'Tab') e.preventDefault(); // focus stays in the combobox (modal dialog)
+    } else if (e.key === 'Tab') e.preventDefault(); // focus stays in the combobox (the dialog traps it anyway)
   }
 
   private scroll(): void {

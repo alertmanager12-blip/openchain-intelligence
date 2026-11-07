@@ -1,4 +1,6 @@
+import { TestbedHarnessEnvironment } from '@angular/cdk/testing/testbed';
 import { TestBed } from '@angular/core/testing';
+import { MatSnackBarHarness } from '@angular/material/snack-bar/testing';
 import { ToastOutlet } from '../layout/toast-outlet';
 import { Toasts } from './toasts';
 
@@ -35,18 +37,23 @@ describe('Toasts', () => {
 });
 
 describe('ToastOutlet', () => {
-  it('renders toasts in a polite live region with a dismiss button', async () => {
+  it('shows the toasts in a Material snack bar, a polite live region, with a dismiss button', async () => {
     const f = TestBed.createComponent(ToastOutlet);
     const t = TestBed.inject(Toasts);
     t.success('Rule enabled', 'large-transfer');
     await f.whenStable();
-    const el = f.nativeElement as HTMLElement;
-    const region = el.querySelector('[aria-live="polite"]');
-    expect(region?.getAttribute('role')).toBe('status');
+    // the snack bar module is imported on the first toast; the snack bar moves its content into the live region after 150 ms
+    await new Promise((r) => setTimeout(r, 300));
+    const snack = await TestbedHarnessEnvironment.documentRootLoader(f).getHarness(MatSnackBarHarness);
+    // Material's live region: aria-live="polite" (it adds role="status" only on Firefox, where aria-live alone is not enough)
+    expect(await snack.getAriaLive()).toBe('polite');
+    const region = document.querySelector('.mat-mdc-snack-bar-container [aria-live="polite"]');
+    expect(region?.closest('[aria-hidden="true"]')).toBeNull();
     expect(region?.textContent).toContain('Rule enabled');
     expect(region?.textContent).toContain('large-transfer');
-    el.querySelector<HTMLButtonElement>('button[aria-label="Dismiss notification"]')!.click();
+    document.querySelector<HTMLButtonElement>('.mat-mdc-snack-bar-container button[aria-label="Dismiss notification"]')!.click();
     await f.whenStable();
     expect(t.items()).toEqual([]);
+    expect(await snack.isDismissed()).toBe(true);
   });
 });

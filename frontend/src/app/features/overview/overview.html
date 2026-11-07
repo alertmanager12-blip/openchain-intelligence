@@ -1,7 +1,7 @@
 <div class="page">
   <oci-page-header heading="Overview" lede="Open alerts, ingestion health and the latest signals. A signal is a reason to look closer, not proof of wrongdoing.">
     @if (dash.value(); as d) { <span class="small muted">Updated {{ ago(d.generatedAt) }}</span> }
-    <button class="btn" type="button" (click)="dash.reload()" [disabled]="dash.loading()">Refresh</button>
+    <button matButton="outlined" type="button" (click)="dash.reload()" [disabled]="dash.loading()">Refresh</button>
   </oci-page-header>
 
   <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="4" loadingText="Loading the dashboard" (retry)="dash.reload()">
@@ -17,7 +17,7 @@
             <div class="urgent">
               <a class="sev-link" [routerLink]="['/alerts']" [queryParams]="{ severity: 'CRITICAL', status: 'OPEN' }"><span class="num">{{ u.critical }}</span><oci-severity value="CRITICAL" /></a>
               <a class="sev-link" [routerLink]="['/alerts']" [queryParams]="{ severity: 'HIGH', status: 'OPEN' }"><span class="num">{{ u.high }}</span><oci-severity value="HIGH" /></a>
-              <a class="btn btn--primary btn--sm" [routerLink]="['/alerts']" [queryParams]="{ status: 'OPEN' }">Triage open alerts</a>
+              <a matButton="filled" [routerLink]="['/alerts']" [queryParams]="{ status: 'OPEN' }">Triage open alerts</a>
             </div>
           } @else { <p class="small muted">Your role has no alerts:read permission.</p> }
         </div>
@@ -35,24 +35,28 @@
           <div class="section-head"><h2 id="h-recent">Recent alerts</h2><a class="small act" routerLink="/alerts">View all alerts</a></div>
           @if (d.alerts; as al) {
             @if (al.recent.length) {
-              <div class="table-wrap"><table class="recent">
-                <thead><tr><th scope="col">Alert</th><th scope="col">Subject wallet score</th><th scope="col" class="right">Created</th></tr></thead>
-                <tbody>
-                  @for (a of al.recent; track a.id) {
-                    <tr>
-                      <td><div class="row nowrap-row"><oci-severity [value]="a.severity" /><a class="strong" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }">{{ a.ruleName }}</a></div>
-                        <div class="sub"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.address) { <span class="mono">{{ short(a.address) }}</span> }</div></td>
-                      <td class="g">
-                        @if (a.address) {
-                          @if (scores.value()?.[a.id]; as s) { <oci-gauge [score]="s.score" [level]="s.level" [label]="'Risk score of ' + short(a.address)" /> }
-                          @else if (scores.value() && scores.value()![a.id] === null) { <span class="small muted">Not available</span> }
-                          @else { <span class="skel bar" aria-label="Loading score"></span> }
-                        } @else { <span class="small muted">No wallet</span> }
-                      </td>
-                      <td class="right small nowrap muted">{{ ago(a.createdAt) }}</td>
-                    </tr>
-                  }
-                </tbody>
+              <div class="table-wrap"><table mat-table class="recent" [dataSource]="al.recent" [trackBy]="byId">
+                <ng-container matColumnDef="alert">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Alert</th>
+                  <td mat-cell *matCellDef="let a"><div class="row nowrap-row"><oci-severity [value]="a.severity" /><a class="strong" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }">{{ a.ruleName }}</a></div>
+                    <div class="sub"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.address) { <span class="mono">{{ short(a.address) }}</span> }</div></td>
+                </ng-container>
+                <ng-container matColumnDef="score">
+                  <th mat-header-cell *matHeaderCellDef scope="col">Subject wallet score</th>
+                  <td mat-cell *matCellDef="let a" class="g">
+                    @if (a.address) {
+                      @if (scores.value()?.[a.id]; as s) { <oci-gauge [score]="s.score" [level]="s.level" [label]="'Risk score of ' + short(a.address)" /> }
+                      @else if (scores.value() && scores.value()![a.id] === null) { <span class="small muted">Not available</span> }
+                      @else { <span class="skel bar" aria-label="Loading score"></span> }
+                    } @else { <span class="small muted">No wallet</span> }
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="created">
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Created</th>
+                  <td mat-cell *matCellDef="let a" class="right small nowrap muted">{{ ago(a.createdAt) }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="recentCols"></tr>
+                <tr mat-row *matRowDef="let a; columns: recentCols"></tr>
               </table></div>
             } @else { <div class="empty"><strong>No alert yet</strong><span>Enable a rule to start monitoring.</span><a routerLink="/rules/builder">Open the rule builder</a></div> }
           } @else { <p class="muted">Alerts are hidden: your role has no alerts:read permission.</p> }
@@ -91,31 +95,50 @@
 
       <section class="section" aria-labelledby="h-net">
         <div class="section-head"><h2 id="h-net">Networks</h2><p>Head is the latest block seen by the provider. Lag is how far indexing is behind it.</p></div>
-        <div class="table-wrap"><table>
-          <thead><tr>
-            <th scope="col" class="x"><span class="sr-only">Details</span></th><th scope="col">Network</th><th scope="col">Health</th><th scope="col" class="right">Head block</th>
-            <th scope="col" class="right">Lag (blocks)</th><th scope="col" class="right">Latency</th><th scope="col" class="right">Checked</th>
-          </tr></thead>
-          <tbody>
-            @for (x of d.networks; track x.network) {
-              <tr>
-                <td class="x"><button class="expander" type="button" [attr.aria-expanded]="openNet() === x.network" [attr.aria-controls]="'net-' + x.network" [attr.aria-label]="'Details of ' + x.network" (click)="toggleNet(x.network)">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
-                <td><span class="cap strong">{{ x.network }}</span>@if (x.simulated) { <span class="chip sim" title="Data comes from the simulated demo ledger, not the real chain">Simulated</span> }</td>
-                <td><span class="health" [class.warn]="!x.healthy"><span class="dot" [class.dot--bad]="!x.healthy" aria-hidden="true"></span>{{ x.healthy ? 'Healthy' : 'Degraded' }}</span></td>
-                <td class="right">{{ n(x.headBlock) }}</td>
-                <td class="right" [class.warn]="lag(x) > lagWarn">{{ n(lag(x)) }}</td>
-                <td class="right" [class.warn]="x.latencyMillis > 1000">{{ n(x.latencyMillis) }} ms</td>
-                <td class="right small nowrap muted">{{ ago(x.checkedAt) }}</td>
-              </tr>
+        <div class="table-wrap"><table mat-table [dataSource]="d.networks" multiTemplateDataRows [trackBy]="byNetwork">
+          <ng-container matColumnDef="x">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
+            <td mat-cell *matCellDef="let x" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="openNet() === x.network" [attr.aria-controls]="'net-' + x.network"
+              [attr.aria-label]="'Details of ' + x.network" (click)="toggleNet(x.network)">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
+          </ng-container>
+          <ng-container matColumnDef="network">
+            <th mat-header-cell *matHeaderCellDef scope="col">Network</th>
+            <td mat-cell *matCellDef="let x"><span class="cap strong">{{ x.network }}</span>@if (x.simulated) { <span class="chip sim" matTooltip="Data comes from the simulated demo ledger, not the real chain">Simulated</span> }</td>
+          </ng-container>
+          <ng-container matColumnDef="health">
+            <th mat-header-cell *matHeaderCellDef scope="col">Health</th>
+            <td mat-cell *matCellDef="let x"><span class="health" [class.warn]="!x.healthy"><span class="dot" [class.dot--bad]="!x.healthy" aria-hidden="true"></span>{{ x.healthy ? 'Healthy' : 'Degraded' }}</span></td>
+          </ng-container>
+          <ng-container matColumnDef="head">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right">Head block</th>
+            <td mat-cell *matCellDef="let x" class="right">{{ n(x.headBlock) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="lag">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right">Lag (blocks)</th>
+            <td mat-cell *matCellDef="let x" class="right" [class.warn]="lag(x) > lagWarn">{{ n(lag(x)) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="latency">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right">Latency</th>
+            <td mat-cell *matCellDef="let x" class="right" [class.warn]="x.latencyMillis > 1000">{{ n(x.latencyMillis) }} ms</td>
+          </ng-container>
+          <ng-container matColumnDef="checked">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right">Checked</th>
+            <td mat-cell *matCellDef="let x" class="right small nowrap muted">{{ ago(x.checkedAt) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="detail">
+            <td mat-cell *matCellDef="let x" [attr.colspan]="netCols.length" [id]="'net-' + x.network">
               @if (openNet() === x.network) {
-                <tr class="detail-row" [id]="'net-' + x.network"><td colspan="7"><div class="detail">
+                <div class="detail">
                   <dl class="kv"><dt>Provider</dt><dd>{{ x.providerId }}</dd><dt>Indexed block</dt><dd>{{ x.lastIndexedBlock !== undefined ? n(x.lastIndexedBlock) : '–' }}</dd></dl>
                   <dl class="kv"><dt>Finalized block</dt><dd>{{ n(x.finalizedBlock) }}</dd><dt>Status detail</dt><dd>{{ x.detail ?? 'None reported' }}</dd></dl>
-                </div></td></tr>
+                </div>
               }
-            }
-          </tbody>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="netCols"></tr>
+          <tr mat-row *matRowDef="let x; columns: netCols"></tr>
+          <tr mat-row *matRowDef="let x; columns: ['detail']" class="detail-row" [class.open]="openNet() === x.network"></tr>
         </table></div>
       </section>
 
@@ -132,18 +155,25 @@
         <section class="section" aria-labelledby="h-sig">
           <div class="section-head"><h2 id="h-sig">Recent signals</h2></div>
           @if ((d.recentSignals ?? []).length) {
-            <div class="table-wrap"><table>
-              <thead><tr><th scope="col">Signal</th><th scope="col">Evidence</th><th scope="col">Address</th><th scope="col" class="right">Detected</th></tr></thead>
-              <tbody>
-                @for (s of (d.recentSignals ?? []).slice(0, 6); track s.id) {
-                  <tr>
-                    <td><span class="strong">{{ sentence(s.type) }}</span><div class="sub clamp">{{ s.evidence[0]?.description }}</div></td>
-                    <td><oci-evidence [value]="s.evidenceLevel" /><div class="sub">Confidence <span class="num">{{ (s.confidence * 100).toFixed(0) }}</span>%</div></td>
-                    <td><oci-addr [address]="s.address" [network]="s.network" /></td>
-                    <td class="right nowrap small muted">{{ ago(s.detectedAt) }}</td>
-                  </tr>
-                }
-              </tbody>
+            <div class="table-wrap"><table mat-table [dataSource]="(d.recentSignals ?? []).slice(0, 6)" [trackBy]="byId">
+              <ng-container matColumnDef="signal">
+                <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
+                <td mat-cell *matCellDef="let s"><span class="strong">{{ sentence(s.type) }}</span><div class="sub clamp">{{ s.evidence[0]?.description }}</div></td>
+              </ng-container>
+              <ng-container matColumnDef="evidence">
+                <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                <td mat-cell *matCellDef="let s"><oci-evidence [value]="s.evidenceLevel" /><div class="sub">Confidence <span class="num">{{ (s.confidence * 100).toFixed(0) }}</span>%</div></td>
+              </ng-container>
+              <ng-container matColumnDef="address">
+                <th mat-header-cell *matHeaderCellDef scope="col">Address</th>
+                <td mat-cell *matCellDef="let s"><oci-addr [address]="s.address" [network]="s.network" /></td>
+              </ng-container>
+              <ng-container matColumnDef="detected">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right">Detected</th>
+                <td mat-cell *matCellDef="let s" class="right nowrap small muted">{{ ago(s.detectedAt) }}</td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="signalCols"></tr>
+              <tr mat-row *matRowDef="let s; columns: signalCols"></tr>
             </table></div>
           } @else { <p class="muted">No signal detected yet, or your role has no risk:read permission.</p> }
         </section>

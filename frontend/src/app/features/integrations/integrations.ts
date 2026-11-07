@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, inject, signal } from '@angular/core';
 import { FormField, form, required, submit, validate } from '@angular/forms/signals';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
@@ -7,6 +9,8 @@ import { ConnectorType, Webhook } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { timeAgo } from '../../shared/format';
+import { confirmAction } from '../../shared/confirm-dialog';
+import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { UI } from '../../shared/ui';
 import { maskTarget } from './connector-target';
@@ -21,7 +25,7 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
 
 @Component({
   selector: 'oci-integrations',
-  imports: [FormField, PageHeader, ...UI],
+  imports: [FormField, PageHeader, MatButtonToggleModule, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './integrations.html',
   styleUrl: './integrations.scss',
@@ -29,7 +33,11 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
 export class IntegrationsPage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
   readonly types = TYPES;
+  readonly cols = ['name', 'type', 'target', 'last', 'actions'];
+  readonly byId = (_: number, w: Webhook) => w.id;
   readonly list = apiResource({ params: () => ({}), stream: () => this.api.webhooks() });
   readonly type = signal<ConnectorType>('WEBHOOK');
   readonly meta = computed(() => TYPES.find((t) => t.type === this.type())!);
@@ -103,8 +111,9 @@ export class IntegrationsPage {
     }
   }
 
-  remove(w: Webhook): void {
-    if (!confirm(`Delete connector "${w.name}"? Rules referencing ${w.id} will stop delivering to it.`)) return;
+  async remove(w: Webhook): Promise<void> {
+    const ok = await confirmAction(this.dialog, this.injector, { title: `Delete connector "${w.name}"?`, message: `Rules referencing ${w.id} will stop delivering to it.`, confirm: 'Delete connector', danger: true });
+    if (!ok) return;
     this.api.deleteWebhook(w.id).subscribe({
       next: () => {
         this.list.update((l) => (l ?? []).filter((x) => x.id !== w.id));
