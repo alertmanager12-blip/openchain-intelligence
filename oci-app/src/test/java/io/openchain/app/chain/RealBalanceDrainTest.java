@@ -50,6 +50,10 @@ class RealBalanceDrainTest {
         void balance(Address a, long block, String usdt) { balances.put(a.value() + "@" + block, new BigDecimal(usdt).movePointRight(6).toBigIntegerExact()); }
         @Override public Optional<BigInteger> getBalanceAt(Address a, Token token, long atBlock) {
             calls.add(a.value() + "@" + atBlock);
+            if (a.value().startsWith(SLOW_PREFIX)) {
+                try { Thread.sleep(300); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return Optional.of(BigInteger.valueOf(1_000_000_000L));
+            }
             if (a.equals(UNKNOWN)) throw new ProviderException("HTTP 429 rate limited", true);
             return Optional.ofNullable(balances.get(a.value() + "@" + atBlock));
         }
@@ -75,14 +79,19 @@ class RealBalanceDrainTest {
 
     @AfterAll static void stop() { if (ctx != null) ctx.close(); }
 
-    static void transfer(int n, long block, Address from, Address to, String usdt) {
+    static final String SLOW_PREFIX = "0x5100";
+
+    static io.openchain.core.event.ChainEvent event(int n, long block, Address from, Address to, String usdt) {
         TokenRegistry tokens = ctx.getBean(TokenRegistry.class);
         Token token = tokens.resolve(Network.ETHEREUM, USDT);
         Instant ts = T0.plusSeconds(12 * (block - 100));
         TokenTransfer t = new TokenTransfer(Network.ETHEREUM, "0x" + String.format("%064x", n), 0, block, "0xb" + block, ts, from, to, token,
                 new BigDecimal(usdt).movePointRight(6).toBigIntegerExact());
-        ctx.getBean(ChainIngestionService.class).onEvent(new TransferEventMapper(tokens).map(t, new BlockRef(Network.ETHEREUM, block,
-                "0xb" + block, null, ts), Instant.now()));
+        return new TransferEventMapper(tokens).map(t, new BlockRef(Network.ETHEREUM, block, "0xb" + block, null, ts), Instant.now());
+    }
+
+    static void transfer(int n, long block, Address from, Address to, String usdt) {
+        ctx.getBean(ChainIngestionService.class).onEvent(event(n, block, from, to, usdt));
     }
 
     static List<Alert> drains(Address a) {
@@ -129,5 +138,57 @@ class RealBalanceDrainTest {
         assertThat(provider.calls.stream().filter(c -> c.startsWith(UNKNOWN.value()))).hasSize(1);
         assertThat(drains(UNKNOWN)).isEmpty();
         assertThat(rapidDrainSignal(UNKNOWN)).isFalse();
+    }
+
+    static Address sender(int i) { return new Address(Network.ETHEREUM, "0x" + String.format("%040x", 0xabc000 + i)); }
+
+    @Test void realBalanceLookupsAreCappedPerBlock() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        // lag check neutralised: this test is about the per-block cap only (test order must not matter)
+        chains.setBalanceBudget(Network.ETHEREUM, new ChainIngestionService.BalanceBudget(25, Long.MAX_VALUE));
+        long skipped = chains.balanceLookupsSkipped();
+        for (int i = 0; i < 30; i++) transfer(300 + i, 150, sender(i), SINK, "100");
+        long calls = provider.calls.stream().filter(c -> c.endsWith("@149")).count();
+        assertThat(calls).isEqualTo(25);                                   // never more than the budget for one block
+        assertThat(chains.balanceLookupsSkipped()).isEqualTo(skipped + 5); // the rest: field absent, no call
+    }
+
+    @Test void noRealBalanceLookupWhileCatchingUpFarBehindTheHead() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        ChainIngestionService.NetworkRuntime rt = chains.runtime(Network.ETHEREUM).orElseThrow();
+        chains.setBalanceBudget(Network.ETHEREUM, new ChainIngestionService.BalanceBudget(25, 32));
+        try {
+            chains.poll(rt); // records the head (200) from the provider's network status
+            long skipped = chains.balanceLookupsSkipped();
+            int before = provider.calls.size();
+            transfer(400, 160, sender(99), SINK, "100"); // 40 blocks behind the head > 32: catch-up, no RPC call
+            assertThat(provider.calls).hasSize(before);
+            assertThat(chains.balanceLookupsSkipped()).isEqualTo(skipped + 1);
+            assertThat(drains(sender(99))).isEmpty();
+        } finally {
+            // the other tests use blocks ~100-150, far "behind" the head recorded here: neutralise the lag check for them
+            chains.setBalanceBudget(Network.ETHEREUM, new ChainIngestionService.BalanceBudget(25, Long.MAX_VALUE));
+        }
+    }
+
+    @Test void balancesOfABlockArePrefetchedConcurrentlyThenServedFromTheCache() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        chains.setBalanceBudget(Network.ETHEREUM, new ChainIngestionService.BalanceBudget(5, Long.MAX_VALUE));
+        List<Address> senders = java.util.stream.IntStream.range(0, 5)
+                .mapToObj(i -> new Address(Network.ETHEREUM, SLOW_PREFIX + String.format("%036x", i))).toList();
+        List<io.openchain.core.event.ChainEvent> block = new java.util.ArrayList<>();
+        for (int i = 0; i < 5; i++) block.add(event(500 + i, 170, senders.get(i), SINK, "100"));
+        block.add(event(510, 170, senders.get(0), eth("6"), "100")); // same sender and token: no second lookup
+
+        long t0 = System.nanoTime();
+        chains.prefetchBalances(block);
+        long millis = (System.nanoTime() - t0) / 1_000_000;
+        assertThat(millis).as("5 lookups of 300 ms in parallel, not 1.5 s in sequence").isLessThan(1_000);
+        assertThat(provider.calls.stream().filter(c -> c.startsWith(SLOW_PREFIX))).hasSize(5);
+
+        long lookups = chains.balanceLookups();
+        block.forEach(e -> chains.onEvent(e));
+        assertThat(chains.balanceLookups()).as("processing is served from the cache").isEqualTo(lookups);
+        assertThat(provider.calls.stream().filter(c -> c.startsWith(SLOW_PREFIX))).hasSize(5);
     }
 }

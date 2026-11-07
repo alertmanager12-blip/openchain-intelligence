@@ -25,4 +25,10 @@ public interface LabelRepository {
     }
 
     int size();
+
+    /**
+     * True when at least one label of a risky category exists. Exposure detection is skipped otherwise: without a
+     * listed address there is nothing to be exposed to, and its graph walk is the costliest detector on busy chains.
+     */
+    default boolean hasRisky() { return true; }
 }

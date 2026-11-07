@@ -43,6 +43,7 @@ public final class ExposureDetector extends AbstractDetector {
     private record Node(Address address, List<ValueFlow> path) {} // path[0] = flow leaving the source ... path[last] = flow into subject
 
     @Override public List<Signal> detect(DetectionContext ctx) {
+        if (!ctx.labels().hasRisky()) return List.of(); // nothing listed: no exposure possible, skip the graph walk
         List<Signal> out = new ArrayList<>(direct(ctx));
         out.addAll(indirect(ctx));
         return out;

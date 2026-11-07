@@ -60,6 +60,28 @@ class BlockIndexerTest {
         return sink.stream().filter(e -> !e.removed() && e.blockNumber() >= from && e.blockNumber() <= to).count();
     }
 
+    @Test void eachBlockIsPreparedWithAllItsEventsBeforeAnyOfThemIsEmitted() {
+        chain.mine(6);
+        List<String> log = new ArrayList<>();
+        ChainEventSink recording = new ChainEventSink() {
+            @Override public void emit(ChainEvent e) { log.add("emit " + e.blockNumber() + " " + e.eventId()); }
+            @Override public void prepare(List<ChainEvent> block) {
+                assertThat(block).isNotEmpty().allMatch(e -> e.blockNumber() == block.getFirst().blockNumber());
+                block.forEach(e -> log.add("prep " + e.blockNumber() + " " + e.eventId()));
+            }
+        };
+        new BlockIndexer(chain, store, recording, new IndexerConfig("idx-eth", 1, 0, 10, 1000)).poll();
+        // for every block: all "prep" lines, then the same events emitted in the same order
+        List<String> preps = log.stream().filter(s -> s.startsWith("prep")).map(s -> s.substring(5)).toList();
+        List<String> emits = log.stream().filter(s -> s.startsWith("emit")).map(s -> s.substring(5)).toList();
+        assertThat(emits).isNotEmpty().isEqualTo(preps);
+        for (int i = 0; i < log.size(); i++) {
+            if (!log.get(i).startsWith("emit")) continue;
+            long blockNo = Long.parseLong(log.get(i).split(" ")[1]);
+            assertThat(log.subList(i, log.size())).noneMatch(s -> s.startsWith("prep " + blockNo + " "));
+        }
+    }
+
     @Test void indexesAllTransfersWithFlatFields() {
         chain.mine(20);
         BlockIndexer.PollResult r = indexer(0, 10).poll();

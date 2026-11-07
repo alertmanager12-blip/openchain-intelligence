@@ -20,8 +20,9 @@ RUN --mount=type=cache,target=/root/.m2 \
  && jar=$(find oci-app/target -maxdepth 1 -name 'oci-app-*.jar' ! -name '*-plain.jar' ! -name '*-sources.jar' | head -n 1) \
  && test -n "$jar" && cp "$jar" /app.jar
 
-# Stage 2: minimal runtime, non-root
-FROM eclipse-temurin:21-jre
+# Stage 2: minimal runtime, non-root. Java 25 runtime (code compiled for Java 21): virtual threads no longer pin
+# their carrier inside synchronized blocks (JEP 491, Java 24+), which the indexers rely on.
+FROM eclipse-temurin:25-jre
 LABEL org.opencontainers.image.title="openchain-intelligence" \
       org.opencontainers.image.description="Open source blockchain investigation, risk intelligence and programmable monitoring" \
       org.opencontainers.image.licenses="Apache-2.0" \

@@ -33,7 +33,8 @@ Chosen option: **1**, Java release 21 with the Spring Boot 4.1 parent. `oci-core
 
 ## Consequences
 
-- Minimum JDK 21 to build and run; container base `eclipse-temurin:21-jre`.
+- Minimum JDK 21 to build and run; the code targets Java 21 (`release` 21).
+- *Amendment (2026-11-07):* the container runtime is `eclipse-temurin:25-jre` (LTS). Indexing uses virtual threads, and before Java 24 a virtual thread blocked on I/O inside a `synchronized` block pins its carrier thread (fixed by JEP 491). The build stage stays on JDK 21, so the code keeps running on any Java 21+ runtime; on 21 it is correct but parallelises less.
 - Framework annotations are confined to `oci-app` and to adapters; domain code is plain Java.
 
 ## Pros and cons of the other options

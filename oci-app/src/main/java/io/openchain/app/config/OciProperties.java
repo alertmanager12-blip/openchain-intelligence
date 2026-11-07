@@ -138,6 +138,23 @@ public class OciProperties {
         private boolean adminChangesOfAllContracts;
         private final FreezeBackfill freezeBackfill = new FreezeBackfill();
         private final History history = new History();
+        /**
+         * Real on-chain balance lookups (wallet.balance, rapid drain) cost one RPC call each. They are skipped while the
+         * indexer catches up (more than {@code realBalanceMaxLag} blocks behind the head) and capped per block; a skipped
+         * lookup leaves the field absent, so balance-based rules and detectors stay silent instead of guessing.
+         */
+        private int realBalanceMaxLookupsPerBlock = 5;
+        /** Blocks per indexer pass on a real chain: small, so the 2 s tick budget is respected and other networks get their turn. */
+        private int maxBlocksPerPoll = 2;
+
+        public int getMaxBlocksPerPoll() { return maxBlocksPerPoll; }
+        public void setMaxBlocksPerPoll(int v) { this.maxBlocksPerPoll = v; }
+        private long realBalanceMaxLag = 32;
+
+        public int getRealBalanceMaxLookupsPerBlock() { return realBalanceMaxLookupsPerBlock; }
+        public void setRealBalanceMaxLookupsPerBlock(int v) { this.realBalanceMaxLookupsPerBlock = v; }
+        public long getRealBalanceMaxLag() { return realBalanceMaxLag; }
+        public void setRealBalanceMaxLag(long v) { this.realBalanceMaxLag = v; }
 
         public List<String> getWatchedContracts() { return watchedContracts; }
         public void setWatchedContracts(List<String> watchedContracts) { this.watchedContracts = watchedContracts; }

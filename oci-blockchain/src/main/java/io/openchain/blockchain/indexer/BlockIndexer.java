@@ -120,6 +120,8 @@ public final class BlockIndexer {
                 if (!watched(c)) continue;
                 emit(c.eventId(), () -> mapper.mapAdminChange(c, block, clock.instant()), seen, events);
             }
+            sink.prepare(List.copyOf(events));
+            for (ChainEvent e : events) sink.emit(e);
             emitted += events.size();
             window.addLast(new IndexedBlock(block, events));
             while (window.size() > config.windowSize()) window.removeFirst();
@@ -177,11 +179,10 @@ public final class BlockIndexer {
         return config.watchedContracts().contains(contract) || tokens.find(c.network(), contract).isPresent();
     }
 
+    /** Maps a new event of the block being indexed; emission happens once the whole block is mapped (see poll). */
     private void emit(String eventId, java.util.function.Supplier<ChainEvent> event, Set<String> seen, List<ChainEvent> events) {
         if (!seen.add(eventId)) return;
-        ChainEvent e = event.get();
-        sink.emit(e);
-        events.add(e);
+        events.add(event.get());
     }
 
     private static Set<String> seenIds(Deque<IndexedBlock> window) {

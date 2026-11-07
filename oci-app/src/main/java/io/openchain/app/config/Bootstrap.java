@@ -32,6 +32,7 @@ import io.openchain.blockchain.tron.TronGridProvider;
 import io.openchain.core.detection.Signal.EvidenceLevel;
 import io.openchain.core.model.Address;
 import io.openchain.core.model.Network;
+import io.openchain.core.model.NetworkStatus;
 import io.openchain.core.provider.BlockchainProvider;
 import io.openchain.intelligence.label.AddressLabel;
 import io.openchain.intelligence.label.LabelCategory;
@@ -82,11 +83,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final DemoScenarios demoScenarios;
     private final FreezeBackfillService backfills;
     private final io.openchain.app.history.AddressHistoryService history;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
-        Thread t = new Thread(r, "oci-background");
-        t.setDaemon(true);
-        return t;
-    });
+    /** Delay before retrying a real chain whose provider was unreachable at start-up. */
+    private static final Duration START_RETRY = Duration.ofSeconds(30);
+    // virtual threads: polls and lookups mostly wait on providers; one task per network runs in parallel
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(8,
+            Thread.ofVirtual().name("oci-background-", 0).factory());
 
     public Bootstrap(OciProperties props, LabelCatalog labels, RuleRegistry rules, ChainIngestionService chains,
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
@@ -135,7 +136,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);
         scheduler.scheduleWithFixedDelay(guard("escalation", alertService::escalateOverdue), 60, 60, TimeUnit.SECONDS);
-        alerting.dispatch(1_000);
+        // first flush of pending deliveries off the main thread: INTERNAL_EVENT deliveries wait for the ingestion lock, so a
+        // long first indexing pass on a busy real chain must not keep start-up (and readiness) waiting
+        scheduler.execute(guard("initial dispatch", () -> alerting.dispatch(1_000)));
         log.info("OpenChain Intelligence ready in {} ms: {} network(s), {} rule(s), {} label(s), {} alert(s)",
                 (System.nanoTime() - t0) / 1_000_000, chains.runtimes().size(), rules.list().size(), labels.size(),
                 alertService.repository().findAll().size());
@@ -290,11 +293,25 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                         EvmConfig.defaults(n).withHistoryChunks(c.getHistory().getChunkSize(), c.getHistory().getMinChunkSize()));
                 default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
             };
-            long start = c.getStartBlock() >= 0 ? c.getStartBlock() : Math.max(0, p.getNetworkStatus().headBlock() + c.getStartBlock());
+            long start = c.getStartBlock();
+            if (start < 0) {
+                // relative start: needs the real head. An unreachable provider reports an unhealthy status with head 0
+                // (it does not throw): starting from "0 - 100" would index from genesis, so retry later instead.
+                NetworkStatus st = p.getNetworkStatus();
+                if (st == null || !st.healthy() || st.headBlock() <= 0) {
+                    log.warn("chain {}: head block unknown ({}); retrying in {} s", id, st == null ? "no status" : st.detail(),
+                            START_RETRY.toSeconds());
+                    scheduler.schedule(guard("start " + id, () -> startRealChain(id, c)), START_RETRY.toMillis(), TimeUnit.MILLISECONDS);
+                    return;
+                }
+                start = Math.max(0, st.headBlock() + c.getStartBlock());
+            }
             IndexerConfig cfg = IndexerConfig.of(n.id() + "-indexer", n, start).withApprovalsOfUnknownTokens(c.isApprovalsOfUnknownTokens())
                     .withWatchedContracts(n, java.util.Set.copyOf(c.getWatchedContracts()))
-                    .withAdminChangesOfAllContracts(c.isAdminChangesOfAllContracts());
+                    .withAdminChangesOfAllContracts(c.isAdminChangesOfAllContracts())
+                    .withMaxBlocksPerPoll(c.getMaxBlocksPerPoll());
             ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, cfg, null);
+            chains.setBalanceBudget(n, new ChainIngestionService.BalanceBudget(c.getRealBalanceMaxLookupsPerBlock(), c.getRealBalanceMaxLag()));
             startFreezeBackfill(n, p, c.getFreezeBackfill());
             OciProperties.History h = c.getHistory();
             if (h.isEnabled() && p instanceof io.openchain.core.history.AddressHistorySource src) {

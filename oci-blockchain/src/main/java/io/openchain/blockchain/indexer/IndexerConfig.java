@@ -41,6 +41,11 @@ public record IndexerConfig(String indexerId, long startBlock, int confirmations
                 adminChangesOfAllContracts);
     }
 
+    public IndexerConfig withMaxBlocksPerPoll(int max) {
+        return new IndexerConfig(indexerId, startBlock, confirmations, windowSize, max, approvalsOfUnknownTokens, watchedContracts,
+                adminChangesOfAllContracts);
+    }
+
     public IndexerConfig withAdminChangesOfAllContracts(boolean all) {
         return new IndexerConfig(indexerId, startBlock, confirmations, windowSize, maxBlocksPerPoll, approvalsOfUnknownTokens,
                 watchedContracts, all);

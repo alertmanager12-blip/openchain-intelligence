@@ -34,6 +34,8 @@ public final class LabelCatalog implements LabelRepository {
 
     @Override public int size() { return delegate.size(); }
 
+    @Override public boolean hasRisky() { return delegate.hasRisky(); }
+
     /** Every label, ordered by (network, address, category, source). */
     public List<AddressLabel> all() {
         List<AddressLabel> list = new ArrayList<>(all.values());

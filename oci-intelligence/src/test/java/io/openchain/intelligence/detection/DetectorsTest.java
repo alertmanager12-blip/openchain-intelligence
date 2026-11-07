@@ -210,6 +210,16 @@ class DetectorsTest {
         final Detector d = new ExposureDetector();
         final Address sanctioned = a("5a9c");
 
+        @Test void skipsTheGraphWalkWhenNothingIsListed() {
+            // no label at all: no exposure is possible, and the costly upstream walk must not run
+            assertThat(fx.labels.hasRisky()).isFalse();
+            assertThat(d.detect(fx.ctx(me, fx.flow(a("h1"), me, "1000", min(0))))).isEmpty();
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            assertThat(fx.labels.hasRisky()).isTrue();
+            fx.labels.remove(sanctioned, LabelCategory.SANCTIONED, fx.labels.findByAddress(sanctioned).getFirst().source());
+            assertThat(fx.labels.hasRisky()).isFalse();
+        }
+
         @Test void directSanctionedExposureIsConfirmedBySource() {
             fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
             ValueFlow f = fx.flow(sanctioned, me, "50", min(0));

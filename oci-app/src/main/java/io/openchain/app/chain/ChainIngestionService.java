@@ -70,6 +70,7 @@ public class ChainIngestionService {
     private static final Logger log = LoggerFactory.getLogger(ChainIngestionService.class);
     private static final int MAX_SIGNALS_KEPT = 10_000;
     private static final int MAX_POLLS_PER_TICK = 1_000;
+    private static final java.time.Duration REAL_CHAIN_TICK = java.time.Duration.ofSeconds(2);
 
     /** One indexed network. */
     public static final class NetworkRuntime {
@@ -160,7 +161,10 @@ public class ChainIngestionService {
         if (runtimes.containsKey(n)) throw new IllegalStateException("network already registered: " + n.id());
         // TODO(persistence): PostgreSQL checkpoint store; in memory, indexing restarts from the configured start block
         // (alert creation is idempotent on replayed events, see AlertService#onMatch)
-        BlockIndexer indexer = new BlockIndexer(provider, new InMemoryCheckpointStore(), this::onEvent, config, tokens, clock);
+        BlockIndexer indexer = new BlockIndexer(provider, new InMemoryCheckpointStore(), new io.openchain.blockchain.indexer.ChainEventSink() {
+            @Override public void emit(ChainEvent e) { onEvent(e); }
+            @Override public void prepare(List<ChainEvent> blockEvents) { prefetchBalances(blockEvents); }
+        }, config, tokens, clock);
         NetworkRuntime rt = new NetworkRuntime(n, provider, simulator, ledger, indexer, blockTime);
         rt.indexerConfig = config;
         runtimes.put(n, rt);
@@ -182,13 +186,24 @@ public class ChainIngestionService {
     // ---- polling ----------------------------------------------------------------------------------------------
 
     /** Indexes everything currently available on one network (bounded), recording errors instead of throwing. */
-    public synchronized void poll(NetworkRuntime rt) {
+    public void poll(NetworkRuntime rt) {
+        synchronized (rt) { pollLocked(rt); }
+    }
+
+    private void pollLocked(NetworkRuntime rt) {
         rt.lastPollAt = clock.instant();
         try {
+            // head known BEFORE indexing, so real balance lookups can be skipped while catching up (withinBalanceBudget)
+            rt.lastStatus = rt.provider.getNetworkStatus();
+            // a real chain yields after REAL_CHAIN_TICK so other networks (same scheduler thread, same lock) keep up;
+            // simulated and demo chains drain everything available, as before
+            boolean real = rt.simulator == null && rt.ledger == null;
+            long deadline = System.nanoTime() + REAL_CHAIN_TICK.toNanos();
             for (int i = 0; i < MAX_POLLS_PER_TICK; i++) {
                 BlockIndexer.PollResult r = rt.indexer.poll();
                 rt.lastIndexedBlock = r.lastBlock();
                 if (r.blocksIndexed() == 0) break;
+                if (real && System.nanoTime() > deadline) break;
             }
             rt.lastStatus = rt.provider.getNetworkStatus();
             rt.lastError = null;
@@ -213,8 +228,22 @@ public class ChainIngestionService {
 
     // ---- event pipeline ---------------------------------------------------------------------------------------
 
-    /** Indexer sink. Package-visible for tests; called under the {@link #poll} lock. */
+    /**
+     * Indexer sink. Package-visible for tests. Networks are polled concurrently (one lock per network, see
+     * {@link #poll}); the real balance lookup (an RPC round trip) happens here, outside the service lock, and the
+     * processing itself is serialised by {@link #process}.
+     */
     void onEvent(ChainEvent e) {
+        Optional<BigDecimal> balance = Optional.empty();
+        if (!e.removed() && (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER)
+                && intelligence.balances().authoritative(e.network())) {
+            Optional<ValueFlow> flow = toFlow(e);
+            if (flow.isPresent()) balance = realBalanceBefore(flow.get().from(), flow.get().token(), e.blockNumber());
+        }
+        process(e, balance);
+    }
+
+    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (e.removed()) {
@@ -236,7 +265,7 @@ public class ChainIngestionService {
                 Optional<BigDecimal> realBalance = Optional.empty();
                 boolean real = intelligence.balances().authoritative(e.network());
                 if (real) {
-                    realBalance = realBalanceBefore(f.from(), f.token(), e.blockNumber());
+                    realBalance = prefetchedBalance;
                     realBalance.ifPresent(b -> intelligence.balances().recordSenderBalanceBefore(f.eventId(), b));
                 }
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
@@ -345,6 +374,68 @@ public class ChainIngestionService {
      * {@code block}), from the network's provider; cached per (address, token, block) in a bounded LRU, so several
      * transfers of one block cost one call. Empty when the provider cannot tell or fails (counted).
      */
+    /** Per-network budget of real balance lookups (see OciProperties.Chain); defaults apply when not configured. */
+    public record BalanceBudget(int maxLookupsPerBlock, long maxLag) {
+        public static final BalanceBudget DEFAULT = new BalanceBudget(5, 32);
+    }
+
+    private final Map<Network, BalanceBudget> balanceBudgets = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<Network, long[]> balanceBudgetUse = new java.util.concurrent.ConcurrentHashMap<>(); // {block, used}
+    private final AtomicLong balanceLookupsSkipped = new AtomicLong();
+
+    public void setBalanceBudget(Network n, BalanceBudget b) { balanceBudgets.put(n, b); }
+
+    /** Lookups not made because of the catch-up or per-block budget: wallet.balance was then absent. */
+    public long balanceLookupsSkipped() { return balanceLookupsSkipped.get(); }
+
+    /**
+     * True when a real balance lookup may be made for this block: not while catching up far behind the head (a
+     * synchronous RPC call per transfer would stall indexing and start-up), and at most N per block and network.
+     */
+    private boolean withinBalanceBudget(NetworkRuntime rt, long block) {
+        BalanceBudget b = balanceBudgets.getOrDefault(rt.network(), BalanceBudget.DEFAULT);
+        NetworkStatus st = rt.lastStatus();
+        long head = st == null ? -1 : st.headBlock();
+        if (head > 0 && head - block > b.maxLag()) return false;
+        long[] use = balanceBudgetUse.computeIfAbsent(rt.network(), k -> new long[]{-1, 0});
+        synchronized (use) {
+            if (use[0] != block) { use[0] = block; use[1] = 0; }
+            if (use[1] >= b.maxLookupsPerBlock()) return false;
+            use[1]++;
+            return true;
+        }
+    }
+
+    /** One virtual thread per balance lookup: they only wait on the provider (Java 25 runtime: no pinning). */
+    private final java.util.concurrent.ExecutorService lookups = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+
+    /**
+     * Fetches, concurrently, the real balances the block's transfers will ask for (see {@link #onEvent}), so the
+     * sequential processing then finds them in the cache. Same selection as sequential processing: the first distinct
+     * (sender, token) pairs of the block, within the per-block budget; nothing while catching up.
+     */
+    void prefetchBalances(List<ChainEvent> blockEvents) {
+        if (blockEvents.isEmpty()) return;
+        ChainEvent first = blockEvents.getFirst();
+        NetworkRuntime rt = runtimes.get(first.network());
+        if (rt == null || !intelligence.balances().authoritative(first.network())) return;
+        BalanceBudget b = balanceBudgets.getOrDefault(rt.network(), BalanceBudget.DEFAULT);
+        NetworkStatus st = rt.lastStatus();
+        if (st != null && st.headBlock() > 0 && st.headBlock() - first.blockNumber() > b.maxLag()) return;
+        java.util.LinkedHashMap<String, ValueFlow> wanted = new java.util.LinkedHashMap<>();
+        for (ChainEvent e : blockEvents) {
+            if (wanted.size() >= b.maxLookupsPerBlock()) break;
+            if (e.removed() || (e.type() != ChainEvent.EventType.TOKEN_TRANSFER && e.type() != ChainEvent.EventType.NATIVE_TRANSFER)) continue;
+            toFlow(e).ifPresent(f -> wanted.putIfAbsent(f.from().value() + "|" + ValueFlow.tokenKey(f.token()), f));
+        }
+        if (wanted.size() < 2) return; // nothing to parallelise: sequential processing does it
+        List<java.util.concurrent.CompletableFuture<?>> all = new ArrayList<>();
+        for (ValueFlow f : wanted.values()) {
+            all.add(java.util.concurrent.CompletableFuture.runAsync(() -> realBalanceBefore(f.from(), f.token(), first.blockNumber()), lookups));
+        }
+        java.util.concurrent.CompletableFuture.allOf(all.toArray(java.util.concurrent.CompletableFuture[]::new)).join();
+    }
+
     Optional<BigDecimal> realBalanceBefore(Address a, Token token, long block) {
         NetworkRuntime rt = runtimes.get(a.network());
         if (rt == null || block <= 0) return Optional.empty();
@@ -354,6 +445,10 @@ public class ChainIngestionService {
         if (cached != null) {
             balanceCacheHits.incrementAndGet();
             return cached;
+        }
+        if (!withinBalanceBudget(rt, block)) {
+            balanceLookupsSkipped.incrementAndGet();
+            return Optional.empty(); // not cached: a later event of the same block may fit in the budget
         }
         Optional<BigDecimal> v;
         try {
