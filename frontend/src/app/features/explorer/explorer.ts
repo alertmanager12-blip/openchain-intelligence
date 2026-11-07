@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { NETWORKS, NetworkId } from '../../core/models';
+import { EnabledNetworks } from '../../core/enabled-networks';
 import { detectQuery } from '../../core/network-detect';
 import { apiResource } from '../../shared/api-resource';
 import { formatUnits, timeAgo, netLabel } from '../../shared/format';
@@ -34,8 +35,8 @@ const EXAMPLES: { family: string; example: string }[] = [
         <mat-form-field>
           <mat-label>Network</mat-label>
           <mat-select [value]="net()" (valueChange)="net.set($event)">
-            <mat-option [value]="null">Detect ({{ det().candidates[0] ?? 'none' }})</mat-option>
-            @for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }
+            <mat-option [value]="null">Detect ({{ detected() ?? 'no enabled network' }})</mat-option>
+            @for (n of networks(); track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }
           </mat-select>
         </mat-form-field>
         <button matButton="filled" type="submit" [disabled]="det().kind === 'unknown'">Search</button>
@@ -125,11 +126,15 @@ const EXAMPLES: { family: string; example: string }[] = [
 export class ExplorerPage {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly enabledNetworks = inject(EnabledNetworks);
   /** Bound from query params. */
   readonly q = input<string>();
   readonly network = input<NetworkId>();
 
-  readonly networks = NETWORKS;
+  /** Networks offered in the selector: those this instance indexes (all known ones while that list is loading). */
+  readonly networks = computed<NetworkId[]>(() => this.enabledNetworks.enabled() ?? [...NETWORKS]);
+  /** Detected network: the most likely candidate that is enabled here. */
+  readonly detected = computed<NetworkId | undefined>(() => this.enabledNetworks.enabledCandidates(this.det().candidates)[0]);
   readonly netLabel = netLabel;
   readonly examples = EXAMPLES;
   readonly text = signal('');
@@ -145,7 +150,7 @@ export class ExplorerPage {
       const q = this.q();
       if (!q) return undefined;
       const d = detectQuery(q);
-      const n = this.network() ?? d.candidates[0];
+      const n = this.network() ?? this.enabledNetworks.enabledCandidates(d.candidates)[0];
       return d.kind === 'transaction' && n ? { hash: d.normalized, network: n } : undefined;
     },
     stream: (p) => this.api.transactionAnalysis(p.hash, p.network),
@@ -163,7 +168,7 @@ export class ExplorerPage {
 
   submit(): void {
     const d = this.det();
-    const n = this.net() ?? d.candidates[0];
+    const n = this.net() ?? this.detected();
     if (!n) return;
     if (d.kind === 'address') this.router.navigate(['/wallets', n, d.normalized]);
     else this.router.navigate(['/explorer'], { queryParams: { q: d.normalized, network: n } });

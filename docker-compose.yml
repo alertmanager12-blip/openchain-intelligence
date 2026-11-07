@@ -51,6 +51,22 @@ services:
       OCI_CRYPTO_MASTER_KEY: ${OCI_CRYPTO_MASTER_KEY:-b2NpLWRldi1vbmx5LW1hc3Rlci1rZXktMDAwMDAwMDA=}
       OCI_SECURITY_OIDC_ISSUER_URI: ${OCI_SECURITY_OIDC_ISSUER_URI:-}
       OCI_TELEGRAM_BOT_TOKEN: ${OCI_TELEGRAM_BOT_TOKEN:-}
+      # Production: an administrator API key provisioned from the environment (format oci_live_<8 chars>_<32+ chars>;
+      # only its hash is stored). Demo mode generates one instead and prints it in the logs.
+      OCI_SECURITY_KEYS_0_NAME: ${OCI_ADMIN_KEY_NAME:-admin}
+      OCI_SECURITY_KEYS_0_KEY: ${OCI_ADMIN_API_KEY:-}
+      OCI_SECURITY_KEYS_0_SCOPES_0: "*"
+      # Real chains (off by default). See docs/guides/installation.md, "Configuration".
+      OCI_CHAINS_ETHEREUM_ENABLED: ${OCI_CHAINS_ETHEREUM_ENABLED:-false}
+      OCI_CHAINS_ETHEREUM_PROVIDER: json-rpc
+      OCI_CHAINS_ETHEREUM_URL: ${OCI_CHAINS_ETHEREUM_URL:-}
+      OCI_CHAINS_ETHEREUM_START_BLOCK: ${OCI_CHAINS_ETHEREUM_START_BLOCK:--100}
+      OCI_CHAINS_TRON_ENABLED: ${OCI_CHAINS_TRON_ENABLED:-false}
+      OCI_CHAINS_TRON_PROVIDER: trongrid
+      OCI_CHAINS_TRON_URL: ${OCI_CHAINS_TRON_URL:-https://api.trongrid.io}
+      OCI_CHAINS_TRON_API_KEY_HEADER: TRON-PRO-API-KEY
+      OCI_CHAINS_TRON_API_KEY: ${OCI_CHAINS_TRON_API_KEY:-}
+      OCI_CHAINS_TRON_START_BLOCK: ${OCI_CHAINS_TRON_START_BLOCK:--100}
       SERVER_PORT: "8080"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"

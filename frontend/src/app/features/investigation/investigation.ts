@@ -6,6 +6,7 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { Router } from '@angular/router';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
+import { EnabledNetworks } from '../../core/enabled-networks';
 import { Graph, GraphNode, NETWORKS, NetworkId, RiskLevel } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
 import { ThemeService } from '../../core/theme.service';
@@ -54,7 +55,7 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
         </mat-form-field>
         <mat-form-field class="netf">
           <mat-label>Network</mat-label>
-          <mat-select [value]="net()" (valueChange)="net.set($event)">@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
+          <mat-select [value]="net()" (valueChange)="net.set($event)">@for (n of networks(); track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
         </mat-form-field>
         <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">Load graph</button>
       </form>
@@ -160,13 +161,15 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
 export class InvestigationPage {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly enabledNetworks = inject(EnabledNetworks);
   protected readonly theme = inject(ThemeService);
   protected readonly toasts = inject(Toasts);
   /** Query params. */
   readonly address = input<string>();
   readonly network = input<NetworkId>();
 
-  readonly networks = NETWORKS;
+  /** Only networks this instance indexes (all known ones while that list is loading). */
+  readonly networks = computed<NetworkId[]>(() => this.enabledNetworks.enabled() ?? [...NETWORKS]);
   readonly crumbs = computed<Crumb[]>(() => {
     const r = this.root();
     return r ? [{ label: 'Fund flow graph', link: '/investigation' }, { label: shortHash(r, 6, 4), mono: true }] : [{ label: 'Fund flow graph' }];
@@ -240,7 +243,8 @@ export class InvestigationPage {
 
   submit(): void {
     const d = detectQuery(this.addr());
-    const n = d.candidates.includes(this.net()) ? this.net() : (d.candidates[0] ?? this.net());
+    const usable = this.enabledNetworks.enabledCandidates(d.candidates);
+    const n = usable.includes(this.net()) ? this.net() : (usable[0] ?? this.net());
     const address = d.normalized || this.addr().trim();
     if (this.address() === address && this.network() === n) this.graph.reload();
     else this.router.navigate(['/investigation'], { queryParams: { address, network: n } });

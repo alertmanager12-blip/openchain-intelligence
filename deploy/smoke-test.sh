@@ -6,6 +6,18 @@
 # Catches failures that image builds alone do not: missing runtime modules in the JRE image, missing rule pack, etc.
 set -euo pipefail
 
+# Isolation from a real deployment: the smoke stack is a separate compose project (own containers and pgdata volume),
+# always in demo mode with real chains off and no provisioned admin key, whatever a local .env holds. It still uses
+# ports 8080/4200, so stop a running deployment first (`docker compose down`, data kept).
+export COMPOSE_PROJECT_NAME=${SMOKE_PROJECT:-oci-smoke}
+export OCI_DEMO_MODE=true OCI_CHAINS_ETHEREUM_ENABLED=false OCI_CHAINS_TRON_ENABLED=false OCI_ADMIN_API_KEY=
+export OCI_SECURITY_API_KEY_PEPPER= OCI_CRYPTO_MASTER_KEY=b2NpLWRldi1vbmx5LW1hc3Rlci1rZXktMDAwMDAwMDA=
+for p in 8080 4200; do
+  if docker ps --format '{{.Ports}} {{.Label "com.docker.compose.project"}}' | grep -E ":$p->" | grep -vq " $COMPOSE_PROJECT_NAME\$"; then
+    echo "SMOKE FAIL: port $p is used by another stack (stop it with 'docker compose down'; its data is kept)" >&2; exit 1
+  fi
+done
+
 API=${API:-http://localhost:8080}
 UI=${UI:-http://localhost:4200}
 fail() { echo "SMOKE FAIL: $*" >&2; docker compose logs app --tail 80 >&2 || true; exit 1; }
@@ -13,7 +25,7 @@ cleanup() { [ "${KEEP_RUNNING:-0}" = 1 ] || docker compose down >/dev/null 2>&1 
 trap cleanup EXIT
 
 echo "== starting stack"
-OCI_DEMO_MODE=true docker compose up -d --build --wait --wait-timeout 240 || fail "stack did not become healthy"
+docker compose up -d --build --wait --wait-timeout 240 || fail "stack did not become healthy"
 
 echo "== console page is fully styled under the production CSP"
 # nginx sends script-src 'self': an inline <script> is blocked. Angular's critical-CSS inlining relied on one to switch

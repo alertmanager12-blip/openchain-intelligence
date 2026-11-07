@@ -3,6 +3,7 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { NetworkId, Severity } from '../core/models';
+import { EnabledNetworks } from '../core/enabled-networks';
 import { detectQuery } from '../core/network-detect';
 import { apiResource } from '../shared/api-resource';
 import { shortHash } from '../shared/format';
@@ -82,6 +83,7 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
 export class CommandPalette {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
+  private readonly networks = inject(EnabledNetworks);
   readonly open = model(false);
   private readonly dialog = inject(MatDialog);
   private readonly tpl = viewChild.required<TemplateRef<unknown>>('dialogTpl');
@@ -103,7 +105,17 @@ export class CommandPalette {
     const out: PaletteOption[] = [];
     const d = this.detection();
     if (d && d.kind !== 'unknown') {
-      for (const n of d.candidates) {
+      // only networks this instance indexes: the address format alone cannot tell Ethereum, BSC and Polygon apart
+      const usable = this.networks.enabledCandidates(d.candidates);
+      if (!usable.length) {
+        const names = d.candidates.map((n) => NET_LABEL[n]).join(', ');
+        out.push({
+          id: 'po-go-none', group: 'Go to address or transaction',
+          label: `No enabled network for this ${d.kind}`, hint: `${names}: not enabled on this instance`,
+          run: () => this.router.navigate(['/settings']),
+        });
+      }
+      for (const n of usable) {
         out.push({
           id: `po-go-${n}`, group: 'Go to address or transaction',
           label: `${d.kind === 'address' ? 'Open address' : 'Open transaction'} on ${NET_LABEL[n]}`, hint: shortHash(d.normalized, 10, 8),
