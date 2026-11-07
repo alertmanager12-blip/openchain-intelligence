@@ -1,9 +1,8 @@
-import { ChangeDetectionStrategy, Component, Injector, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, inject, input, linkedSignal, signal } from '@angular/core';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { MatTabsModule } from '@angular/material/tabs';
 import { FormField, form, required, submit, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
@@ -20,11 +19,13 @@ import { PageHeader } from '../../shared/page-header';
 import { UI, sentence } from '../../shared/ui';
 import { environment } from '../../../environments/environment';
 
+type Section = 'connection' | 'appearance' | 'keys' | 'users';
+
 const SCOPES = ['rules:read', 'rules:write', 'alerts:read', 'alerts:write', 'wallets:read', 'labels:write'];
 
 @Component({
   selector: 'oci-settings',
-  imports: [FormField, PageHeader, MatTabsModule, MatSlideToggleModule, MatRadioModule, MatCheckboxModule, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [FormField, PageHeader, MatSlideToggleModule, MatRadioModule, MatCheckboxModule, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings.html',
   styleUrl: './settings.scss',
@@ -45,8 +46,12 @@ export class SettingsPage {
 
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
-  /** Selected tab: Connection, Appearance, API keys, Users and roles. */
-  readonly section = signal(0);
+  /** Section from the URL (?section=keys, from the account menu); the sub-navigation changes it in place. */
+  readonly sectionParam = input<string | undefined>(undefined, { alias: 'section' });
+  readonly sections: { id: Section; label: string }[] = [
+    { id: 'connection', label: 'Connection' }, { id: 'appearance', label: 'Appearance' }, { id: 'keys', label: 'API keys' }, { id: 'users', label: 'Users and roles' },
+  ];
+  readonly section = linkedSignal<Section>(() => (this.sections.some((x) => x.id === this.sectionParam()) ? (this.sectionParam() as Section) : 'connection'));
   readonly keyCols = ['name', 'key', 'scopes', 'used', 'actions'];
   readonly userCols = ['user', 'role', 'login'];
   readonly byId = (_: number, r: { id: string }) => r.id;
@@ -63,6 +68,17 @@ export class SettingsPage {
   });
   readonly newSecret = signal<string | null>(null);
   readonly keyError = signal<ApiError | null>(null);
+
+  /** Vertical tab list: arrow keys move between sections (WAI-ARIA tabs pattern, automatic activation). */
+  tabKey(e: KeyboardEvent): void {
+    const i = this.sections.findIndex((x) => x.id === this.section());
+    const n = this.sections.length;
+    const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    this.section.set(this.sections[next].id);
+    (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`#tab-${this.sections[next].id}`)?.focus();
+  }
 
   toggleMock(): void {
     this.settings.update({ mock: !this.conn().mock });

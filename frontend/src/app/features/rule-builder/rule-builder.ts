@@ -35,9 +35,8 @@ import { WindowStep } from './window-step';
   template: `
     <div class="page">
       <oci-page-header heading="Rule builder" lede="Compose a rule without code. Rules are declarative data checked against a fixed set of operators, so nothing you type is ever executed.">
-        <mat-form-field class="open">
-          <mat-label>Open a rule</mat-label>
-          <mat-select [value]="loadedId()" (valueChange)="loadRule($event)">
+        <mat-form-field class="open" subscriptSizing="dynamic">
+          <mat-select [value]="loadedId()" (valueChange)="loadRule($event)" aria-label="Open a rule">
             <mat-option value="">New rule</mat-option>@for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ r.name }}</mat-option> }
           </mat-select>
         </mat-form-field>
@@ -111,34 +110,37 @@ import { WindowStep } from './window-step';
     </div>
   `,
   styles: `
-    .open { width: 260px; }
+    .open { width: 220px; }
     .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 24px; align-items: start; }
     .layout.review { grid-template-columns: minmax(0, 1fr); }
     @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-    .main { padding: 4px 20px 20px; }
+    .main { padding: 0 20px 20px; }
     .step-body { display: grid; gap: 18px; padding-top: 18px; }
-    .step-hint { margin: 0 0 -6px; font: 600 13px var(--font-display); color: var(--muted); letter-spacing: 0.01em; }
+    .step-hint { margin: 0 0 -6px; font: 500 13px var(--font); color: var(--ink); }
     .lead { margin: 0; }
-    .iss { display: inline-block; margin-left: 8px; font: 600 12px/20px var(--font); color: var(--danger); background: color-mix(in srgb, var(--risk-critical) var(--tint), var(--surface)); padding: 0 7px; border-radius: 10px; vertical-align: 1px; }
+    .iss { display: inline-block; margin-left: 6px; font: 500 11px/18px var(--font); color: var(--danger); background: color-mix(in srgb, var(--risk-critical) var(--tint), var(--surface)); padding: 0 7px; border-radius: 10px; vertical-align: 1px; }
     .foot { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--line-soft); }
-    .side { position: sticky; top: 76px; display: grid; gap: 8px; }
+    .side { position: sticky; top: calc(var(--topbar-h) + 16px); display: grid; gap: 8px; }
     .act { margin-left: auto; }
     .yaml { max-height: 60vh; }
     .yaml-full { max-height: 70vh; }
     .verdict { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
-    .errs { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 14px; }
+    .errs { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
     .errs li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--danger); }
-    /* the stepper sits on the raised panel: flat header, numbered discs in the instrument style */
+    /* flat stepper: small numbered discs, a hairline under the header, no ripple or hover wash */
     mat-stepper { background: transparent; }
     :host ::ng-deep .mat-horizontal-stepper-header-container { margin: 0 -20px; padding: 0 8px; border-bottom: 1px solid var(--line-soft); }
     :host ::ng-deep .mat-horizontal-content-container { padding: 0; }
-    :host ::ng-deep .mat-step-icon { font: 600 14px var(--font-display); box-shadow: var(--shadow-inset); }
+    :host ::ng-deep .mat-step-icon { width: 20px; height: 20px; font: 600 11px var(--font); box-shadow: inset 0 0 0 1px var(--line); }
     :host ::ng-deep .mat-step-icon-selected { box-shadow: none; }
     :host ::ng-deep .mat-step-icon-state-error { background: color-mix(in srgb, var(--risk-critical) var(--tint), var(--surface)); color: var(--danger); box-shadow: none; }
+    :host ::ng-deep .mat-step-header .mat-step-header-ripple, :host ::ng-deep .mat-step-header:hover { background: transparent; }
+    :host ::ng-deep .mat-step-header:hover .mat-step-label { color: var(--ink); }
     :host ::ng-deep .mat-step-label-error .mat-step-sub-label-error { display: none; }
-    :host ::ng-deep .mat-horizontal-stepper-header { padding: 0 14px; }
-    :host ::ng-deep .mat-stepper-horizontal-line { min-width: 12px; }
-    @media (max-width: 720px) { .main { padding: 8px 8px 16px; } .open { width: 100%; } }
+    :host ::ng-deep .mat-horizontal-stepper-header { padding: 0 12px; border-radius: 0; }
+    :host ::ng-deep .mat-step-header .mat-step-icon { margin-right: 8px; }
+    :host ::ng-deep .mat-stepper-horizontal-line { min-width: 12px; border-top-color: var(--line); }
+    @media (max-width: 720px) { .main { padding: 8px 8px 16px; } .open { width: 150px; } }
   `,
 })
 export class RuleBuilderPage {

@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { ALERT_STATUSES, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
+import { ALERT_STATUSES, NetworkId, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
@@ -23,6 +23,7 @@ const LAG_WARN = 200;
 })
 export class OverviewPage {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   /** One call: GET /dashboard. */
   readonly dash = apiResource({ params: () => ({}), stream: () => this.api.dashboard() });
   /** Recent alerts also show their subject wallet's score (GET /wallets/{a}/risk each); null = could not be scored. */
@@ -48,8 +49,7 @@ export class OverviewPage {
   readonly statuses = ALERT_STATUSES;
   readonly lagWarn = LAG_WARN;
   readonly openNet = signal<string | null>(null);
-  readonly recentCols = ['alert', 'score', 'created'];
-  readonly netCols = ['x', 'network', 'health', 'head', 'lag', 'latency', 'checked'];
+    readonly netCols = ['x', 'network', 'health', 'head', 'lag', 'latency', 'checked'];
   readonly signalCols = ['signal', 'evidence', 'address', 'detected'];
   readonly byId = (_: number, r: { id: string }) => r.id;
   readonly byNetwork = (_: number, r: NetworkStatus) => r.network;
@@ -74,6 +74,15 @@ export class OverviewPage {
 
   lag(x: NetworkStatus): number {
     return x.indexerLag ?? x.headBlock - x.finalizedBlock;
+  }
+
+  /** Whole-row navigation (the row also holds a real link for keyboard and assistive tech). */
+  openAlert(id: string): void {
+    void this.router.navigate(['/alerts'], { queryParams: { id } });
+  }
+
+  openWallet(network: NetworkId, address: string): void {
+    void this.router.navigate(['/wallets', network, address]);
   }
 
   toggleNet(id: string): void {

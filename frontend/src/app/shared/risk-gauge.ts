@@ -74,28 +74,29 @@ export function levelLabel(l: RiskLevel): string {
     }
   `,
   styles: `
-    :host { display: inline-grid; grid-template-columns: 3ch minmax(64px, 1fr); align-items: center; gap: 8px; min-width: 0; font-variant-numeric: tabular-nums; vertical-align: middle; }
-    :host(.gauge--lg) { display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; max-width: 560px; }
-    .score { font: 600 15px/1 var(--font-display); text-align: right; color: var(--ink); }
-    .readout { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-    .readout .score { font-size: 52px; line-height: 0.95; letter-spacing: -0.02em; text-align: left; }
-    .of { color: var(--muted); font-size: 14px; }
-    .lvl { margin-left: 10px; font: 600 20px var(--font-display); }
+    :host { display: inline-grid; grid-template-columns: 3ch minmax(56px, 1fr); align-items: center; gap: 8px; min-width: 0; font-variant-numeric: tabular-nums; vertical-align: middle; }
+    :host(.gauge--lg) { display: grid; grid-template-columns: 1fr; gap: 6px; width: 100%; max-width: 520px; }
+    .score { font: 500 13px/1 var(--font); text-align: right; color: var(--ink); }
+    .readout { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+    .readout .score { font-size: 28px; font-weight: 600; line-height: 1; letter-spacing: -0.03em; text-align: left; }
+    .of { color: var(--muted); font-size: 12px; }
+    .lvl { margin-left: 8px; font-size: 13px; font-weight: 500; }
     :host(.lv-low) .lvl { color: var(--risk-low-text); }
     :host(.lv-medium) .lvl { color: var(--risk-medium-text); }
     :host(.lv-high) .lvl { color: var(--risk-high-text); }
     :host(.lv-critical) .lvl { color: var(--risk-critical-text); }
-    :host(.lv-unknown) .lvl { color: var(--muted); font-weight: 500; }
-    .scale { position: relative; display: flex; gap: 2px; height: 6px; }
-    :host(.gauge--lg) .scale { height: 12px; margin-top: 4px; }
-    .seg { position: relative; flex-basis: 0; overflow: hidden; background: color-mix(in srgb, var(--c) 24%, var(--well)); }
+    :host(.lv-unknown) .lvl { color: var(--muted); font-weight: 400; }
+    /* the 2px gaps between bands are the threshold ticks */
+    .scale { position: relative; display: flex; gap: 2px; height: 4px; }
+    :host(.gauge--lg) .scale { height: 6px; margin-top: 2px; }
+    .seg { position: relative; flex-basis: 0; overflow: hidden; background: color-mix(in srgb, var(--c) 18%, var(--line)); }
     .seg.b-low { border-radius: 3px 0 0 3px; } .seg.b-critical { border-radius: 0 3px 3px 0; }
-    .fill { position: absolute; inset: 0 auto 0 0; background: var(--c); transition: width 0.45s var(--ease); }
+    .fill { position: absolute; inset: 0 auto 0 0; background: var(--c); transition: width 0.4s var(--ease); }
     .b-low { --c: var(--risk-low); } .b-medium { --c: var(--risk-medium); } .b-high { --c: var(--risk-high); } .b-critical { --c: var(--risk-critical); }
-    :host(.lv-unknown) .seg { background: var(--line-soft); }
-    .marker { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 0 1.5px var(--surface); transition: left 0.45s var(--ease); }
-    :host(.gauge--lg) .marker { top: -6px; bottom: -6px; }
-    .ticks { position: relative; height: 16px; font-size: 12px; color: var(--muted); }
+    :host(.lv-unknown) .seg { background: var(--line); }
+    .marker { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--ink); box-shadow: 0 0 0 1.5px var(--surface); transition: left 0.4s var(--ease); }
+    :host(.gauge--lg) .marker { top: -4px; bottom: -4px; }
+    .ticks { position: relative; height: 14px; font-size: 11px; color: var(--muted); }
     .tick { position: absolute; top: 0; transform: translateX(-50%); }
     .tick:first-child { transform: none; }
     .tick:last-child { transform: translateX(-100%); }

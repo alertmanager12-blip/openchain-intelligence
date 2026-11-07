@@ -3,6 +3,7 @@
 .unavailable { margin-top: -6px; }
 .hint { margin: 0; }
 .target { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.types { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; }
-.types ::ng-deep .mat-button-toggle-label-content { padding: 0 4px; }
+.types { display: flex; width: 100%; }
+.types ::ng-deep .mat-button-toggle { flex: 1 1 auto; }
+.types ::ng-deep .mat-button-toggle-label-content { padding: 0 6px; font-size: 12.5px; }
 .card-head .status-line { flex-basis: 100%; }

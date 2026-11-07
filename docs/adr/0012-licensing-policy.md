@@ -59,12 +59,14 @@ The console needs self-hosted web fonts: the nginx Content-Security-Policy is `d
 | Packaging | Fonts are kept as separate files in the build output (`dist/frontend/browser/media/`), never inlined into or merged with Apache-2.0 code, never renamed. Using OFL fonts in a document or a web page does not change the licence of that page (OFL-1.1, permission 4 and the FAQ). |
 | Modification | Fonts are used unmodified (only the upstream Fontsource Latin subsets are shipped). A modified font must not use the Reserved Font Name. |
 | Attribution | Each font is credited in `NOTICE` with its copyright line and licence. The OFL text ships inside each npm package (`LICENSE`). |
-| Enforcement | The CI npm licence check allows `OFL-1.1` only for the named font packages (`@fontsource/barlow`, `@fontsource/barlow-semi-condensed`, `@fontsource/jetbrains-mono`); every other package is still checked against the original allowlist. Adding another font package requires updating that list and `NOTICE`. |
+| Enforcement | The CI npm licence check allows `OFL-1.1` only for the named font packages (`@fontsource-variable/inter`, `@fontsource/jetbrains-mono`); every other package is still checked against the original allowlist. Adding another font package requires updating that list and `NOTICE`. |
 
 Fonts adopted: Barlow (UI text), Barlow Semi Condensed (titles, numeric readouts, table headers), JetBrains Mono (addresses, hashes, YAML), via Fontsource 5.3.0, weights 400/500/600, 500/600 and 400 respectively, Latin subset.
 
+Revision (2026-11-07): the console redesign replaces Barlow and Barlow Semi Condensed with **Inter** (`@fontsource-variable/inter` 5.3.0, OFL-1.1, Copyright 2016 The Inter Project Authors), one variable file (weight axis 100 to 900) for all UI text, titles and figures. Only the Latin weight-axis subset is declared (`frontend/src/theme/inter.css`), so a single unmodified upstream WOFF2 of about 48 KB ships. The Barlow packages are removed from the dependencies and from the CI allow-list. JetBrains Mono is unchanged.
+
 ### Consequences
 
-- Consistent rendering and tabular figures (OpenType `tnum`, verified in the shipped Barlow and Barlow Semi Condensed files) across platforms.
+- Consistent rendering and tabular figures (OpenType `tnum`, available in Inter and JetBrains Mono) across platforms.
 - About 134 KB of WOFF2 for the six faces (272 KB on disk including the WOFF fallbacks); browsers download only the faces a page uses (`font-display: swap`).
 

@@ -1,71 +1,61 @@
 <div class="page">
   <oci-page-header heading="Overview" lede="Open alerts, ingestion health and the latest signals. A signal is a reason to look closer, not proof of wrongdoing.">
-    @if (dash.value(); as d) { <span class="small muted">Updated {{ ago(d.generatedAt) }}</span> }
+    @if (dash.value(); as d) { <span class="small muted hide-sm">Updated {{ ago(d.generatedAt) }}</span> }
     <button matButton="outlined" type="button" (click)="dash.reload()" [disabled]="dash.loading()">Refresh</button>
   </oci-page-header>
 
-  <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="4" loadingText="Loading the dashboard" (retry)="dash.reload()">
+  <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="6" loadingText="Loading the dashboard" (retry)="dash.reload()">
     @if (dash.value(); as d) {
-      <section class="panel-raised primary" aria-labelledby="h-now">
+      <section aria-labelledby="h-now">
         <h2 id="h-now" class="sr-only">Right now</h2>
-        <div class="well lead">
-          <dl class="readout readout--lg">
+        <dl class="stats">
+          <div class="stat">
             <dt>Open alerts</dt>
-            <dd>{{ openAlerts() ?? '–' }}</dd>
-          </dl>
-          @if (openUrgent(); as u) {
-            <div class="urgent">
-              <a class="sev-link" [routerLink]="['/alerts']" [queryParams]="{ severity: 'CRITICAL', status: 'OPEN' }"><span class="num">{{ u.critical }}</span><oci-severity value="CRITICAL" /></a>
-              <a class="sev-link" [routerLink]="['/alerts']" [queryParams]="{ severity: 'HIGH', status: 'OPEN' }"><span class="num">{{ u.high }}</span><oci-severity value="HIGH" /></a>
-              <a matButton="filled" [routerLink]="['/alerts']" [queryParams]="{ status: 'OPEN' }">Triage open alerts</a>
-            </div>
-          } @else { <p class="small muted">Your role has no alerts:read permission.</p> }
-        </div>
-        <p class="status-line">
-          <span [class.warn]="health().healthy < health().total"><strong>{{ health().healthy }}</strong> of {{ health().total }} networks healthy</span>
-          <span [class.warn]="health().maxLag > lagWarn">largest indexing lag <strong>{{ n(health().maxLag) }}</strong> blocks</span>
-          <span><strong>{{ d.totals.signals24h ?? '–' }}</strong> signals in the last 24 hours</span>
-          <span><strong>{{ d.totals.rulesEnabled }}</strong> of {{ d.totals.rules }} rules enabled</span>
-          <span><strong>{{ n(d.totals.walletsTracked) }}</strong> wallets tracked</span>
-        </p>
+            <dd><a class="stat-v" routerLink="/alerts" [queryParams]="{ status: 'OPEN' }">{{ openAlerts() ?? '–' }}</a>
+              @if (openUrgent(); as u) {
+                <span class="stat-sub"><a [routerLink]="['/alerts']" [queryParams]="{ severity: 'CRITICAL', status: 'OPEN' }" [class.bad]="u.critical > 0"><span class="num">{{ u.critical }}</span> critical</a>
+                  <a [routerLink]="['/alerts']" [queryParams]="{ severity: 'HIGH', status: 'OPEN' }"><span class="num">{{ u.high }}</span> high</a></span>
+              }</dd>
+          </div>
+          <div class="stat" [class.warn]="health().healthy < health().total"><dt>Networks healthy</dt><dd><span class="stat-v">{{ health().healthy }}</span><span class="stat-of">/ {{ health().total }}</span></dd></div>
+          <div class="stat" [class.warn]="health().maxLag > lagWarn"><dt>Largest indexing lag</dt><dd><span class="stat-v">{{ n(health().maxLag) }}</span><span class="stat-of">blocks</span></dd></div>
+          <div class="stat"><dt>Signals, 24 hours</dt><dd><span class="stat-v">{{ d.totals.signals24h ?? '–' }}</span></dd></div>
+          <div class="stat"><dt>Rules enabled</dt><dd><a class="stat-v" routerLink="/rules/code">{{ d.totals.rulesEnabled }}</a><span class="stat-of">/ {{ d.totals.rules }}</span></dd></div>
+          <div class="stat"><dt>Wallets tracked</dt><dd><span class="stat-v">{{ n(d.totals.walletsTracked) }}</span></dd></div>
+        </dl>
       </section>
 
       <div class="cols">
-        <section class="section" aria-labelledby="h-recent">
-          <div class="section-head"><h2 id="h-recent">Recent alerts</h2><a class="small act" routerLink="/alerts">View all alerts</a></div>
+        <section class="card card--flush" aria-labelledby="h-recent">
+          <div class="card-head"><h2 id="h-recent">Recent alerts</h2><a class="small act" routerLink="/alerts">View all</a></div>
           @if (d.alerts; as al) {
             @if (al.recent.length) {
-              <div class="table-wrap"><table mat-table class="recent" [dataSource]="al.recent" [trackBy]="byId">
-                <ng-container matColumnDef="alert">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Alert</th>
-                  <td mat-cell *matCellDef="let a"><div class="row nowrap-row"><oci-severity [value]="a.severity" /><a class="strong" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }">{{ a.ruleName }}</a></div>
-                    <div class="sub"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.address) { <span class="mono">{{ short(a.address) }}</span> }</div></td>
-                </ng-container>
-                <ng-container matColumnDef="score">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Subject wallet score</th>
-                  <td mat-cell *matCellDef="let a" class="g">
-                    @if (a.address) {
-                      @if (scores.value()?.[a.id]; as s) { <oci-gauge [score]="s.score" [level]="s.level" [label]="'Risk score of ' + short(a.address)" /> }
-                      @else if (scores.value() && scores.value()![a.id] === null) { <span class="small muted">Not available</span> }
-                      @else { <span class="skel bar" aria-label="Loading score"></span> }
-                    } @else { <span class="small muted">No wallet</span> }
-                  </td>
-                </ng-container>
-                <ng-container matColumnDef="created">
-                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Created</th>
-                  <td mat-cell *matCellDef="let a" class="right small nowrap muted">{{ ago(a.createdAt) }}</td>
-                </ng-container>
-                <tr mat-header-row *matHeaderRowDef="recentCols"></tr>
-                <tr mat-row *matRowDef="let a; columns: recentCols"></tr>
-              </table></div>
-            } @else { <div class="empty"><strong>No alert yet</strong><span>Enable a rule to start monitoring.</span><a routerLink="/rules/builder">Open the rule builder</a></div> }
-          } @else { <p class="muted">Alerts are hidden: your role has no alerts:read permission.</p> }
+              <ul class="recent">
+                @for (a of al.recent; track a.id) {
+                  <li (click)="openAlert(a.id)">
+                    <span class="sev-dot {{ a.severity }}" [attr.title]="sentence(a.severity)"></span>
+                    <div class="r-main">
+                      <a class="r-title" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }" (click)="$event.stopPropagation()"><span class="sr-only">{{ sentence(a.severity) }}: </span>{{ a.ruleName }}</a>
+                      <div class="r-meta"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.address) { <span class="mono">{{ short(a.address) }}</span> }</div>
+                    </div>
+                    <div class="r-score">
+                      @if (a.address) {
+                        @if (scores.value()?.[a.id]; as s) { <oci-gauge [score]="s.score" [level]="s.level" [label]="'Risk score of ' + short(a.address)" /> }
+                        @else if (scores.value() && scores.value()![a.id] === null) { <span class="small muted">Not available</span> }
+                        @else { <span class="skel bar" aria-label="Loading score"></span> }
+                      } @else { <span class="small muted">No wallet</span> }
+                    </div>
+                    <time class="r-time" [attr.datetime]="a.createdAt">{{ ago(a.createdAt) }}</time>
+                  </li>
+                }
+              </ul>
+            } @else { <div class="empty"><span>No alert yet. Enable a rule to start monitoring.</span><a matButton="filled" routerLink="/rules/builder">Create a rule</a></div> }
+          } @else { <p class="empty muted">Alerts are hidden: your role has no alerts:read permission.</p> }
         </section>
 
-        <div class="stack-lg">
-          <section class="section" aria-labelledby="h-dist">
-            <div class="section-head"><h2 id="h-dist">Tracked wallets by risk</h2>
-              <p>Bands follow the engine thresholds {{ thr.MEDIUM }}, {{ thr.HIGH }} and {{ thr.CRITICAL }}.</p></div>
+        <div class="side">
+          <section class="card" aria-labelledby="h-dist">
+            <div class="card-head"><h2 id="h-dist">Tracked wallets by risk</h2></div>
             @if (distTotal() > 0) {
               <div class="dist" role="img" [attr.aria-label]="distAria()">
                 @for (b of dist(); track b.level) {
@@ -74,15 +64,16 @@
               </div>
               <ul class="dist-legend">
                 @for (b of dist(); track b.level) {
-                  <li><span class="sw bg-{{ b.key }}" aria-hidden="true"></span><span class="lbl">{{ b.label }}</span><span class="num strong">{{ n(b.count) }}</span><span class="num muted">{{ b.pct }}%</span></li>
+                  <li><span class="sw bg-{{ b.key }}" aria-hidden="true"></span><span class="lbl">{{ b.label }}</span><span class="num">{{ n(b.count) }}</span><span class="num muted">{{ b.pct }}%</span></li>
                 }
               </ul>
-            } @else { <p class="muted">No wallet has been scored yet. Look up an address in the Explorer to score it.</p> }
+              <p class="small muted foot">Bands follow the engine thresholds {{ thr.MEDIUM }}, {{ thr.HIGH }} and {{ thr.CRITICAL }}.</p>
+            } @else { <p class="muted">No wallet has been scored yet. <a routerLink="/explorer">Look up an address</a> to score it.</p> }
           </section>
 
           @if (d.alerts; as al) {
-            <section class="section" aria-labelledby="h-status">
-              <div class="section-head"><h2 id="h-status">Alerts by status</h2></div>
+            <section class="card" aria-labelledby="h-status">
+              <div class="card-head"><h2 id="h-status">Alerts by status</h2></div>
               <ul class="statuses">
                 @for (s of statuses; track s) {
                   <li><a class="status st-{{ s.toLowerCase() }}" [routerLink]="['/alerts']" [queryParams]="{ status: s }">{{ sentence(s) }}</a><span class="num">{{ al.byStatus[s] ?? 0 }}</span></li>
@@ -93,13 +84,13 @@
         </div>
       </div>
 
-      <section class="section" aria-labelledby="h-net">
-        <div class="section-head"><h2 id="h-net">Networks</h2><p>Head is the latest block seen by the provider. Lag is how far indexing is behind it.</p></div>
+      <section class="card card--flush" aria-labelledby="h-net" id="networks">
+        <div class="card-head"><h2 id="h-net">Networks</h2><span class="small muted">Lag is how far indexing is behind the provider's head block.</span></div>
         <div class="table-wrap"><table mat-table [dataSource]="d.networks" multiTemplateDataRows [trackBy]="byNetwork">
           <ng-container matColumnDef="x">
             <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
             <td mat-cell *matCellDef="let x" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="openNet() === x.network" [attr.aria-controls]="'net-' + x.network"
-              [attr.aria-label]="'Details of ' + x.network" (click)="toggleNet(x.network)">
+              [attr.aria-label]="'Details of ' + x.network" (click)="toggleNet(x.network); $event.stopPropagation()">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg></button></td>
           </ng-container>
           <ng-container matColumnDef="network">
@@ -137,14 +128,14 @@
             </td>
           </ng-container>
           <tr mat-header-row *matHeaderRowDef="netCols"></tr>
-          <tr mat-row *matRowDef="let x; columns: netCols"></tr>
+          <tr mat-row *matRowDef="let x; columns: netCols" class="clickable" (click)="toggleNet(x.network)"></tr>
           <tr mat-row *matRowDef="let x; columns: ['detail']" class="detail-row" [class.open]="openNet() === x.network"></tr>
         </table></div>
       </section>
 
       <div class="cols cols--chart">
-        <section class="section" aria-labelledby="h-act">
-          <div class="section-head"><h2 id="h-act">Activity, last 24 hours</h2></div>
+        <section class="card" aria-labelledby="h-act">
+          <div class="card-head"><h2 id="h-act">Activity, last 24 hours</h2></div>
           @defer (on idle) {
             <oci-activity-chart [activity]="d.activity" />
           } @placeholder {
@@ -152,8 +143,8 @@
           }
         </section>
 
-        <section class="section" aria-labelledby="h-sig">
-          <div class="section-head"><h2 id="h-sig">Recent signals</h2></div>
+        <section class="card card--flush" aria-labelledby="h-sig">
+          <div class="card-head"><h2 id="h-sig">Recent signals</h2></div>
           @if ((d.recentSignals ?? []).length) {
             <div class="table-wrap"><table mat-table [dataSource]="(d.recentSignals ?? []).slice(0, 6)" [trackBy]="byId">
               <ng-container matColumnDef="signal">
@@ -173,9 +164,9 @@
                 <td mat-cell *matCellDef="let s" class="right nowrap small muted">{{ ago(s.detectedAt) }}</td>
               </ng-container>
               <tr mat-header-row *matHeaderRowDef="signalCols"></tr>
-              <tr mat-row *matRowDef="let s; columns: signalCols"></tr>
+              <tr mat-row *matRowDef="let s; columns: signalCols" class="clickable" (click)="openWallet(s.network, s.address)"></tr>
             </table></div>
-          } @else { <p class="muted">No signal detected yet, or your role has no risk:read permission.</p> }
+          } @else { <p class="empty muted">No signal detected yet, or your role has no risk:read permission.</p> }
         </section>
       </div>
     }

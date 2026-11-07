@@ -28,7 +28,7 @@ import { formatUnits } from '../../shared/format';
       </section>
       <section aria-labelledby="h-act">
         <h3 id="h-act">Activity, last 30 days</h3>
-        <div class="well chart">
+        <div class="chart">
           <svg viewBox="0 0 300 80" preserveAspectRatio="none" role="img" [attr.aria-label]="'Daily transactions, peak ' + actMax() + ' per day'">
             @for (d of a().activity; track d.day; let i = $index) {
               <rect [attr.x]="i * 10 + 1" width="4" [attr.y]="80 - (d.txIn / actMax()) * 76" [attr.height]="(d.txIn / actMax()) * 76" class="in-bar"><title>{{ d.day }}: {{ d.txIn }} in</title></rect>
@@ -41,7 +41,7 @@ import { formatUnits } from '../../shared/format';
       <section aria-labelledby="h-rh">
         <h3 id="h-rh">Score history</h3>
         @if (a().risk?.history?.length) {
-          <div class="well chart">
+          <div class="chart">
             <svg viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Risk score over time, with the 35, 65 and 85 thresholds">
               @for (t of [35, 65, 85]; track t) { <line x1="0" x2="300" [attr.y1]="80 - t * 0.8" [attr.y2]="80 - t * 0.8" class="thr-line" /> }
               <polyline [attr.points]="riskLine()" class="risk-line" />
@@ -57,7 +57,7 @@ import { formatUnits } from '../../shared/format';
     section { display: grid; gap: 10px; align-content: start; min-width: 0; }
     p { margin: 0; }
     .mini th[scope='row'] { font-weight: 500; }
-    .chart { padding: 12px; }
+    .chart { padding: 4px 0 0; }
     svg { width: 100%; height: 100px; display: block; }
     .in-bar { fill: var(--ink-2); } .out-bar { fill: var(--accent); }
     .in-bg { background: var(--ink-2); } .out-bg { background: var(--accent); }

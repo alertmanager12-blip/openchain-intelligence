@@ -15,6 +15,7 @@ import { shortHash, netLabel } from '../../shared/format';
 import { levelLabel } from '../../shared/risk-gauge';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { Skeleton } from '../../shared/skeleton';
+import { Crumb, PageHeader } from '../../shared/page-header';
 import { UI } from '../../shared/ui';
 import { GraphCanvas } from './graph-canvas';
 import { GraphCommand, GraphSelection, KeyedEdge } from './graph-model';
@@ -38,28 +39,25 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
 
 @Component({
   selector: 'oci-investigation',
-  imports: [GraphCanvas, GraphInspector, Skeleton, MatButtonToggleModule, MatDatepickerModule, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
+  imports: [PageHeader, GraphCanvas, GraphInspector, Skeleton, MatButtonToggleModule, MatDatepickerModule, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Date range picker on JS Dates; only this page needs a date adapter.
   providers: [provideNativeDateAdapter()],
   template: `
-    <div class="page graph-page">
-      <div class="head">
-        <h1>Fund flow graph</h1>
+    <div class="page wide graph-page">
+      <oci-page-header heading="Fund flow graph" [titleHidden]="true" [crumbs]="crumbs()" />
+      <section class="canvas-card" aria-label="Graph">
         <form class="root-form" (submit)="$event.preventDefault(); submit()" aria-label="Graph root">
-          <mat-form-field class="addr">
-            <mat-label>Root address</mat-label>
-            <input matInput name="a" class="mono" [value]="addr()" (input)="addr.set($any($event.target).value)" placeholder="0x…, T… or a base58 address" autocomplete="off" spellcheck="false" />
-          </mat-form-field>
-          <mat-form-field class="netf">
-            <mat-label>Network</mat-label>
-            <mat-select [value]="net()" (valueChange)="net.set($event)">@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
-          </mat-form-field>
-          <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">Load graph</button>
-        </form>
-      </div>
-
-      <section class="card card--flush canvas-card" aria-label="Graph">
+        <mat-form-field class="addr">
+          <mat-label>Root address</mat-label>
+          <input matInput name="a" class="mono" [value]="addr()" (input)="addr.set($any($event.target).value)" placeholder="0x…, T… or a base58 address" autocomplete="off" spellcheck="false" />
+        </mat-form-field>
+        <mat-form-field class="netf">
+          <mat-label>Network</mat-label>
+          <mat-select [value]="net()" (valueChange)="net.set($event)">@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
+        </mat-form-field>
+        <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">Load graph</button>
+      </form>
         <div class="tools" role="toolbar" aria-label="Graph options">
           <mat-button-toggle-group aria-label="Depth" [value]="depth()" (change)="depth.set($event.value)">
             @for (d of [1, 2, 3]; track d) { <mat-button-toggle [value]="d">{{ d }} {{ d === 1 ? 'hop' : 'hops' }}</mat-button-toggle> }
@@ -120,38 +118,38 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
     </div>
   `,
   styles: `
-    .graph-page { gap: 16px; padding-top: 24px; padding-bottom: 24px; max-width: none; }
-    .head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; }
-    .root-form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-start; flex: 1 1 520px; justify-content: flex-end; }
-    .root-form .addr { flex: 1 1 360px; max-width: 520px; }
+    .graph-page { gap: 0; padding-bottom: 0; height: 100vh; grid-template-rows: auto auto auto minmax(0, 1fr); }
+    .canvas-card { display: contents; }
+    .root-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0 0; }
+    .root-form .addr { flex: 1 1 360px; max-width: 560px; }
     .root-form .netf { width: 150px; }
-    .root-form button { margin-top: 4px; }
-    .tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px 8px; border-bottom: 1px solid var(--line-soft); }
-    .tool { --mat-form-field-container-height: 36px; --mat-form-field-container-vertical-padding: 6px; font-size: 14px; }
+    .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin: 0 calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
+    .root-form { margin: 0 calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
     .tok { width: 140px; }
-    .dates { width: 250px; }
-    .dates svg { width: 18px; height: 18px; }
-    .stats { flex: 1; justify-content: flex-end; flex-wrap: nowrap; gap: 4px 14px; font-size: 14px; white-space: nowrap; }
+    .dates { width: 240px; }
+    .dates svg { width: 16px; height: 16px; }
+    .stats { flex: 1; justify-content: flex-end; flex-wrap: nowrap; gap: 4px 14px; font-size: 12.5px; white-space: nowrap; }
     .expanding { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
-    .stage { position: relative; height: max(620px, calc(100vh - 230px)); background: radial-gradient(circle at 1px 1px, var(--line-soft) 1px, transparent 0) 0 0 / 22px 22px, var(--surface); overflow: hidden; }
+    .stage { position: relative; min-height: 480px; margin: 0 calc(-1 * var(--gutter)); background: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 20px 20px, var(--bg); overflow: hidden; }
     /* the canvas stops short of the floating inspector and legend, so fitting never hides nodes under them */
-    .canvas { display: block; position: absolute; inset: 0 324px 64px 0; }
+    .canvas { display: block; position: absolute; inset: 0 332px 56px 0; }
     .overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: left; pointer-events: none; }
     .overlay .sk { width: min(420px, 80%); }
     .overlay.err { pointer-events: auto; display: flex; flex-direction: column; justify-content: center; gap: 6px; color: var(--danger); background: color-mix(in srgb, var(--surface) 80%, transparent); }
-    .inspector { position: absolute; top: 12px; right: 12px; width: 300px; max-height: calc(100% - 24px); overflow: auto; padding: 16px 18px;
-      background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--shadow-raised); }
-    .legend { position: absolute; left: 12px; bottom: 12px; right: 324px; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 8px 12px; font-size: 13px; color: var(--ink-2);
-      background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line-soft); border-radius: var(--r-control); width: fit-content; backdrop-filter: blur(4px); }
+    .inspector { position: absolute; top: 16px; right: 16px; width: 300px; max-height: calc(100% - 32px); overflow: auto; padding: 14px 16px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-overlay); }
+    .legend { position: absolute; left: 16px; bottom: 16px; right: 332px; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 10px; font-size: 12px; color: var(--ink-2);
+      background: color-mix(in srgb, var(--surface) 90%, transparent); border: 1px solid var(--line); border-radius: 8px; width: fit-content; backdrop-filter: blur(6px); }
     .legend span { display: inline-flex; align-items: center; }
-    .dot-l { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    .dot-l { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
     .shape { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border: 1.5px solid var(--ink-2); }
     .shape.dia { transform: rotate(45deg) scale(0.85); }
     .shape.sq { border-radius: 2px; }
     .shape.root { border-radius: 50%; border-width: 2.5px; border-color: var(--ink); width: 11px; height: 11px; }
     .weight { width: 26px; height: 10px; margin-right: 6px; stroke: var(--muted); fill: none; }
     @media (max-width: 900px) {
-      .stage { height: 460px; overflow: visible; }
+      .graph-page { height: auto; }
+      .stage { overflow: visible; }
       .inspector, .legend { position: static; width: auto; max-height: none; box-shadow: none; border-radius: 0; border-width: 1px 0 0; backdrop-filter: none; }
       .stage { display: grid; grid-template-rows: 460px auto auto; height: auto; }
       .canvas, .overlay { grid-row: 1; position: relative; inset: auto; height: 460px; }
@@ -169,6 +167,10 @@ export class InvestigationPage {
   readonly network = input<NetworkId>();
 
   readonly networks = NETWORKS;
+  readonly crumbs = computed<Crumb[]>(() => {
+    const r = this.root();
+    return r ? [{ label: 'Fund flow graph', link: '/investigation' }, { label: shortHash(r, 6, 4), mono: true }] : [{ label: 'Fund flow graph' }];
+  });
   readonly netLabel = netLabel;
   readonly legend = LEGEND;
   readonly levelLabel = levelLabel;

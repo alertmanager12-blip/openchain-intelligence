@@ -1,4 +1,4 @@
-.sections { max-width: 1080px; }
+
 .switch-row { display: grid; gap: 2px; }
 .switch-row .hint { padding-left: 60px; }
 .auth { width: min(320px, 100%); }
@@ -18,3 +18,17 @@
 .roles dt { font-weight: 600; color: var(--ink); }
 .roles dd { margin: 0; }
 .role { width: 160px; --mat-form-field-container-height: 36px; --mat-form-field-container-vertical-padding: 6px; }
+.layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px; align-items: start; max-width: 1080px; }
+.subnav { display: grid; gap: 1px; position: sticky; top: calc(var(--topbar-h) + 16px); }
+.subnav button {
+  height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--muted); font: inherit; font-size: 13px;
+  font-weight: 500; text-align: left; cursor: pointer; transition: background-color var(--t-fast) var(--ease), color var(--t-fast);
+}
+.subnav button:hover { background: var(--hover); color: var(--ink); }
+.subnav button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.subnav button:focus-visible { outline-offset: -2px; }
+@media (max-width: 720px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .subnav { position: static; display: flex; overflow-x: auto; gap: 2px; scrollbar-width: none; }
+  .subnav button { flex: none; }
+}

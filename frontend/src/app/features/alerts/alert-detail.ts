@@ -1,8 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Signal, inject, linkedSignal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatProgressBar } from '@angular/material/progress-bar';
+import { MatTabsModule } from '@angular/material/tabs';
 import { FormField, email, form, required, submit } from '@angular/forms/signals';
 import { Observable, firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
@@ -14,41 +14,41 @@ import { MAT_FORM } from '../../shared/material';
 import { UI, sentence } from '../../shared/ui';
 import { AlertWhy } from './alert-why';
 
+export interface AlertAction { to: AlertStatus; label: string; done: string; primary?: boolean; key?: string }
+
 /** Lifecycle actions available from each status (mirrors the backend state machine); `done` is the toast text. */
-const ACTIONS: Record<AlertStatus, { to: AlertStatus; label: string; done: string; primary?: boolean }[]> = {
-  OPEN: [{ to: 'ACKNOWLEDGED', label: 'Acknowledge alert', done: 'Alert acknowledged', primary: true }, { to: 'INVESTIGATING', label: 'Start investigating', done: 'Investigation started' }, { to: 'RESOLVED', label: 'Resolve alert', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'Mark as false positive', done: 'Marked as false positive' }],
-  ACKNOWLEDGED: [{ to: 'INVESTIGATING', label: 'Start investigating', done: 'Investigation started', primary: true }, { to: 'RESOLVED', label: 'Resolve alert', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'Mark as false positive', done: 'Marked as false positive' }],
-  INVESTIGATING: [{ to: 'RESOLVED', label: 'Resolve alert', done: 'Alert resolved', primary: true }, { to: 'FALSE_POSITIVE', label: 'Mark as false positive', done: 'Marked as false positive' }],
-  RESOLVED: [{ to: 'OPEN', label: 'Reopen alert', done: 'Alert reopened' }],
-  FALSE_POSITIVE: [{ to: 'OPEN', label: 'Reopen alert', done: 'Alert reopened' }],
+export const ACTIONS: Record<AlertStatus, AlertAction[]> = {
+  OPEN: [{ to: 'ACKNOWLEDGED', label: 'Acknowledge', done: 'Alert acknowledged', primary: true, key: 'E' }, { to: 'INVESTIGATING', label: 'Investigate', done: 'Investigation started' }, { to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
+  ACKNOWLEDGED: [{ to: 'INVESTIGATING', label: 'Investigate', done: 'Investigation started', primary: true }, { to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
+  INVESTIGATING: [{ to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved', primary: true }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
+  RESOLVED: [{ to: 'OPEN', label: 'Reopen', done: 'Alert reopened' }],
+  FALSE_POSITIVE: [{ to: 'OPEN', label: 'Reopen', done: 'Alert reopened' }],
 };
 
-export interface AlertDetailData {
-  /** The open alert; follows list and detail reloads while the dialog is open. */
-  alert: Signal<Alert | null>;
-  updated: (a: Alert) => void;
-}
-
 /**
- * Alert dialog content (opened with MatDialog by the alerts page): evidence on the left, triage (lifecycle, assignee,
- * history, comments) on the right. The dialog provides role="dialog", aria-modal, the focus trap, Escape and focus return.
+ * The alert pane of the inbox: header with the lifecycle actions, then Overview (why it fired) and Activity
+ * (history and comments). A labelled region, not a dialog: the list stays usable next to it.
  */
 @Component({
   selector: 'oci-alert-detail',
-  imports: [DatePipe, FormField, AlertWhy, MatDialogModule, MatButtonModule, MatProgressBar, ...MAT_FORM, ...UI],
+  imports: [DatePipe, FormField, AlertWhy, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './alert-detail.html',
   styleUrl: './alert-detail.scss',
+  host: { role: 'region', 'aria-labelledby': 'pane-title' },
 })
 export class AlertDetail {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
-  private readonly data = inject<AlertDetailData>(MAT_DIALOG_DATA);
-  /** Keeps the last alert while the dialog closes (the selection is cleared first). */
-  readonly alert = linkedSignal<Alert | null, Alert>({ source: this.data.alert, computation: (a, prev) => a ?? prev!.value });
+  readonly alert = input.required<Alert>();
+  readonly updated = output<Alert>();
+  readonly closed = output<void>();
   readonly busy = signal(false);
   readonly actionError = signal<ApiError | null>(null);
-  readonly reason = signal('');
+  /** Optional reason recorded with the next status change; cleared when another alert opens. */
+  readonly reason = linkedSignal({ source: () => this.alert().id, computation: () => '' });
+  readonly assigning = linkedSignal({ source: () => this.alert().id, computation: () => false });
+  readonly tab = linkedSignal({ source: () => this.alert().id, computation: () => 0 });
   readonly ago = timeAgo;
   readonly sentence = sentence;
 
@@ -58,7 +58,7 @@ export class AlertDetail {
   readonly commentModel = linkedSignal({ source: () => this.alert().id, computation: () => ({ body: '' }) });
   readonly commentForm = form(this.commentModel, (p) => required(p.body, { message: 'Write a comment first.' }));
 
-  actions(s: AlertStatus) {
+  actions(s: AlertStatus): AlertAction[] {
     return ACTIONS[s];
   }
 
@@ -74,7 +74,7 @@ export class AlertDetail {
     this.busy.set(true);
     this.actionError.set(null);
     try {
-      this.data.updated(await firstValueFrom(call));
+      this.updated.emit(await firstValueFrom(call));
       this.toasts.success(done);
       return true;
     } catch (e) {
@@ -88,6 +88,7 @@ export class AlertDetail {
   }
 
   async move(to: AlertStatus, done: string): Promise<void> {
+    if (this.busy()) return;
     const a = this.alert();
     const reason = this.reason().trim() || undefined;
     if (await this.mutate(to === 'ACKNOWLEDGED' && !reason ? this.api.acknowledgeAlert(a.id) : this.api.setAlertStatus(a.id, to, reason), done)) this.reason.set('');
@@ -97,7 +98,7 @@ export class AlertDetail {
     e.preventDefault();
     void submit(this.assignForm, async () => {
       const who = this.assignModel().assignee.trim() || null;
-      await this.mutate(this.api.assignAlert(this.alert().id, who), who ? `Alert assigned to ${who}` : 'Alert unassigned');
+      if (await this.mutate(this.api.assignAlert(this.alert().id, who), who ? `Alert assigned to ${who}` : 'Alert unassigned')) this.assigning.set(false);
     });
   }
 

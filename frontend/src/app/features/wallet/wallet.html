@@ -1,58 +1,51 @@
 <div class="page">
+  <oci-page-header [crumbs]="crumbs()">
+    <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">Risk breakdown</a>
+    <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
+  </oci-page-header>
+
   <header class="ident">
-    <div class="row kind"><oci-net [value]="network()" />
-      @if (w.value(); as a) { <span class="small muted">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span> }</div>
-    <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
-    @if (w.value(); as a) {
-      @if (a.labels.length) {
-        <ul class="labels" aria-label="Labels">
+    <div class="id-main">
+      <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
+      <div class="chips"><oci-net [value]="network()" />
+        @if (w.value(); as a) {
+          <span class="chip">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span>
           @for (l of a.labels; track l.id) {
-            <li><span class="chip">{{ l.category }}</span><span>{{ l.name }}</span><oci-evidence [value]="l.evidenceLevel" />
-              <span class="small muted">Source {{ l.source }}, reliability <span class="num">{{ pct(l.reliability) }}</span>%</span></li>
-          }
-        </ul>
-      } @else { <p class="small muted">No label. The absence of a label says nothing about the owner.</p> }
+            <span class="label" [attr.title]="'Source ' + l.source + ', reliability ' + pct(l.reliability) + '%'"><span class="chip">{{ l.category }}</span>{{ l.name }}<oci-evidence [value]="l.evidenceLevel" /></span>
+          } @empty { <span class="small muted">No label. The absence of a label says nothing about the owner.</span> }
+        }
+      </div>
+    </div>
+    @if (w.value(); as a) {
+      <div class="id-gauge">
+        @if (a.risk; as r) { <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" /> }
+        @else { <oci-gauge size="lg" [score]="null" label="Wallet risk score" /> }
+      </div>
     }
   </header>
 
-  <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="4" loadingText="Analysing the wallet">
+  <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" loadingText="Analysing the wallet">
     @if (w.value(); as a) {
-      <section class="panel-raised primary" aria-label="Risk and profile">
-        <div class="well score">
-          <div class="gauge-col">
-            @if (a.risk; as r) {
-              <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" />
-              <p class="small muted">Method {{ r.method }}, model {{ r.modelVersion }}, computed {{ ago(r.computedAt) }}.</p>
-            } @else {
-              <oci-gauge size="lg" [score]="null" label="Wallet risk score" />
-              <p class="small muted">Not enough data to score this wallet yet.</p>
-            }
-          </div>
-          <dl class="facts">
-            <div><dt>Transactions</dt><dd>{{ a.txCount.toLocaleString('en-US') }}</dd></div>
-            <div><dt>Last active</dt><dd>{{ ago(a.lastSeen) }}</dd></div>
-            <div><dt>Signals</dt><dd [class.warn]="a.signals.length > 0">{{ a.signals.length }}</dd></div>
-            <div><dt>Counterparties</dt><dd>{{ a.counterparties.length }}</dd></div>
-          </dl>
-        </div>
-        <div class="row actions">
-          <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
-          <a matButton="outlined" [routerLink]="['/risk', network(), address()]">Open risk breakdown</a>
-        </div>
-      </section>
-
-      @if (a.risk; as r) {
-        <section class="section" aria-labelledby="h-sheet">
-          <div class="section-head"><h2 id="h-sheet">How the score is built</h2>
-            <p>Each row adds or removes points; the bars stack from 0 and end at the score.</p></div>
-          <oci-score-sheet [risk]="r" />
-        </section>
-      }
+      <dl class="stats" style="--stats: 5">
+        <div class="stat"><dt>Transactions</dt><dd><span class="stat-v">{{ a.txCount.toLocaleString('en-US') }}</span></dd></div>
+        <div class="stat"><dt>First seen</dt><dd><span class="stat-v">{{ ago(a.firstSeen) }}</span></dd></div>
+        <div class="stat"><dt>Last active</dt><dd><span class="stat-v">{{ ago(a.lastSeen) }}</span></dd></div>
+        <div class="stat" [class.warn]="a.signals.length > 0"><dt>Signals</dt><dd><span class="stat-v">{{ a.signals.length }}</span></dd></div>
+        <div class="stat"><dt>Counterparties</dt><dd><span class="stat-v">{{ a.counterparties.length }}</span></dd></div>
+      </dl>
 
       <section class="tabs-wrap" aria-label="Wallet records">
         <mat-tab-group [(selectedIndex)]="tabIndex" aria-label="Wallet records" mat-stretch-tabs="false" mat-align-tabs="start">
+          <mat-tab label="Score">
+            @if (a.risk; as r) {
+              <div class="score-tab">
+                <p class="small muted">Each row adds or removes points; the bars stack from 0 and end at the score. Method {{ r.method }}, model {{ r.modelVersion }}, computed {{ ago(r.computedAt) }}.</p>
+                <oci-score-sheet [risk]="r" />
+              </div>
+            } @else { <p class="muted">Not enough data to score this wallet yet.</p> }
+          </mat-tab>
           <mat-tab>
-            <ng-template mat-tab-label>Transactions<span class="count">{{ tabs()[0].count }}</span></ng-template>
+            <ng-template mat-tab-label>Transactions<span class="count">{{ tabs()[1].count }}</span></ng-template>
             <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="txs().length > 0" [empty]="!txPage.loading() && txs().length === 0"
               emptyText="No transaction indexed for this wallet yet." skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
               <div class="table-wrap"><table mat-table [dataSource]="txs()" [trackBy]="byHash">
@@ -81,7 +74,7 @@
                   <td mat-cell *matCellDef="let t">@if (t.success) { Confirmed } @else { <span class="warn">Failed</span> }</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="txCols"></tr>
-                <tr mat-row *matRowDef="let t; columns: txCols"></tr>
+                <tr mat-row *matRowDef="let t; columns: txCols" class="clickable" (click)="openTx(t)"></tr>
               </table></div>
               <!-- Cursor paging: the server returns no total, so "load more" instead of a paginator with an invented length. -->
               @if (nextCursor()) { <div class="more"><button matButton="outlined" type="button" (click)="loadMore()" [disabled]="txPage.loading()">{{ txPage.loading() ? 'Loading' : 'Load more transactions' }}</button></div> }
@@ -89,7 +82,7 @@
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Counterparties<span class="count">{{ tabs()[1].count }}</span></ng-template>
+            <ng-template mat-tab-label>Counterparties<span class="count">{{ tabs()[2].count }}</span></ng-template>
             <mat-form-field class="filter">
               <mat-label>Filter</mat-label>
               <input matInput type="search" [value]="cp.filter()" (input)="cp.filter.set($any($event.target).value)" placeholder="Address, label or token" />
@@ -120,13 +113,13 @@
                 <td mat-cell *matCellDef="let c"><oci-risk [value]="c.riskLevel" /></td>
               </ng-container>
               <tr mat-header-row *matHeaderRowDef="cpCols"></tr>
-              <tr mat-row *matRowDef="let c; columns: cpCols"></tr>
+              <tr mat-row *matRowDef="let c; columns: cpCols" class="clickable" (click)="openWallet(c.address)"></tr>
               <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell muted" [attr.colspan]="cpCols.length">No counterparty matches the filter. Clear it to see all.</td></tr>
             </table></div>
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Exposure@if (tabs()[2].count !== undefined) { <span class="count">{{ tabs()[2].count }}</span> }</ng-template>
+            <ng-template mat-tab-label>Exposure@if (tabs()[3].count !== undefined) { <span class="count">{{ tabs()[3].count }}</span> }</ng-template>
             <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="expRows().length === 0" emptyText="No exposure to labelled categories was found." skeleton="table" (retry)="exp.reload()">
               <p class="small muted">Share of volume connected to labelled categories. Indirect exposure (2 hops or more) is weaker evidence than direct exposure.</p>
               <div class="table-wrap"><table mat-table [dataSource]="expRows()">
@@ -157,7 +150,7 @@
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Signals<span class="count">{{ tabs()[3].count }}</span></ng-template>
+            <ng-template mat-tab-label>Signals<span class="count">{{ tabs()[4].count }}</span></ng-template>
             @if (a.signals.length) {
               <div class="table-wrap"><table mat-table [dataSource]="a.signals">
                 <ng-container matColumnDef="signal">

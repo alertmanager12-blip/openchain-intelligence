@@ -1,8 +1,17 @@
 <div class="page">
   <oci-page-header heading="Settings" lede="How this console connects to the backend, how it looks, and who can use it." />
 
-  <mat-tab-group class="sections" aria-label="Settings sections" [(selectedIndex)]="section">
-    <mat-tab label="Connection">
+  <div class="layout">
+  <div class="subnav" role="tablist" aria-label="Settings sections" aria-orientation="vertical" (keydown)="tabKey($event)">
+    @for (x of sections; track x.id) {
+      <button type="button" role="tab" [id]="'tab-' + x.id" [attr.aria-selected]="section() === x.id" [attr.aria-controls]="'panel-' + x.id"
+        [tabindex]="section() === x.id ? 0 : -1" (click)="section.set(x.id)">{{ x.label }}</button>
+    }
+  </div>
+  <div class="panel">
+    @switch (section()) {
+    @case ('connection') {
+    <div role="tabpanel" id="panel-connection" aria-labelledby="tab-connection">
       <section class="card stack" aria-labelledby="h-conn">
         <h2 id="h-conn">Connection</h2>
         @if (allowMock) {
@@ -25,9 +34,10 @@
           </mat-form-field>
         }
       </section>
-    </mat-tab>
-
-    <mat-tab label="Appearance">
+    </div>
+    }
+    @case ('appearance') {
+    <div role="tabpanel" id="panel-appearance" aria-labelledby="tab-appearance">
       <section class="card stack" aria-labelledby="h-app">
         <h2 id="h-app">Appearance</h2>
         <mat-radio-group class="themes" aria-labelledby="h-theme" [value]="theme.pref()" (change)="theme.pref.set($event.value)">
@@ -36,9 +46,10 @@
         </mat-radio-group>
         <p class="hint">System follows your operating system preference.</p>
       </section>
-    </mat-tab>
-
-    <mat-tab label="API keys">
+    </div>
+    }
+    @case ('keys') {
+    <div role="tabpanel" id="panel-keys" aria-labelledby="tab-keys">
       <section class="card card--flush" aria-labelledby="h-keys">
         <div class="card-head"><h2 id="h-keys">API keys</h2></div>
         <form class="key-form" (submit)="createKey($event)" novalidate>
@@ -85,9 +96,10 @@
           </table></div>
         </oci-state>
       </section>
-    </mat-tab>
-
-    <mat-tab label="Users and roles">
+    </div>
+    }
+    @case ('users') {
+    <div role="tabpanel" id="panel-users" aria-labelledby="tab-users">
       <section class="card card--flush" aria-labelledby="h-users">
         <div class="card-head"><h2 id="h-users">Users and roles</h2></div>
         <dl class="roles"><div><dt>Admin</dt><dd>manages users, keys and connectors.</dd></div><div><dt>Analyst</dt><dd>triages alerts and edits rules.</dd></div><div><dt>Viewer</dt><dd>reads only.</dd></div></dl>
@@ -116,6 +128,9 @@
           </table></div>
         </oci-state>
       </section>
-    </mat-tab>
-  </mat-tab-group>
+    </div>
+    }
+    }
+  </div>
+  </div>
 </div>

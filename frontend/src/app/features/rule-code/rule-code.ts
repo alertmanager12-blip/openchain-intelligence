@@ -70,10 +70,10 @@ import { StoredRules } from './stored-rules';
     .act { margin-left: auto; }
     .editor-card { padding: 0; overflow: hidden; }
     .editor { display: flex; background: var(--surface); }
-    .gutter { margin: 0; padding: 12px 8px; min-width: 44px; text-align: right; color: var(--muted); background: var(--surface-2); border-right: 1px solid var(--line-soft); font: 13px/1.6 var(--mono); user-select: none; overflow: hidden; }
+    .gutter { margin: 0; padding: 12px 8px; min-width: 44px; text-align: right; color: var(--muted); background: var(--surface-2); border-right: 1px solid var(--line-soft); font: 12px/1.65 var(--mono); letter-spacing: -0.01em; user-select: none; overflow: hidden; }
     .editor textarea { min-height: 520px; flex: 1; }
     .editor textarea:focus { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
-    .errs { margin: 0; padding-left: 18px; font-size: 14px; color: var(--danger); display: grid; gap: 4px; }
+    .errs { margin: 0; padding-left: 18px; font-size: 13px; color: var(--danger); display: grid; gap: 4px; }
     .ref p { color: var(--ink-2); }
   `,
 })

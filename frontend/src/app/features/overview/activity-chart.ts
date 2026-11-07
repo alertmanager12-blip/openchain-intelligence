@@ -7,7 +7,7 @@ import { Dashboard } from '../../core/models';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (activity().length) {
-      <div class="well chart">
+      <div class="chart">
         <svg viewBox="0 0 240 72" preserveAspectRatio="none" role="img" [attr.aria-label]="aria()">
           @for (t of [0.25, 0.5, 0.75]; track t) { <line x1="0" x2="240" [attr.y1]="72 - t * 64" [attr.y2]="72 - t * 64" class="grid" /> }
           @for (b of activity(); track b.start; let i = $index) {
@@ -21,7 +21,7 @@ import { Dashboard } from '../../core/models';
     } @else { <p class="muted">No activity recorded in the last 24 hours.</p> }
   `,
   styles: `
-    .chart { padding: 14px 14px 8px; }
+    .chart { padding: 4px 0 0; }
     svg { width: 100%; height: 120px; display: block; }
     .grid { stroke: var(--line); stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
     .ev { fill: var(--accent); opacity: 0.75; }

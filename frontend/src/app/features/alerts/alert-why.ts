@@ -16,7 +16,7 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
   template: `
     <h3 id="h-why">Why this alert fired</h3>
     <p class="lead">Rule <span class="mono">{{ alert().ruleId }}</span>@if (alert().ruleVersion) { version {{ alert().ruleVersion }} } matched the values below.
-      This is not a finding of wrongdoing: record your conclusion on the right.</p>
+      This is not a finding of wrongdoing: record your conclusion with the actions above.</p>
 
     <h4>Measured values</h4>
     @if (alert().evidence; as ev) {
@@ -75,7 +75,7 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
       <p class="small"><oci-addr [address]="addr" [network]="alert().network" [full]="true" /></p>
       <oci-state [loading]="risk.loading()" [error]="risk.error()" [hasData]="!!risk.value()" skeleton="readout" [skeletonRows]="1" loadingText="Loading the wallet score" (retry)="risk.reload()">
         @if (risk.value(); as r) {
-          <div class="well"><oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Subject wallet risk score" /></div>
+          <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Subject wallet risk score" />
           <table class="contrib">
             <caption class="sr-only">Largest contributions to the wallet score</caption>
             <thead><tr><th scope="col">Top contributions</th><th scope="col">Evidence</th><th scope="col" class="right">Points</th></tr></thead>
@@ -95,23 +95,24 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
   `,
   styles: `
     :host { display: grid; gap: 12px; align-content: start; min-width: 0; }
-    .lead { color: var(--ink-2); margin: 0; }
-    h4 { margin: 12px 0 0; }
+    .lead { color: var(--muted); margin: 0; font-size: 12.5px; }
+    h3 { font-size: 13px; margin-top: 8px; }
+    h4 { margin: 14px 0 0; font-size: 12px; color: var(--muted); font-weight: 500; }
     .measure { display: grid; gap: 10px; padding: 16px 18px; }
-    .m-label { font-size: 14px; color: var(--ink-2); }
+    .m-label { font-size: 12.5px; color: var(--ink-2); }
     .m-grid { display: grid; grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr)); gap: 12px 20px; margin: 0; align-items: end; }
     @media (max-width: 640px) { .m-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    .cmp { position: relative; height: 8px; border-radius: 4px; background: var(--line-soft); margin: 6px 0 0; }
-    .cmp-bar { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); border-radius: 4px; }
-    .cmp-thr { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--risk-high); }
+    .cmp { position: relative; height: 6px; border-radius: 3px; background: var(--line); margin: 6px 0 0; }
+    .cmp-bar { position: absolute; inset: 0 auto 0 0; background: var(--ink-2); border-radius: 3px; }
+    .cmp-thr { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--risk-high); }
     .measure p { margin: 0; }
     .res { color: var(--muted); }
-    .res.met { color: var(--ink); font-weight: 600; }
+    .res.met { color: var(--ink); font-weight: 500; }
     .cond td.mono { font-size: 12px; }
-    .steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
-    .txs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; font-size: 14px; }
+    .steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; }
+    .txs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; font-size: 13px; }
     .txs li { display: flex; gap: 8px; align-items: baseline; }
-    .raw summary { cursor: pointer; font-size: 14px; color: var(--ink-2); padding: 4px 0; }
+    .raw summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 4px 0; }
     .raw pre { margin-top: 8px; }
   `,
 })

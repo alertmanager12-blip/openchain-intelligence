@@ -18,8 +18,8 @@
   @if (address() && network()) {
     <oci-state [loading]="risk.loading()" [error]="risk.error()" [hasData]="!!risk.value()" (retry)="risk.reload()" skeleton="readout" [skeletonRows]="3" loadingText="Computing score">
       @if (risk.value(); as r) {
-        <section class="panel-raised primary" aria-labelledby="h-g">
-          <div class="well score">
+        <section class="card primary" aria-labelledby="h-g">
+          <div class="score">
             <div class="gauge-col">
               <h2 id="h-g" class="sr-only">Score</h2>
               <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" />

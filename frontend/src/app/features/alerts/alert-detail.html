@@ -1,80 +1,79 @@
-<div class="sheet">
-  @let a = alert();
-  <header class="sheet-head">
-    <div class="row">
-      <oci-severity [value]="a.severity" /><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span><oci-evidence [value]="a.evidenceLevel" />
-      <span class="spacer"></span>
-      <button matIconButton type="button" mat-dialog-close aria-label="Close alert details">
-        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+@let a = alert();
+<header class="head">
+  <div class="top">
+    <button type="button" class="ib back" (click)="closed.emit()" aria-label="Close alert" aria-keyshortcuts="Escape" title="Close  Esc">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+    </button>
+    <span class="mono id">{{ a.id }}</span>
+    <span class="spacer"></span>
+    <div class="acts" role="group" aria-label="Alert actions">
+      @for (act of actions(a.status); track act.to) {
+        @if (act.primary) {
+          <button matButton="filled" type="button" [disabled]="busy()" (click)="move(act.to, act.done)" [attr.aria-keyshortcuts]="act.key ?? null">{{ act.label }}@if (act.key) { <kbd class="k">{{ act.key }}</kbd> }</button>
+        } @else { <button matButton="outlined" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button> }
+      }
+      <button matButton="outlined" type="button" [attr.aria-expanded]="assigning()" aria-controls="assign-form" (click)="assigning.set(!assigning())">Assign</button>
     </div>
-    <h2 id="drawer-title" tabindex="-1">{{ a.ruleName }}</h2>
-    <p class="summary">{{ a.summary }}</p>
-    <dl class="meta">
-      <div><dt>Alert</dt><dd class="mono">{{ a.id }}</dd></div>
-      <div><dt>Network</dt><dd><oci-net [value]="a.network" /></dd></div>
-      <div><dt>Created</dt><dd>{{ a.createdAt | date: 'yyyy-MM-dd HH:mm' : 'UTC' }} UTC</dd></div>
-      @if (a.occurrenceCount && a.occurrenceCount > 1) { <div><dt>Occurrences</dt><dd class="num">{{ a.occurrenceCount }}</dd></div> }
-      <div><dt>Evidence</dt><dd>{{ evidenceHelp(a) }}</dd></div>
-    </dl>
-  </header>
+  </div>
+  <h2 id="pane-title">{{ a.ruleName }}</h2>
+  <div class="meta">
+    <oci-severity [value]="a.severity" /><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span><oci-evidence [value]="a.evidenceLevel" />
+    <oci-net [value]="a.network" />
+    <span class="muted"><time [attr.datetime]="a.createdAt">{{ a.createdAt | date: 'MMM d, HH:mm' : 'UTC' }} UTC</time></span>
+    @if (a.occurrenceCount && a.occurrenceCount > 1) { <span class="muted"><span class="num">{{ a.occurrenceCount }}</span> occurrences</span> }
+    <span [class.muted]="!a.assignee">{{ a.assignee ?? 'Unassigned' }}</span>
+  </div>
+  <input class="reason" [value]="reason()" (input)="reason.set($any($event.target).value)" aria-label="Reason for the status change, kept in history"
+    placeholder="Reason for the status change (optional, kept in history)" />
+  @if (assigning()) {
+    <form class="assign" id="assign-form" (submit)="assign($event)" novalidate>
+      <mat-form-field class="grow">
+        <mat-label>Assignee email</mat-label>
+        <input matInput type="email" [formField]="assignForm.assignee" [ociInvalid]="assignForm.assignee().touched() && assignForm.assignee().invalid()" placeholder="Email, or empty to unassign" />
+        <mat-error>{{ assignForm.assignee().errors()[0]?.message }}</mat-error>
+      </mat-form-field>
+      <button matButton="filled" type="submit" [disabled]="busy()">Save</button>
+      <button matButton type="button" (click)="assigning.set(false)">Cancel</button>
+    </form>
+  }
+  @if (busy()) { <mat-progress-bar class="busy" mode="indeterminate" aria-label="Saving" /> }
+  @if (actionError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+</header>
 
-  <div class="sheet-body">
-    <oci-alert-why class="why" [alert]="a" aria-labelledby="h-why" />
-
-    <div class="side">
-      <section aria-labelledby="h-life">
-        <h3 id="h-life">Lifecycle</h3>
-        <mat-form-field>
-          <mat-label>Reason, kept in history</mat-label>
-          <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" placeholder="Optional, for example known exchange rebalancing" />
-        </mat-form-field>
-        <div class="acts">
-          @for (act of actions(a.status); track act.to) {
-            @if (act.primary) { <button matButton="filled" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button> }
-            @else { <button matButton="outlined" type="button" [disabled]="busy()" (click)="move(act.to, act.done)">{{ act.label }}</button> }
-          }
-        </div>
-        @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving" /> }
-      </section>
-
-      <section aria-labelledby="h-asg">
-        <h3 id="h-asg">Assignee</h3>
-        <form class="assign" (submit)="assign($event)" novalidate>
-          <mat-form-field class="grow">
-            <mat-label>Assignee email</mat-label>
-            <input matInput type="email" [formField]="assignForm.assignee" [ociInvalid]="assignForm.assignee().touched() && assignForm.assignee().invalid()" placeholder="Email, or empty to unassign" />
-            <mat-error>{{ assignForm.assignee().errors()[0]?.message }}</mat-error>
-          </mat-form-field>
-          <button matButton="outlined" type="submit" [disabled]="busy()">Assign</button>
-        </form>
-      </section>
-
-      @if (actionError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-
+<mat-tab-group class="tabs" [(selectedIndex)]="tab" aria-label="Alert sections" animationDuration="0ms">
+  <mat-tab label="Overview">
+    <div class="body">
+      <p class="summary">{{ a.summary }}</p>
+      <p class="small muted">Evidence: {{ evidenceHelp(a) }}</p>
+      <oci-alert-why [alert]="a" />
+    </div>
+  </mat-tab>
+  <mat-tab>
+    <ng-template mat-tab-label>Activity<span class="cnt">{{ a.history.length + a.comments.length }}</span></ng-template>
+    <div class="body activity">
       <section aria-labelledby="h-hist">
         <h3 id="h-hist">History</h3>
         <ol class="timeline">
           @for (h of a.history; track $index) {
-            <li><span class="strong">{{ action(h.action) }}</span><span class="small">&#32;by {{ h.actor }}</span>
+            <li><span class="strong">{{ action(h.action) }}</span><span class="muted">&#32;by {{ h.actor }}</span>
               <div class="small muted"><time [attr.datetime]="h.at">{{ h.at | date: 'MMM d, HH:mm' : 'UTC' }} UTC</time>, {{ ago(h.at) }}</div>
               @if (h.detail) { <div class="small">{{ h.detail }}</div> }</li>
           }
         </ol>
       </section>
-
       <section aria-labelledby="h-com">
         <h3 id="h-com">Comments</h3>
         @for (c of a.comments; track c.id) {
-          <div class="comment"><div class="small muted">{{ c.author }}, {{ ago(c.createdAt) }}</div><p>{{ c.body }}</p></div>
+          <div class="comment"><div class="small muted"><span class="strong ink">{{ c.author }}</span> {{ ago(c.createdAt) }}</div><p>{{ c.body }}</p></div>
         } @empty { <p class="small muted">No comment yet. Write down what you checked so the next analyst does not repeat it.</p> }
         <form class="stack" (submit)="comment($event)" novalidate>
           <mat-form-field>
             <mat-label>Add a comment</mat-label>
             <textarea matInput rows="3" [formField]="commentForm.body"></textarea>
           </mat-form-field>
-          <div><button matButton="outlined" type="submit" [disabled]="busy() || !commentModel().body.trim()">Post comment</button></div>
+          <div><button matButton="filled" type="submit" [disabled]="busy() || !commentModel().body.trim()">Post comment</button></div>
         </form>
       </section>
     </div>
-  </div>
-</div>
+  </mat-tab>
+</mat-tab-group>

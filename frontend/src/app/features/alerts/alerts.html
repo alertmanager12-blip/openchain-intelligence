@@ -1,79 +1,72 @@
-<div class="page">
-  <oci-page-header heading="Alerts" lede="Alerts are raised by your rules. Triage them, record your reasoning, and mark false positives so the rules can be tuned.">
-    <button matButton="outlined" type="button" (click)="list.reload(); summary.reload()" [disabled]="list.loading()">Refresh</button>
+<div class="page wide inbox-page" [class.has-sel]="!!selectedId()">
+  <oci-page-header heading="Alerts" [titleHidden]="true" [crumbs]="crumbs()">
+    <button matButton="outlined" class="hide-sm" type="button" (click)="refresh()" [disabled]="list.loading()">Refresh</button>
   </oci-page-header>
-  @if (selectedId() && detail.error(); as e) {
-    <div class="state state--error" role="alert"><strong>{{ e.title }}</strong><p>{{ e.detail }} Pick the alert from the list instead.</p></div>
-  }
 
-  <div class="quick">
-    @if (counts(); as c) {
-      <mat-chip-listbox aria-label="Filter by status" [value]="status()" (change)="filterStatus($event.value ?? '')">
-        @for (s of active; track s) {
-          <mat-chip-option [value]="s"><span class="status st-{{ s.toLowerCase() }}">{{ sentence(s) }}</span><strong class="qn">{{ c.byStatus[s] ?? 0 }}</strong></mat-chip-option>
-        }
-      </mat-chip-listbox>
-      <p class="urgent" [class.bad]="(c.openBySeverity.CRITICAL ?? 0) > 0"><strong>{{ (c.openBySeverity.CRITICAL ?? 0) + (c.openBySeverity.HIGH ?? 0) }}</strong> open alerts are critical or high
-        <span class="muted">({{ c.openBySeverity.CRITICAL ?? 0 }} critical, {{ c.openBySeverity.HIGH ?? 0 }} high)</span></p>
-    } @else if (summary.error()) {
-      <p class="small muted">Counts are unavailable right now. The list below is still up to date.</p>
-    } @else {
-      @for (i of [1, 2, 3]; track i) { <span class="skel sk" aria-hidden="true"></span> }
-    }
+  <div class="filters" role="toolbar" aria-label="Filter alerts">
+    <div class="seg" role="group" aria-label="Status">
+      <button type="button" [attr.aria-pressed]="status() === ''" (click)="status.set('')">All</button>
+      @for (s of statuses; track s) {
+        <button type="button" [attr.aria-pressed]="status() === s" (click)="status.set(s)">
+          <span class="status st-{{ s.toLowerCase() }}">{{ sentence(s) }}</span>@if (counts(); as c) { <span class="n">{{ c[s] ?? 0 }}</span> }</button>
+      }
+    </div>
+    <span class="spacer"></span>
+    <mat-form-field class="f-sel" subscriptSizing="dynamic">
+      <mat-select [value]="severity()" (valueChange)="severity.set($event)" aria-label="Severity">
+        <mat-option value="">Any severity</mat-option>@for (s of severities; track s) { <mat-option [value]="s">{{ sentence(s) }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field class="f-sel" subscriptSizing="dynamic">
+      <mat-select [value]="t.sortKey()" (valueChange)="setSort($event)" aria-label="Sort">
+        <mat-option value="created">Newest first</mat-option><mat-option value="severity">Most severe first</mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 
-  <section class="card card--flush" aria-label="Alert list">
-    <div class="toolbar">
-      <mat-form-field class="f-status">
-        <mat-label>Status</mat-label>
-        <mat-select [value]="status()" (valueChange)="status.set($event)">
-          <mat-option value="">All statuses</mat-option>@for (s of statuses; track s) { <mat-option [value]="s">{{ sentence(s) }}</mat-option> }
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field class="f-sev">
-        <mat-label>Severity</mat-label>
-        <mat-select [value]="severity()" (valueChange)="severity.set($event)">
-          <mat-option value="">All severities</mat-option>@for (s of severities; track s) { <mat-option [value]="s">{{ sentence(s) }}</mat-option> }
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field class="grow">
-        <mat-label>Search</mat-label>
-        <input matInput type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" placeholder="Rule, address, alert id or assignee" />
-      </mat-form-field>
-      <span class="small muted count" aria-live="polite"><span class="num">{{ t.view().length }}</span> {{ t.view().length === 1 ? 'alert' : 'alerts' }}</span>
-    </div>
-    <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="t.view().length === 0" skeleton="table" [skeletonColumns]="[40, 90, 50, 50, 50, 40]"
-      emptyText="No alert matches these filters. Clear the search or choose another status." (retry)="list.reload()">
-      <div class="table-wrap"><table mat-table [dataSource]="t.view()" [trackBy]="byId" [class.stale]="list.loading()"
-        matSort matSortActive="created" matSortDirection="desc" matSortDisableClear (matSortChange)="t.onSort($event)">
-        <ng-container matColumnDef="severity">
-          <th mat-header-cell *matHeaderCellDef scope="col" class="hide-sm" mat-sort-header="severity" sortActionDescription="Sort by severity">Severity</th>
-          <td mat-cell *matCellDef="let a" class="hide-sm"><oci-severity [value]="a.severity" /></td>
-        </ng-container>
-        <ng-container matColumnDef="alert">
-          <th mat-header-cell *matHeaderCellDef scope="col">Alert</th>
-          <td mat-cell *matCellDef="let a"><oci-severity class="show-sm" [value]="a.severity" /><span class="rule">{{ a.ruleName }}</span><div class="sub"><span class="mono">{{ a.id }}</span><oci-net [value]="a.network" /></div></td>
-        </ng-container>
-        <ng-container matColumnDef="status">
-          <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="status" sortActionDescription="Sort by status">Status</th>
-          <td mat-cell *matCellDef="let a"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span></td>
-        </ng-container>
-        <ng-container matColumnDef="evidence">
-          <th mat-header-cell *matHeaderCellDef scope="col" class="hide-sm">Evidence</th>
-          <td mat-cell *matCellDef="let a" class="hide-sm"><oci-evidence [value]="a.evidenceLevel" /></td>
-        </ng-container>
-        <ng-container matColumnDef="assignee">
-          <th mat-header-cell *matHeaderCellDef scope="col" class="hide-sm" mat-sort-header="assignee" sortActionDescription="Sort by assignee">Assignee</th>
-          <td mat-cell *matCellDef="let a" class="small hide-sm" [class.muted]="!a.assignee">{{ a.assignee ?? 'Unassigned' }}</td>
-        </ng-container>
-        <ng-container matColumnDef="created">
-          <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="created" arrowPosition="before" sortActionDescription="Sort by creation time">Created</th>
-          <td mat-cell *matCellDef="let a" class="small nowrap right muted">{{ ago(a.createdAt) }}</td>
-        </ng-container>
-        <tr mat-header-row *matHeaderRowDef="cols"></tr>
-        <tr mat-row *matRowDef="let a; columns: cols" class="clickable" [class.selected]="selectedId() === a.id" (click)="open(a)" (keydown.enter)="open(a)" tabindex="0"
-          [attr.aria-label]="'Open alert ' + a.id + ', ' + a.ruleName"></tr>
-      </table></div>
-    </oci-state>
-  </section>
+  <div class="inbox-split">
+    <section class="list-col" aria-labelledby="h-list">
+      <label class="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+      <input type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" placeholder="Filter by rule, address, id or assignee" aria-label="Filter alerts" />
+    </label>
+      <div class="list-head"><h2 id="h-list">{{ status() ? sentence(status()) : 'All alerts' }}</h2>
+        <span class="small muted" aria-live="polite"><span class="num">{{ t.view().length }}</span> {{ t.view().length === 1 ? 'alert' : 'alerts' }}</span></div>
+      <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="t.view().length === 0" skeleton="lines" [skeletonRows]="8"
+        emptyText="No alert matches these filters." (retry)="list.reload()">
+        <button empty matButton="outlined" class="sm" type="button" (click)="status.set(''); severity.set(''); t.filter.set('')">Clear filters</button>
+        <div class="list" role="listbox" tabindex="0" aria-label="Alerts" [attr.aria-activedescendant]="cursor() ? 'opt-' + cursor() : null" [class.stale]="list.loading()"
+          (focus)="!cursor() && move(1)">
+          @for (a of t.view(); track a.id) {
+            <div class="item" role="option" [id]="'opt-' + a.id" [attr.aria-selected]="selectedId() === a.id" [class.cursor]="cursor() === a.id" (click)="select(a.id)">
+              <span class="sev-dot {{ a.severity }}" [attr.title]="sentence(a.severity)"></span>
+              <span class="sr-only">{{ sentence(a.severity) }},</span>
+              <div class="it-main">
+                <div class="it-title">{{ a.ruleName }}</div>
+                <div class="it-meta"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>
+                  @if (a.address) { <span class="mono">{{ short(a.address) }}</span> }<span>{{ netLabel(a.network) }}</span></div>
+              </div>
+              <time class="it-time" [attr.datetime]="a.createdAt">{{ ago(a.createdAt) }}</time>
+            </div>
+          }
+        </div>
+      </oci-state>
+      <p class="keys small muted" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> move <kbd>Enter</kbd> open <kbd>E</kbd> acknowledge <kbd>?</kbd> all shortcuts</p>
+    </section>
+
+    <section class="pane-col" [attr.aria-label]="selected() ? null : 'Alert details'">
+      @if (selected(); as a) {
+        <oci-alert-detail [alert]="a" (updated)="onUpdated($event)" (closed)="close()" />
+      } @else if (selectedId() && detail.error(); as e) {
+        <div class="pane-empty"><div class="state state--error" role="alert"><strong>{{ e.title }}</strong><p>{{ e.detail }} Pick the alert from the list instead.</p></div></div>
+      } @else if (selectedId()) {
+        <div class="pane-empty"><oci-state [loading]="true" skeleton="lines" [skeletonRows]="6" loadingText="Loading the alert" /></div>
+      } @else {
+        <div class="pane-empty">
+          <p>Select an alert to see why it fired and record your conclusion.</p>
+          <p class="small muted"><kbd>J</kbd> <kbd>K</kbd> to move, <kbd>Enter</kbd> to open</p>
+        </div>
+      }
+    </section>
+  </div>
 </div>

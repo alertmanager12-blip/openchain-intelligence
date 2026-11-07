@@ -1,24 +1,43 @@
-:host { display: block; height: 100%; overflow-y: auto; background: var(--surface); color: var(--ink); }
-.sheet { display: grid; grid-template-rows: auto 1fr; min-height: 100%; }
-.sheet-head { padding: 16px 24px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 2; border-radius: var(--r-panel) var(--r-panel) 0 0; }
-.sheet-head h2 { font-size: 26px; margin: 12px 0 4px; }
-.sheet-head h2:focus { outline: none; }
-.summary { color: var(--ink-2); margin: 0 0 12px; max-width: 80ch; }
-.meta { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 0; font-size: 13px; }
-.meta div { display: flex; gap: 6px; align-items: baseline; }
-.meta dt { color: var(--muted); }
-.meta dd { margin: 0; }
-.sheet-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
-.why { padding: 20px 24px 32px; }
-.side { padding: 20px 24px 32px; border-left: 1px solid var(--line); background: var(--surface-2); display: grid; gap: 28px; align-content: start; }
-.side section { display: grid; gap: 8px; }
-@media (max-width: 860px) { .sheet-body { grid-template-columns: minmax(0, 1fr); } .side { border-left: 0; border-top: 1px solid var(--line); } }
-.acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.assign { display: flex; gap: 8px; align-items: flex-start; }
-.assign .grow { flex: 1; }
-.assign button { margin-top: 4px; }
-.side mat-form-field { width: 100%; }
-.comment { border-left: 2px solid var(--line); padding-left: 10px; }
+:host { display: block; min-height: 100%; background: var(--surface); color: var(--ink); animation: in var(--t-med) var(--ease); }
+@keyframes in { from { opacity: 0; transform: translateX(6px); } }
+.head { display: grid; gap: 8px; padding: 10px 24px 12px; border-bottom: 1px solid var(--line); position: relative; }
+.top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 36px; }
+.ib { display: grid; place-items: center; width: 28px; height: 28px; margin-left: -6px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--muted); cursor: pointer; }
+.ib:hover { background: var(--hover); color: var(--ink); }
+.ib svg { width: 14px; height: 14px; }
+.id { font-size: 12px; color: var(--muted); word-break: normal; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.k { margin-left: 4px; height: 16px; min-width: 16px; font-size: 10px; color: var(--accent-ink); background: transparent; border-color: color-mix(in srgb, var(--accent-ink) 40%, transparent); }
+h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; margin-top: 4px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; }
+.reason {
+  /* a visible (quiet) field: as a borderless inline input it read as plain text and was easy to miss */
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control);
+  padding: 5px 8px; transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.reason::placeholder { color: var(--muted); }
+.reason:hover { border-color: var(--line-strong); }
+.reason:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.assign { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; padding-top: 4px; }
+.assign .grow { flex: 1 1 240px; }
+.assign button { margin-top: 2px; }
+.busy { position: absolute; left: 0; right: 0; bottom: -1px; }
+.tabs { --mat-tab-container-height: 40px; }
+.tabs ::ng-deep > .mat-mdc-tab-header { padding: 0 24px; border-bottom: 1px solid var(--line); --mat-tab-divider-height: 0; }
+.cnt { margin-left: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.body { padding: 4px 24px 40px; display: grid; gap: 12px; align-content: start; max-width: 920px; }
+.summary { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink); max-width: 75ch; }
+.body > .small { margin: -6px 0 0; }
+.activity { gap: 28px; }
+.activity section { display: grid; gap: 10px; }
+.activity mat-form-field { width: 100%; }
+.comment { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-panel); }
 .comment p { margin: 2px 0 0; }
-.sheet-head .row button { margin: -6px -10px -6px 0; }
-@media (max-width: 600px) { .sheet-head, .why, .side { padding-left: 16px; padding-right: 16px; } }
+.ink { color: var(--ink); }
+@media (max-width: 899px) {
+  .head { padding: 8px 16px 12px; position: sticky; top: 0; z-index: 3; background: var(--surface); }
+  .tabs ::ng-deep > .mat-mdc-tab-header { padding: 0 16px; }
+  .body { padding: 4px 16px 32px; }
+  .acts { width: 100%; order: 3; }
+  .reason { font-size: 12px; }
+}

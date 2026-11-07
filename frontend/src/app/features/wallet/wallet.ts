@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { Counterparty, NetworkId, Page, ChainTransaction } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
-import { formatUnits, shortHash, timeAgo } from '../../shared/format';
+import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
+import { Crumb, PageHeader } from '../../shared/page-header';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { TableState } from '../../shared/table-state';
 import { UI, sentence } from '../../shared/ui';
@@ -15,13 +16,14 @@ const RISK_ORDER = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
 @Component({
   selector: 'oci-wallet',
-  imports: [RouterLink, MatTabsModule, ScoreSheet, WalletProfile, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wallet.html',
   styleUrl: './wallet.scss',
 })
 export class WalletPage {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   readonly network = input.required<NetworkId>();
   readonly address = input.required<string>();
 
@@ -59,6 +61,7 @@ export class WalletPage {
   readonly tabs = computed<{ label: string; count?: string | number }[]>(() => {
     const a = this.w.value();
     return [
+      { label: 'Score' },
       { label: 'Transactions', count: a?.txCount.toLocaleString('en-US') },
       { label: 'Counterparties', count: a?.counterparties.length },
       { label: 'Exposure', count: this.exp.value() ? this.expRows().length : undefined },
@@ -77,6 +80,19 @@ export class WalletPage {
     (c) => `${c.address} ${c.label ?? ''} ${c.token.symbol}`,
     { key: 'txCount', dir: 'desc' },
   );
+
+  readonly crumbs = computed<Crumb[]>(() => [
+    { label: 'Wallets', link: '/risk' }, { label: netLabel(this.network()) }, { label: shortHash(this.address(), 6, 4), mono: true },
+  ]);
+
+  /** Whole-row navigation; the hash and address cells keep their own links for keyboard users. */
+  openTx(t: ChainTransaction): void {
+    void this.router.navigate(['/explorer'], { queryParams: { q: t.hash, network: t.network } });
+  }
+
+  openWallet(address: string): void {
+    void this.router.navigate(['/wallets', this.network(), address]);
+  }
 
   loadMore(): void {
     this.cursor.set(this.nextCursor());
