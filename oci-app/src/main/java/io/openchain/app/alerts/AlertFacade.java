@@ -3,6 +3,7 @@ package io.openchain.app.alerts;
 import io.openchain.alerting.alert.Alert;
 import io.openchain.alerting.alert.AlertService;
 import io.openchain.alerting.alert.AlertStatus;
+import io.openchain.alerting.alert.AlertSubject;
 import io.openchain.alerting.alert.IllegalAlertTransitionException;
 import io.openchain.app.api.ApiException;
 import io.openchain.app.api.ApiMapper;
@@ -144,19 +145,23 @@ public class AlertFacade {
     }
 
     public Dto.AlertDto dto(Alert a) {
-        Optional<ChainEvent> trigger = a.matchedEventIds().isEmpty() ? Optional.empty() : history.find(a.matchedEventIds().getLast());
-        Map<String, Object> fields = trigger.map(ChainEvent::fields).orElse(Map.of());
-        String address = str(fields.get("wallet.address"));
-        if (address == null) address = str(fields.get("transaction.from"));
-        String txHash = str(fields.get("transaction.hash"));
+        // the subject stored with the alert (V3) is authoritative; the in-memory event history is only a fallback for
+        // alerts stored before subjects existed (it is empty after a restart)
+        AlertSubject s = a.subject();
+        boolean stored = s != null && s.eventId() != null;
+        Optional<ChainEvent> trigger = stored || a.matchedEventIds().isEmpty() ? Optional.empty() : history.find(a.matchedEventIds().getLast());
+        AlertSubject subject = stored ? s : trigger.map(AlertSubject::of).orElse(s);
+        Map<String, Object> fields = subject == null ? Map.of() : subject.fields();
+        String address = subject == null ? null : subject.address();
+        String txHash = subject == null ? null : subject.txHash();
         Map<String, Object> matched = new LinkedHashMap<>();
-        trigger.ifPresent(e -> {
-            matched.put("eventId", e.eventId());
-            matched.put("type", e.type().name());
-            matched.put("network", e.network().id());
-            matched.put("eventTime", e.eventTime() == null ? null : e.eventTime().toString());
-            matched.putAll(ApiMapper.jsonSafe(e.fields()));
-        });
+        if (subject != null && subject.eventId() != null) {
+            matched.put("eventId", subject.eventId());
+            matched.put("type", subject.eventType());
+            matched.put("network", a.network() == null ? null : a.network().id());
+            matched.put("eventTime", subject.eventTime() == null ? null : subject.eventTime().toString());
+            matched.putAll(ApiMapper.jsonSafe(fields));
+        }
         List<Dto.CommentDto> comments = new ArrayList<>();
         for (int i = 0; i < a.comments().size(); i++) {
             Alert.Comment c = a.comments().get(i);
@@ -175,7 +180,8 @@ public class AlertFacade {
                 apiStatus(a.status()), a.status().name(), allowed, a.network() == null ? null : a.network().id(), address, txHash,
                 summary(a, fields), a.evidenceLevel() == null ? null : a.evidenceLevel().name(), a.assignee(), a.occurrenceCount(),
                 a.firstSeen(), a.lastSeen(), a.createdAt(), a.updatedAt(), a.matchedEventIds(), matched,
-                ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a));
+                ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a), subject == null ? null : subject.counterparty(),
+                subject == null ? null : subject.blockNumber(), AlertNarrative.explain(a, fields));
     }
 
     private String demoScenario(Alert a) {

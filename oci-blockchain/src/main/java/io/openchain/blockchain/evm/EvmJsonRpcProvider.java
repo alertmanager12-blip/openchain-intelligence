@@ -6,6 +6,7 @@ import static io.openchain.blockchain.transport.Json.text;
 
 import io.openchain.blockchain.backfill.FreezeLogScanner;
 import io.openchain.blockchain.backfill.RangeTooLargeException;
+import io.openchain.blockchain.indexer.TransferEventMapper;
 import io.openchain.blockchain.provider.ContractTypeCache;
 import io.openchain.blockchain.provider.PollingSubscription;
 import io.openchain.blockchain.token.StablecoinFreezeSources;
@@ -13,6 +14,8 @@ import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.blockchain.transport.Json;
 import io.openchain.blockchain.transport.JsonRpcException;
 import io.openchain.blockchain.transport.JsonRpcClient;
+import io.openchain.core.event.ChainEvent;
+import io.openchain.core.history.AddressHistorySource;
 import io.openchain.core.model.*;
 import io.openchain.core.provider.BlockchainProvider;
 import io.openchain.core.provider.ProviderException;
@@ -35,8 +38,11 @@ import tools.jackson.databind.node.ObjectNode;
  * <p>{@link #scanFreezes} (freeze backfill): {@code eth_getLogs({fromBlock, toBlock, address: [official contracts],
  * topics: [[freeze/unfreeze topics]]})}; a "too many results / range too large" error becomes
  * {@link RangeTooLargeException}.
+ * <p>{@link #fetch} (address history, ADR-0020): ERC-20 transfers and approvals of one address via {@code eth_getLogs}
+ * by topic, walking the range backwards in chunks (see the method). Native and internal transfers are NOT visible
+ * through logs.
  */
-public final class EvmJsonRpcProvider implements BlockchainProvider, FreezeLogScanner {
+public final class EvmJsonRpcProvider implements BlockchainProvider, FreezeLogScanner, AddressHistorySource {
     private static final Set<Network> SUPPORTED = EnumSet.of(Network.ETHEREUM, Network.BSC, Network.POLYGON);
     private static final int TS_CACHE = 2048;
 
@@ -49,6 +55,7 @@ public final class EvmJsonRpcProvider implements BlockchainProvider, FreezeLogSc
     private final StablecoinFreezeSources freezeSources;
     private final LogDecoder decoder;
     private final ContractTypeCache contractTypes;
+    private final TransferEventMapper mapper;
     /** null = not probed yet; false once the node said eth_getBlockReceipts is not implemented. */
     private volatile Boolean blockReceiptsSupported;
     private final Map<String, Instant> timestampByBlockHash = Collections.synchronizedMap(
@@ -77,6 +84,7 @@ public final class EvmJsonRpcProvider implements BlockchainProvider, FreezeLogSc
         this.freezeSources = freezeSources;
         this.decoder = new LogDecoder(network, tokens, freezeSources, hex -> new Address(network, "0x" + hex), c -> c);
         this.contractTypes = contractTypes;
+        this.mapper = new TransferEventMapper(tokens);
     }
 
     /** Contract-code lookups (cache hits vs eth_getCode calls). */
@@ -322,6 +330,131 @@ public final class EvmJsonRpcProvider implements BlockchainProvider, FreezeLogSc
                     (int) quantityLong(text(log, "logIndex")), quantityLong(text(log, "blockNumber")), bh, time, d);
         }
         return List.copyOf(d.freezes);
+    }
+
+    // ---- address history (ADR-0020) -----------------------------------------------------------------------------
+
+    private static final Coverage HISTORY_COVERAGE = new Coverage(true, true, false, false);
+
+    @Override public String sourceId() { return "eth_getLogs"; }
+
+    @Override public Coverage coverage() { return HISTORY_COVERAGE; }
+
+    /** Finalized block, as for the freeze backfill: history never contains reorgable logs. */
+    @Override public long historySafeHead() { return backfillSafeHead(); }
+
+    /**
+     * Scans ONE chunk {@code [max(fromBlock, upper - chunk + 1), upper]}, newest chunk first, with exactly two
+     * {@code eth_getLogs} queries and no contract filter (any token): {@code topics: [[Transfer, Approval], address]}
+     * (sender of a transfer, owner of an approval) and {@code topics: [Transfer, null, address]} (recipient); the
+     * address topic is the lowercase address left-padded to 32 bytes. Only ERC-20 logs are decoded (3 topics + one
+     * 32-byte word; ERC-721 logs have 4 topics and are ignored); removed logs, approvals of another owner and logs
+     * outside the chunk are skipped; a log returned by both queries (self-transfer) is emitted once. Event ids are the
+     * live indexer's ({@code network:txHash:logIndex}).
+     * <p>A "range too large / too many results" answer halves the chunk (down to {@link EvmConfig#historyMinChunkSize()},
+     * below which a non-retryable {@link ProviderException} is thrown) and retries within the same call; the smaller
+     * chunk is kept in the cursor. Cursor format: {@code <upperBlock>:<chunkSize>} (null = start at {@code toBlock} with
+     * {@link EvmConfig#historyChunkSize()}). {@code coveredFromTime} is always null (no extra RPC for the low block).
+     */
+    @Override public HistoryPage fetch(Address address, long fromBlock, long toBlock, String cursor) {
+        if (address.network() != network) throw new ProviderException("address network mismatch", false);
+        if (fromBlock < 0 || toBlock < fromBlock) return new HistoryPage(List.of(), fromBlock, null, null, 0);
+        long upper = toBlock;
+        int chunk = config.historyChunkSize();
+        if (cursor != null) {
+            String[] c = cursor.split(":");
+            try {
+                if (c.length != 2) throw new NumberFormatException();
+                upper = Long.parseLong(c[0]);
+                chunk = Integer.parseInt(c[1]);
+            } catch (NumberFormatException e) {
+                throw new ProviderException(id + ": invalid history cursor " + cursor, false);
+            }
+            if (upper < fromBlock || upper > toBlock || chunk < 1) {
+                throw new ProviderException(id + ": history cursor " + cursor + " outside " + fromBlock + ".." + toBlock, false);
+            }
+        }
+        String topic = "0x" + padAddress(address.value());
+        int queries = 0;
+        while (true) {
+            long low = Math.max(fromBlock, upper - chunk + 1);
+            List<JsonNode> logs = new ArrayList<>();
+            try {
+                queries++;
+                logs.addAll(historyLogs(low, upper, List.of(TRANSFER_TOPIC, APPROVAL_TOPIC), topic, null));
+                queries++;
+                logs.addAll(historyLogs(low, upper, List.of(TRANSFER_TOPIC), null, topic));
+            } catch (JsonRpcException e) {
+                if (!e.rangeTooLarge()) throw e;
+                if (chunk <= config.historyMinChunkSize()) {
+                    throw new ProviderException(id + ": eth_getLogs history of " + address.value() + " in blocks " + low + ".." + upper
+                            + " still too large at the minimum chunk size " + config.historyMinChunkSize() + ": " + e.rpcMessage(), false, e);
+                }
+                chunk = Math.max(config.historyMinChunkSize(), chunk / 2);
+                continue;
+            }
+            Instant now = Instant.now();
+            Map<String, ChainEvent> events = new LinkedHashMap<>();
+            for (JsonNode log : logs) historyEvent(log, address, low, upper, now).ifPresent(ev -> events.putIfAbsent(ev.eventId(), ev));
+            String next = low == fromBlock ? null : (low - 1) + ":" + chunk;
+            return new HistoryPage(new ArrayList<>(events.values()), low, null, next, queries);
+        }
+    }
+
+    private List<JsonNode> historyLogs(long from, long to, List<String> topic0, String topic1, String topic2) {
+        ObjectNode filter = Json.MAPPER.createObjectNode();
+        filter.put("fromBlock", toQuantity(from));
+        filter.put("toBlock", toQuantity(to));
+        ArrayNode topics = filter.putArray("topics");
+        if (topic0.size() == 1) topics.add(topic0.getFirst());
+        else topic0.forEach(topics.addArray()::add);
+        if (topic1 == null) topics.addNull(); else topics.add(topic1);
+        if (topic2 != null) topics.add(topic2);
+        JsonNode logs = rpc.call("eth_getLogs", filter);
+        if (!logs.isArray()) throw new ProviderException(id + ": eth_getLogs returned non-array", true);
+        List<JsonNode> out = new ArrayList<>(logs.size());
+        logs.forEach(out::add);
+        return out;
+    }
+
+    private Optional<ChainEvent> historyEvent(JsonNode log, Address address, long low, long upper, Instant ingestedAt) {
+        if (log.path("removed").asBoolean(false)) return Optional.empty();
+        String bh = text(log, "blockHash");
+        String bn = text(log, "blockNumber");
+        JsonNode topics = log.path("topics");
+        if (bh == null || bn == null || !topics.isArray() || topics.size() != 3) return Optional.empty(); // pending / ERC-721
+        long number = quantityLong(bn);
+        if (number < low || number > upper) return Optional.empty();
+        Instant ts = present(log.path("blockTimestamp")) ? Instant.ofEpochSecond(quantityLong(text(log, "blockTimestamp")))
+                : timestampOf(bh);
+        List<String> ts0 = new ArrayList<>(3);
+        for (JsonNode t : topics) ts0.add(text(t));
+        LogDecoder.Decoded d = new LogDecoder.Decoded();
+        decoder.decode(text(log, "address"), ts0, text(log, "data"), text(log, "transactionHash"),
+                (int) quantityLong(text(log, "logIndex")), number, bh, ts, d);
+        BlockRef ref = new BlockRef(network, number, bh, null, ts);
+        for (TokenTransfer t : d.transfers) {
+            if (t.from().equals(address) || t.to().equals(address)) return Optional.of(mapper.map(t, ref, ingestedAt));
+        }
+        for (TokenApproval a : d.approvals) {
+            if (a.owner().equals(address)) return Optional.of(mapper.mapApproval(a, ref, ingestedAt));
+        }
+        return Optional.empty();
+    }
+
+    /** {@code eth_getBalance(address, atBlock)} or {@code eth_call balanceOf(address)} at {@code atBlock} (needs that block's state). */
+    @Override public Optional<BigInteger> getBalanceAt(Address address, Token token, long atBlock) {
+        if (address.network() != network || atBlock < 0) throw new ProviderException("invalid balance query", false);
+        String tag = toQuantity(atBlock);
+        if (token.isNative()) return Optional.of(quantity(text(rpc.call("eth_getBalance", address.value(), tag))));
+        ObjectNode call = Json.MAPPER.createObjectNode();
+        call.put("to", token.contract());
+        call.put("data", BALANCE_OF + padAddress(address.value()));
+        String res = text(rpc.call("eth_call", call, tag));
+        String hex = strip0x(res);
+        if (hex == null || hex.isEmpty()) return Optional.empty(); // not an ERC-20 balanceOf answer
+        if (hex.length() > 64) hex = hex.substring(0, 64);
+        return Optional.of(new BigInteger(hex, 16));
     }
 
     @Override public List<Balance> getAddressBalance(Address address) {

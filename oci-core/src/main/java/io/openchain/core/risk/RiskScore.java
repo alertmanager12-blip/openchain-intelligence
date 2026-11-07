@@ -13,7 +13,15 @@ public record RiskScore(Address address, int score, RiskLevel level, List<Contri
      * @param weight       configured weight of the factor
      * @param points       points actually added after confidence/age decay and dedup
      * @param ageSeconds   age of the underlying information
+     * @param explanation  technical trace of the computation (factor, confidence, decay, q, p)
+     * @param title        plain-language name of the factor, e.g. "Rapid drain", "Listed as sanctioned"
+     * @param summary      plain-language sentence: what was observed (signal) or who lists the address (label)
      */
     public record Contribution(String factor, String signalId, String source, double weight, double confidence,
-                               long ageSeconds, double points, String explanation) {}
+                               long ageSeconds, double points, String explanation, String title, String summary) {
+        public Contribution(String factor, String signalId, String source, double weight, double confidence,
+                            long ageSeconds, double points, String explanation) {
+            this(factor, signalId, source, weight, confidence, ageSeconds, points, explanation, null, null);
+        }
+    }
 }

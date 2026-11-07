@@ -16,9 +16,16 @@ import java.util.Objects;
  * @param event   the non-flow event that caused the run, e.g. APPROVAL (nullable)
  * @param profile current profile of the subject (nullable)
  * @param now     wall clock, used only as {@code detectedAt}; windows use on-chain time ({@link #referenceTime()})
+ * @param balances real balances reported by the provider (nullable: flow-based estimates, e.g. tests and simulated chains)
  */
 public record DetectionContext(Address subject, ValueFlow trigger, ChainEvent event, WalletProfile profile,
-                               FlowStore flows, LabelRepository labels, DetectionConfig config, Instant now) {
+                               FlowStore flows, LabelRepository labels, DetectionConfig config, Instant now, BalanceBook balances) {
+
+    public DetectionContext(Address subject, ValueFlow trigger, ChainEvent event, WalletProfile profile, FlowStore flows,
+                            LabelRepository labels, DetectionConfig config, Instant now) {
+        this(subject, trigger, event, profile, flows, labels, config, now, null);
+    }
+
     public DetectionContext {
         Objects.requireNonNull(subject, "subject");
         Objects.requireNonNull(flows, "flows");

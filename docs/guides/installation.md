@@ -69,12 +69,53 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector) |
 | `OCI_CHAINS_TRON_ENABLED`, `OCI_CHAINS_TRON_PROVIDER=trongrid`, `OCI_CHAINS_TRON_URL`, `OCI_CHAINS_TRON_API_KEY_HEADER`, `OCI_CHAINS_TRON_API_KEY` | off | Live TRON indexing through a TronGrid-compatible API |
 | `OCI_CHAINS_ETHEREUM_ENABLED`, `OCI_CHAINS_ETHEREUM_PROVIDER=json-rpc`, `OCI_CHAINS_ETHEREUM_URL`, `OCI_CHAINS_ETHEREUM_START_BLOCK` | off | Live EVM indexing through JSON-RPC (also `bsc`, `polygon`) |
+| `OCI_CHAINS_<NETWORK>_HISTORY_ENABLED` | `true` | On-demand address history (ADR-0020) for a real network: see "Address history" below |
+| `OCI_CHAINS_<NETWORK>_HISTORY_MAX_BLOCKS` | `500000` | Lookback: blocks searched below the first live-indexed block (~70 days on Ethereum, ~17 days on TRON) |
+| `OCI_CHAINS_<NETWORK>_HISTORY_MAX_PAGES` / `..._MAX_EVENTS` | `200` / `5000` | Caps per address; reaching one marks the history TRUNCATED (older events not loaded) |
+| `OCI_CHAINS_<NETWORK>_HISTORY_CHUNK_SIZE` / `..._MIN_CHUNK_SIZE` | `10000` / `50` | EVM: blocks per `eth_getLogs` query, halved on "range too large" answers down to the minimum |
+| `OCI_CHAINS_<NETWORK>_HISTORY_PAUSE` | `100ms` | Pause between two pages (on top of the transport rate limiter) |
 
 Live providers are implemented but have not been validated against production nodes yet.
 
+### Address history (on demand, ADR-0020)
+
+The live indexer only sees blocks from its start block onwards. When an analyst opens an address of a **real** network
+(wallet analysis, risk or transactions endpoint; the console's wallet page), ChainSentinel loads that address's past
+activity in the background through the network's own provider, then feeds it to profiles, detection, scoring and labels
+like live data. **History never raises alerts** (rules are not evaluated for it). The wallet page shows a coverage line
+("Loading history…" while it runs, then for example "History: ERC-20 transfers and approvals since block 25,865,009
+(eth_getLogs, 37 event(s)). Native transfers and internal transfers are not covered: configure an Erigon node
+(ADR-0020).") and refreshes itself until the load is finished; the API exposes it as `history` in the wallet analysis.
+
+| Network | Source | Covers | Not covered |
+|---|---|---|---|
+| Ethereum, BSC, Polygon | `eth_getLogs` by topic on the configured JSON-RPC (two queries per chunk: the address as topic 1 of `Transfer`/`Approval`, and as topic 2 of `Transfer`) | ERC-20 transfers (sent and received), approvals granted by the address | native ETH/BNB/POL transfers, internal transactions, approvals where the address is the spender, ERC-721/1155 |
+| TRON | TronGrid account endpoints (`/v1/accounts/{address}/transactions/trc20` and `/transactions`, `only_confirmed`) | TRC-20 transfers, TRX transfers (`TransferContract`, `TriggerSmartContract.call_value`) | internal transactions, approvals |
+| Simulated demo chains | none | the indexed demo data is the whole history (`NOT_CONFIGURED`) | |
+
+- **Range:** `[toBlock - max-blocks + 1, toBlock]` with `toBlock` = the provider's finalized head, or the block before
+  the first block indexed live (whichever is lower), so history and live indexing never overlap. Pages are fetched
+  newest first, so a capped (TRUNCATED) history keeps the most recent activity.
+- **Cost:** EVM: 2 `eth_getLogs` per chunk of `chunk-size` blocks (500,000 blocks = 50 chunks = ~100 calls per address
+  when the provider accepts 10,000-block ranges), plus one `eth_getBlockByHash` per distinct block when the node omits
+  `blockTimestamp`. Many public / free gateways limit `eth_getLogs` ranges (observed on 2026-11-07: Cloudflare 800
+  blocks, 1RPC 50 blocks, dRPC free plan under 100 blocks, PublicNode requires a token for archive ranges): the adapter
+  halves the chunk automatically, but a small limit makes a long lookback slow; use your own node or a provider plan
+  that accepts large ranges, or lower `max-blocks`. TRON: one TronGrid call per 200 events.
+- **Resumable and idempotent:** progress and found events are stored (PostgreSQL `address_history_progress` /
+  `address_history_events` in JDBC mode, in memory otherwise). A restart re-applies finished histories without RPC and
+  resumes unfinished ones from their cursor; a provider error marks the history FAILED with its progress kept, and the
+  next analysis of the address resumes it. An address already covered is not fetched again (new blocks are covered by
+  the live indexer).
+- **Limits:** TronGrid gives no log index for TRC-20 history: those events get their own ids (`tron:<tx>:trc20:<hash>:<n>`)
+  and no block number, so coverage on TRON is reported in time (`coveredFromTime`). Native and internal EVM value needs
+  an Erigon `ots_` node or an opt-in commercial adapter (ADR-0020 steps 2-3, not implemented yet).
+- Disable per network with `oci.chains.<network>.history.enabled: false`.
+
 ### Current limitations
 
-- **Operator state is persisted** in PostgreSQL (API keys, connectors, rules and their versions, alerts with history and comments, the delivery outbox with retries and dead letters, label reports, users/roles) when `SPRING_DATASOURCE_URL` is set. **Chain-derived state is not persisted yet**: flows, wallet profiles, signals, risk scores, indexer checkpoints and the event history stay in memory and are rebuilt on restart by re-indexing from the configured start block (`OCI_CHAINS_*_START_BLOCK`; demo chains are regenerated). Re-indexing does not duplicate alerts: an event that already raised an alert for a rule is recognised. Alert details derived from the event history (address, transaction hash, matched fields) are only available for events re-indexed since the start.
+- **Operator state is persisted** in PostgreSQL (API keys, connectors, rules and their versions, alerts with history and comments, the delivery outbox with retries and dead letters, label reports, users/roles) when `SPRING_DATASOURCE_URL` is set. **Chain-derived state is not persisted yet**: flows, wallet profiles, signals, risk scores, indexer checkpoints and the event history stay in memory and are rebuilt on restart by re-indexing from the configured start block (`OCI_CHAINS_*_START_BLOCK`; demo chains are regenerated). Re-indexing does not duplicate alerts: an event that already raised an alert for a rule is recognised. Alert details (address, counterparty, transaction hash, block, matched fields) are stored with each alert (migration V3) and survive restarts; for alerts created before V3 they are filled by the migration where the grouping key is the wallet, or when the triggering event is re-indexed, and stay empty otherwise.
+- **Balances on real chains:** `wallet.balance` (used by `wallet-draining` through `RATIO_OF_BALANCE`) and the rapid drain detector use the balance reported by the provider at the end of the block before the transfer: EVM `eth_getBalance` (native) or `eth_call balanceOf` (tokens) at that block, one call per (sender, token, block), cached (LRU 10 000) — size the provider rate limit accordingly (about one extra call per indexed transfer sender). Your node must still have that block's state (any full node keeps the recent ~128 blocks; the indexer works near the head). When the balance is unavailable (error, rate limit, pruned state) the field is **absent** and balance-based rules and the drain detector do not fire for that transfer — never an estimate. **TRON:** TronGrid exposes no historical balance, so on real TRON `wallet.balance` is absent and `wallet-draining` does not fire (demo chains are unaffected). Known noise on mainnet: `fund-splitting` (>10 distinct recipients in 3 minutes) fires on routers, exchanges and payout wallets; exclude them with labels/lists in your copy of the rule.
 - Single instance: rules and connectors are loaded in memory at startup; outbox claiming is multi-instance safe (`FOR UPDATE SKIP LOCKED` + lease), but running several app instances is not supported yet.
 - No rate limiting, idempotency keys or `If-Match` concurrency control yet.
 - Notification channels: WEBHOOK, SLACK, DISCORD, TELEGRAM. EMAIL and PUSH need a transport that is not available yet.

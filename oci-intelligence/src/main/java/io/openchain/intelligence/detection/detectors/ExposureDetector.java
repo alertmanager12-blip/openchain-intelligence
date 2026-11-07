@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -91,7 +92,8 @@ public final class ExposureDetector extends AbstractDetector {
                     fl.getLast().txHash(), qualifiedId(), fl.getLast().timestamp()));
             EvidenceLevel lvl = l.evidenceLevel() == EvidenceLevel.CONFIRMED_BY_SOURCE ? EvidenceLevel.CONFIRMED_BY_SOURCE : EvidenceLevel.RISK_SIGNAL;
             out.add(signal(ctx, l.category().exposureType(), s, fl.getLast().txHash(), directSeverity(l.category()),
-                    l.sourceReliability(), lvl, ev, "direct|" + l.address() + "|" + l.category() + "|" + l.source()));
+                    l.sourceReliability(), lvl, ev, "direct|" + l.address() + "|" + l.category() + "|" + l.source(),
+                    directSummary(l, perToken, fl.size())));
         });
         return out;
     }
@@ -106,8 +108,12 @@ public final class ExposureDetector extends AbstractDetector {
                 + " by " + l.source() + " ignored for exposure: " + unverified + " of an unverified token contract, "
                 + (fl.size() - unverified) + " below the dust threshold (" + cfg.dustThresholds() + ")",
                 fl.getLast().txHash(), qualifiedId(), fl.getLast().timestamp()));
+        String summary = "Received " + plural(fl.size(), "unsolicited transfer", "unsolicited transfers") + " from an address listed as "
+                + category(l.category().name()) + " by " + l.source() + " (" + (unverified == fl.size() ? "unverified token"
+                : unverified == 0 ? "below the dust threshold" : "unverified token or below the dust threshold")
+                + "); not counted as exposure because anyone can send such transfers.";
         return signal(ctx, SignalType.DUSTING, ctx.subject(), fl.getLast().txHash(), Severity.INFO, l.sourceReliability(),
-                EvidenceLevel.ANOMALY, ev, "dusting|" + l.address() + "|" + l.category() + "|" + l.source());
+                EvidenceLevel.ANOMALY, ev, "dusting|" + l.address() + "|" + l.category() + "|" + l.source(), summary);
     }
 
     /** Indirect tracing follows inbound value only: same rule as {@link #counts} for inbound flows. */
@@ -173,7 +179,25 @@ public final class ExposureDetector extends AbstractDetector {
             case 2 -> l.category() == LabelCategory.SANCTIONED ? Severity.HIGH : Severity.MEDIUM;
             default -> l.category() == LabelCategory.SANCTIONED ? Severity.MEDIUM : Severity.LOW;
         };
-        return signal(ctx, SignalType.INDIRECT_EXPOSURE, ctx.subject(), path.getLast().txHash(), sev, conf, EvidenceLevel.RISK_SIGNAL, ev, disc);
+        String summary = "Received funds that trace back, through " + plural(hops - 1, "intermediary address", "intermediary addresses")
+                + ", to an address listed as " + category(l.category().name()) + " by " + l.source() + " (at most "
+                + amount(bottleneck.amount(), bottleneck.token().symbol()) + " traced).";
+        return signal(ctx, SignalType.INDIRECT_EXPOSURE, ctx.subject(), path.getLast().txHash(), sev, conf, EvidenceLevel.RISK_SIGNAL, ev, disc, summary);
+    }
+
+    /** "Received 12,500 USDT directly from an address listed as sanctioned by ofac-sdn" (sent / both directions alike). */
+    static String directSummary(AddressLabel l, Map<String, BigDecimal[]> perToken, int transfers) {
+        List<String> in = new ArrayList<>(), out = new ArrayList<>();
+        perToken.forEach((sym, io) -> {
+            if (io[0].signum() > 0) in.add(amount(io[0], sym));
+            if (io[1].signum() > 0) out.add(amount(io[1], sym));
+        });
+        String who = "an address listed as " + category(l.category().name()) + " by " + l.source();
+        String verb = !in.isEmpty() && !out.isEmpty() ? "Received " + String.join(" and ", in) + " from and sent "
+                + String.join(" and ", out) + " directly to " + who
+                : !in.isEmpty() ? "Received " + String.join(" and ", in) + " directly from " + who
+                : "Sent " + String.join(" and ", out) + " directly to " + who;
+        return verb + (transfers > 1 ? " (" + transfers + " transfers)." : ".");
     }
 
     private static Evidence labelEvidence(AddressLabel l) {

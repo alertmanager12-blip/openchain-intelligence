@@ -43,8 +43,9 @@
               <span class="sr-only">{{ sentence(a.severity) }},</span>
               <div class="it-main">
                 <div class="it-title">{{ a.ruleName }}</div>
+                @if (a.evidenceSummary) { <div class="it-why">{{ a.evidenceSummary }}</div> }
                 <div class="it-meta"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>
-                  @if (a.address) { <span class="mono">{{ short(a.address) }}</span> }<span>{{ netLabel(a.network) }}</span></div>
+                  @if (a.address) { <span class="mono it-wallet" [attr.title]="a.address"><span class="sr-only">Wallet </span>{{ short(a.address) }}</span> } @else { <span class="muted">No wallet</span> }<span>{{ netLabel(a.network) }}</span></div>
               </div>
               <time class="it-time" [attr.datetime]="a.createdAt">{{ ago(a.createdAt) }}</time>
             </div>

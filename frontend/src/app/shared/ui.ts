@@ -136,4 +136,32 @@ export class CopyButton {
   }
 }
 
-export const UI = [StateComponent, SeverityBadge, EvidenceBadge, RiskBadge, NetworkChip, AddressLink, RiskGauge, CopyButton] as const;
+/**
+ * Collapsed "Technical detail" disclosure: the plain-language reading comes first, the formulas, factor keys,
+ * detector ids and raw evidence stay one click (or Enter / Space) away. Native details/summary, so it works
+ * with the keyboard and screen readers without script; aria-expanded mirrors the open state for older AT.
+ */
+@Component({
+  selector: 'oci-tech',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<details class="tech" [open]="open()" (toggle)="open.set($any($event.target).open)">
+      <summary [attr.aria-expanded]="open()">{{ label() }}</summary>
+      <div class="tech-body"><ng-content /></div>
+    </details>`,
+  styles: `
+    :host { display: block; min-width: 0; }
+    .tech summary { cursor: pointer; width: fit-content; font-size: 12px; color: var(--muted); padding: 2px 0; border-radius: 4px; list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+    .tech summary::-webkit-details-marker { display: none; }
+    .tech summary::before { content: ''; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; transition: transform 120ms ease; }
+    .tech[open] summary::before { transform: rotate(90deg); }
+    .tech summary:hover { color: var(--ink-2); }
+    .tech summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .tech-body { margin-top: 6px; padding: 8px 10px; border-left: 2px solid var(--line); font-size: 12px; color: var(--ink-2); display: grid; gap: 4px; overflow-wrap: anywhere; }
+  `,
+})
+export class TechDetail {
+  readonly label = input('Technical detail');
+  readonly open = signal(false);
+}
+
+export const UI = [StateComponent, SeverityBadge, EvidenceBadge, RiskBadge, NetworkChip, AddressLink, RiskGauge, CopyButton, TechDetail] as const;

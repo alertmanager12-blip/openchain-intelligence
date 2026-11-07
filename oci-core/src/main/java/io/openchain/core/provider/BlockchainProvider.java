@@ -1,5 +1,6 @@
 package io.openchain.core.provider;
 
+import io.openchain.core.model.Token;
 import io.openchain.core.model.*;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +46,14 @@ public interface BlockchainProvider {
     default Optional<Boolean> isContract(Address address, long atBlock) { return Optional.empty(); }
 
     List<Balance> getAddressBalance(Address address);
+
+    /**
+     * Balance of {@code token} (native coin when {@link Token#isNative()}) held by {@code address} at the END of block
+     * {@code atBlock}, in base units. Empty when the provider cannot answer for that block (no historical state, e.g.
+     * TronGrid). Errors (rate limits, pruned state) are thrown as {@link ProviderException}; callers must then treat the
+     * balance as unknown, never estimate it.
+     */
+    default Optional<java.math.BigInteger> getBalanceAt(Address address, Token token, long atBlock) { return Optional.empty(); }
 
     /** Push subscription when supported; otherwise implementations poll. Returns a handle to cancel. */
     Subscription subscribeToEvents(Consumer<BlockRef> onNewHead);

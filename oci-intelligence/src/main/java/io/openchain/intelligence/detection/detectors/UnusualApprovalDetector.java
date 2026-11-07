@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -38,6 +39,9 @@ public final class UnusualApprovalDetector extends AbstractDetector {
             ev.add(new Evidence("label", "spender listed as " + l.category() + " by " + l.source(), l.reference(), l.source(), l.observedAt()));
         Severity sev = spenderLabels.isEmpty() ? Severity.LOW : Severity.HIGH;
         double conf = spenderLabels.isEmpty() ? 0.5 : spenderLabels.stream().mapToDouble(AddressLabel::sourceReliability).max().orElse(0.5);
-        return List.of(signal(ctx, SignalType.UNUSUAL_APPROVAL, owner.get(), tx, sev, conf, EvidenceLevel.RISK_SIGNAL, ev, e.eventId()));
+        String summary = "Granted an unlimited " + token + " allowance to " + shortAddress(spender.get().value())
+                + (spenderLabels.isEmpty() ? ", which can move all of its " + token + " at any time."
+                : ", an address listed as " + category(spenderLabels.getFirst().category().name()) + " by " + spenderLabels.getFirst().source() + ".");
+        return List.of(signal(ctx, SignalType.UNUSUAL_APPROVAL, owner.get(), tx, sev, conf, EvidenceLevel.RISK_SIGNAL, ev, e.eventId(), summary));
     }
 }

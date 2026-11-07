@@ -36,7 +36,7 @@ public final class ApiMapper {
         return new Dto.SignalDto(s.id(), s.type().name(), s.address().value(), s.address().network().id(), s.txHash(),
                 s.severity().name(), s.confidence(), s.evidenceLevel().name(),
                 s.evidence().stream().map(e -> new Dto.EvidenceDto(e.kind(), e.description(), e.reference(), e.source(), e.observedAt())).toList(),
-                s.detectorId(), s.detectedAt());
+                s.detectorId(), s.detectedAt(), s.title(), s.summary());
     }
 
     /**
@@ -45,9 +45,11 @@ public final class ApiMapper {
     public static Dto.RiskScoreDto risk(RiskScore r, List<RiskScore> history, Function<RiskScore.Contribution, String> evidenceLevelOf) {
         return new Dto.RiskScoreDto(r.address().value(), r.address().network().id(), r.score(), r.level().name(),
                 r.contributions().stream().map(c -> new Dto.ContributionDto(c.factor(), c.signalId(), c.source(), round(c.weight()),
-                        round(c.confidence()), c.ageSeconds(), round(c.points()), c.explanation(), evidenceLevelOf.apply(c))).toList(),
+                        round(c.confidence()), c.ageSeconds(), round(c.points()), c.explanation(), evidenceLevelOf.apply(c),
+                        c.title(), c.summary())).toList(),
                 r.method(), r.modelVersion(), r.computedAt(),
-                history == null ? null : history.stream().map(h -> new Dto.RiskHistoryDto(h.computedAt(), h.score(), h.level().name())).toList());
+                history == null ? null : history.stream().map(h -> new Dto.RiskHistoryDto(h.computedAt(), h.score(), h.level().name())).toList(),
+                io.openchain.intelligence.risk.RiskScoringEngine.METHOD_SUMMARY);
     }
 
     public static Dto.LabelDto label(AddressLabel l) {

@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -41,6 +42,15 @@ public final class OwnershipChangeDetector extends AbstractDetector {
             ev.add(new Evidence("label", "new " + role + " listed as " + l.category() + " by " + l.source(), l.reference(), l.source(), l.observedAt()));
         Severity sev = renounced ? Severity.INFO : newLabels.isEmpty() ? Severity.MEDIUM : Severity.HIGH;
         double conf = newLabels.isEmpty() ? 0.9 : newLabels.stream().mapToDouble(AddressLabel::sourceReliability).max().orElse(0.9);
-        return List.of(signal(ctx, SignalType.OWNERSHIP_CHANGE, contract.get(), tx, sev, conf, EvidenceLevel.RISK_SIGNAL, ev, e.eventId()));
+        boolean upgrade = io.openchain.core.model.ContractAdminChange.ROLE_IMPLEMENTATION.equals(role);
+        String what = role.replace('-', ' ').replace('_', ' ');
+        String summary = renounced ? "The " + what + " of this contract was renounced (set to the zero address)."
+                : upgrade && prev.isEmpty() ? "The implementation of this contract was upgraded to "
+                + neu.map(x -> shortAddress(x.value())).orElse("an unknown address") + "."
+                : "The " + what + " of this contract changed from " + prev.map(x -> shortAddress(x.value())).orElse("an unknown address")
+                + " to " + neu.map(x -> shortAddress(x.value())).orElse("an unknown address")
+                + (newLabels.isEmpty() ? "." : ", an address listed as " + category(newLabels.getFirst().category().name()) + " by "
+                + newLabels.getFirst().source() + ".");
+        return List.of(signal(ctx, SignalType.OWNERSHIP_CHANGE, contract.get(), tx, sev, conf, EvidenceLevel.RISK_SIGNAL, ev, e.eventId(), summary));
     }
 }

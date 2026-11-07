@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -26,7 +27,8 @@ public final class DormantReactivationDetector extends AbstractDetector {
         var ev = List.of(flowEvidence(prev, "last activity before dormancy"), flowEvidence(t, "reactivation"),
                 new Evidence("pattern", "no activity for " + human(gap) + " (threshold " + human(ctx.config().dormancy().minDormancy()) + ")",
                         t.txHash(), qualifiedId(), t.timestamp()));
+        String summary = "Sent " + amount(t.amount(), t.token().symbol()) + " after " + duration(gap) + " without any observed activity.";
         return List.of(signal(ctx, SignalType.DORMANT_REACTIVATION, ctx.subject(), t.txHash(), Severity.LOW, 0.8,
-                EvidenceLevel.ANOMALY, ev, t.eventId()));
+                EvidenceLevel.ANOMALY, ev, t.eventId(), summary));
     }
 }

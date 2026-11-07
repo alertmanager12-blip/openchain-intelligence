@@ -58,6 +58,7 @@ public final class IntelligencePipeline {
     private final DetectionConfig config;
     private final Clock clock;
     private final Set<String> seenEvents = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final io.openchain.intelligence.detection.BalanceBook balances = new io.openchain.intelligence.detection.BalanceBook();
     /** Last applied freeze/unfreeze per (address, label source), with the state it replaced (for reorg reverts). */
     private final Map<String, FreezeState> freezeStates = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -92,6 +93,8 @@ public final class IntelligencePipeline {
     public LabelRepository labels() { return labels; }
     public SignalRepository signals() { return signals; }
     public RiskScoringService scoring() { return scoring; }
+    /** Real balances reported by the ingestion (authoritative networks: real chains). */
+    public io.openchain.intelligence.detection.BalanceBook balances() { return balances; }
 
     public Result onTransfer(TokenTransfer t) { return onFlow(ValueFlow.of(t)); }
 
@@ -177,7 +180,7 @@ public final class IntelligencePipeline {
         Map<String, String> errors = new LinkedHashMap<>();
         Set<Address> toScore = new LinkedHashSet<>(subjects);
         for (Address a : subjects) {
-            DetectionResult r = detection.run(new DetectionContext(a, trigger, event, profiles.profileOrEmpty(a), flows, labels, config, clock.instant()));
+            DetectionResult r = detection.run(new DetectionContext(a, trigger, event, profiles.profileOrEmpty(a), flows, labels, config, clock.instant(), balances));
             fresh.addAll(r.newSignals());
             errors.putAll(r.detectorErrors());
             r.newSignals().forEach(s -> toScore.add(s.address()));

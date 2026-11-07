@@ -37,7 +37,8 @@ public final class JsonRpcException extends ProviderException {
         String m = rpcMessage.toLowerCase(Locale.ROOT);
         if (m.contains("rate limit") || m.contains("rate-limit") || m.contains("request count") || m.contains("too many requests")) return false;
         return m.contains("more than") && m.contains("result") || m.contains("too many results") || m.contains("response size")
-                || m.contains("block range") || m.contains("range is too") || m.contains("range too") || m.contains("maximum range");
+                || m.contains("block range") || m.contains("blocks range") || m.contains("range is too") || m.contains("range too")
+                || m.contains("maximum range") || m.contains("max range") || m.contains("ranges over");
     }
 
     /**

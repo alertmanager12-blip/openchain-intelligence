@@ -54,8 +54,11 @@ public class InvestigationService {
     private final IntelligencePipeline intelligence;
     private final LabelCatalog labels;
     private final Clock clock;
+    private final io.openchain.app.history.AddressHistoryService history;
 
-    public InvestigationService(ChainIngestionService chains, IntelligencePipeline intelligence, LabelCatalog labels, Clock clock) {
+    public InvestigationService(ChainIngestionService chains, IntelligencePipeline intelligence, LabelCatalog labels, Clock clock,
+                                io.openchain.app.history.AddressHistoryService history) {
+        this.history = history;
         this.chains = chains;
         this.intelligence = intelligence;
         this.labels = labels;
@@ -127,7 +130,17 @@ public class InvestigationService {
 
     // ---- wallet -------------------------------------------------------------------------------------------------
 
+    /** Starts the on-demand history backfill of an address that is not covered yet (ADR-0020); no-op otherwise. */
+    public void ensureHistory(Address a) {
+        try {
+            history.ensure(a);
+        } catch (RuntimeException e) { // never fail an analysis because of the history store
+            org.slf4j.LoggerFactory.getLogger(InvestigationService.class).warn("address history of {} not started: {}", a, e.getMessage());
+        }
+    }
+
     public Dto.WalletAnalysisDto wallet(Address a) {
+        ensureHistory(a);
         WalletProfile p = intelligence.profiles().profileOrEmpty(a);
         Dto.RiskScoreDto risk = risk(a, true);
         List<Dto.BalanceDto> balances = new ArrayList<>();
@@ -154,7 +167,8 @@ public class InvestigationService {
                 p.inboundTransfers(), p.outboundTransfers(), ApiMapper.round(p.txPerDay()));
         return new Dto.WalletAnalysisDto(a.value(), a.network().id(), p.firstActivity(), p.lastActivity(), p.transactionCount(),
                 false, labels.findByAddress(a).stream().map(ApiMapper::label).toList(), balances, flowDtos,
-                counterparties(a, flows), activity(a, flows), signals, risk, profile, risk, freshness, DISCLAIMER);
+                counterparties(a, flows), activity(a, flows), signals, risk, profile, risk, freshness, DISCLAIMER,
+                history.coverage(a));
     }
 
     private List<Dto.CounterpartyDto> counterparties(Address self, List<ValueFlow> flows) {

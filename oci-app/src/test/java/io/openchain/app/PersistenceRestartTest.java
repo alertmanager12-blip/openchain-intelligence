@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.openchain.alerting.alert.Alert;
 import io.openchain.alerting.alert.AlertService;
+import io.openchain.alerting.alert.AlertSubject;
+import io.openchain.core.event.ChainEvent;
 import io.openchain.alerting.alert.AlertStatus;
 import io.openchain.alerting.engine.RuleMatch;
 import io.openchain.alerting.notify.WebhookSignature;
@@ -114,7 +116,7 @@ class PersistenceRestartTest {
     @Test
     void operatorStateSurvivesARestart() throws Exception {
         PostgresSupport.Database db = PostgresSupport.newDatabase();
-        String key, webhookId, webhookSecret, alertId, deliveryId;
+        String key, webhookId, webhookSecret, alertId, deliveryId, healedId;
         long alertsBefore, keysBefore, rulesBefore;
         String webhookUrl = "https://hooks.example.com/oci/restart?token=URLTOKEN42";
 
@@ -141,9 +143,16 @@ class PersistenceRestartTest {
 
             // an alert for that rule with a delivery to the connector (as the pipeline does), first attempt fails (503)
             AlertService alerts = ctx.getBean(AlertService.class);
+            // the triggering event is NOT part of the demo chain: after the restart nothing re-indexes it, so its wallet and
+            // transaction can only come from what was stored with the alert (V3 subject columns)
+            ChainEvent trigger = new ChainEvent("tron:0xrestart:0", ChainEvent.EventType.TOKEN_TRANSFER, Network.TRON, 4242, "0xblk",
+                    Instant.parse("2026-11-01T10:00:00Z"), Instant.now(), false, Map.of("transaction.hash", "0xrestart",
+                    "transaction.from", "TRestartSender0000000000000000001", "transaction.to", "TRestartRecipient000000000000002",
+                    "wallet.address", "TRestartSender0000000000000000001", "transaction.amount", new BigDecimal("1250.5"),
+                    "transaction.token.symbol", "USDT"));
             RuleMatch m = new RuleMatch("restart-survival", "1.2.0", "Restart survival rule", Severity.HIGH, EvidenceLevel.ANOMALY,
                     Network.TRON, "g", "restart-key", "tron:0xrestart:0", Instant.now(), List.of("tron:0xrestart:0"),
-                    Map.of("kind", "STATELESS", "amount", new BigDecimal("123456789.5")), List.of(), 0);
+                    Map.of("kind", "STATELESS", "amount", new BigDecimal("123456789.5")), List.of(), 0, AlertSubject.of(trigger));
             Alert a = alerts.onMatch(m, Duration.ofMinutes(10)).alert();
             alertId = a.id();
             a = alerts.transition(alertId, AlertStatus.PENDING, AlertService.SYSTEM, "dispatching 1 action(s)");
@@ -162,6 +171,13 @@ class PersistenceRestartTest {
                     .status()).isEqualTo(200);
 
             NamedParameterJdbcTemplate jdbc = ctx.getBean(NamedParameterJdbcTemplate.class);
+            // an alert stored before V3 (no subject): blanked here, it must get its subject back when the demo chain
+            // re-indexes its triggering event after the restart
+            healedId = jdbc.queryForObject("select id from alerts where rule_id = 'wallet-draining' order by created_at, id limit 1",
+                    Map.of(), String.class);
+            jdbc.update("update alerts set subject_event_id = null, subject_event_type = null, subject_address = null, "
+                    + "subject_counterparty = null, subject_tx_hash = null, subject_block = null, subject_time = null, "
+                    + "subject_fields = null where id = :id", Map.of("id", healedId));
             alertsBefore = count(jdbc, "alerts");
             assertThat(alertsBefore).as("demo chain alerts + the test alert").isGreaterThan(1);
             keysBefore = count(jdbc, "api_keys");
@@ -180,6 +196,25 @@ class PersistenceRestartTest {
             assertThat(alert.body().get("comments").get(0).get("body").asString()).isEqualTo("checked before restart");
             List<String> actions = alert.body().get("history").valueStream().map(h -> h.get("action").asString()).toList();
             assertThat(actions).contains("DETECTED", "PENDING", "ACKNOWLEDGED");
+            // wallet / transaction / matched event survive the restart (stored subject, not the in-memory event history)
+            System.out.println("ALERT AFTER RESTART: " + alert.body().toString());
+            assertThat(alert.body().get("address").asString()).isEqualTo("TRestartSender0000000000000000001");
+            assertThat(alert.body().get("txHash").asString()).isEqualTo("0xrestart");
+            assertThat(alert.body().get("counterparty").asString()).isEqualTo("TRestartRecipient000000000000002");
+            assertThat(alert.body().get("blockNumber").asLong()).isEqualTo(4242);
+            assertThat(alert.body().get("matchedEvent").get("transaction.amount").asString()).isEqualTo("1250.5");
+            assertThat(alert.body().get("evidenceSummary").asString()).isEqualTo("TResta…0001 sent 1,250.5 USDT to TResta…0002.");
+            Res filtered = call(ctx, "GET", "/api/v1/alerts?address=TRestartSender0000000000000000001", key, null);
+            assertThat(filtered.body().toString()).contains(alertId);
+            // every alert of the re-indexed demo chain has its wallet, including the one blanked before the restart
+            Res all = call(ctx, "GET", "/api/v1/alerts?limit=200", key, null);
+            List<JsonNode> listed = (all.body().has("items") ? all.body().get("items") : all.body()).valueStream().toList();
+            assertThat(listed).isNotEmpty().allSatisfy(x -> assertThat(x.get("address").isNull()).as(x.get("id").asString()).isFalse());
+            Res healed = call(ctx, "GET", "/api/v1/alerts/" + healedId, key, null);
+            assertThat(healed.body().get("txHash").isNull()).isFalse();
+            assertThat(healed.body().get("evidenceSummary").asString()).containsPattern("sent .*balance.* within 2 minutes");
+            assertThat(ctx.getBean(NamedParameterJdbcTemplate.class).queryForObject(
+                    "select subject_tx_hash from alerts where id = :id", Map.of("id", healedId), String.class)).isNotNull();
 
             // connector listed, masked, and its decrypted secret signs the retried delivery
             Res hooks = call(ctx, "GET", "/api/v1/webhooks", key, null);

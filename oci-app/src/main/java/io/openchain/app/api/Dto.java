@@ -19,15 +19,21 @@ public final class Dto {
     public record EvidenceDto(String kind, String description, String reference, String source, Instant observedAt) {}
 
     public record SignalDto(String id, String type, String address, String network, String txHash, String severity, double confidence,
-                            String evidenceLevel, List<EvidenceDto> evidence, String detectorId, Instant detectedAt) {}
+                            String evidenceLevel, List<EvidenceDto> evidence, String detectorId, Instant detectedAt,
+                            /** Plain-language name, e.g. "Rapid drain". */ String title,
+                            /** One plain-language sentence of what was observed (technical trace in evidence). */ String summary) {}
 
     public record ContributionDto(String factor, String signalId, String source, double weight, double confidence, long ageSeconds,
-                                  double points, String explanation, String evidenceLevel) {}
+                                  double points, String explanation, String evidenceLevel,
+                                  /** Plain-language factor name ("Rapid drain", "Listed as sanctioned"); explanation stays technical. */
+                                  String title, String summary) {}
 
     public record RiskHistoryDto(Instant at, int score, String level) {}
 
     public record RiskScoreDto(String address, String network, int score, String level, List<ContributionDto> contributions,
-                               String method, String modelVersion, Instant computedAt, List<RiskHistoryDto> history) {}
+                               String method, String modelVersion, Instant computedAt, List<RiskHistoryDto> history,
+                               /** Plain-language description of the scoring method ({@code method} keeps the formula). */
+                               String methodSummary) {}
 
     public record LabelDto(String id, String address, String network, String category, String name, String source,
                            double reliability, String evidenceLevel, Instant createdAt, String reference, String status) {}
@@ -48,7 +54,20 @@ public final class Dto {
                                     boolean isContract, List<LabelDto> labels, List<BalanceDto> balances, List<FlowDto> flows,
                                     List<CounterpartyDto> counterparties, List<ActivityDto> activity, List<SignalDto> signals,
                                     RiskScoreDto risk, ProfileDto profile, RiskScoreDto riskScore, String dataFreshness,
-                                    String disclaimer) {}
+                                    String disclaimer, HistoryCoverageDto history) {}
+
+    /**
+     * Coverage of the on-demand address history (ADR-0020) for one wallet.
+     *
+     * @param status           NOT_CONFIGURED (no history source: simulated chain or none configured), PENDING (queued),
+     *                         RUNNING, COMPLETE, TRUNCATED (caps reached: older history not loaded), FAILED (resumable)
+     * @param coveredFromBlock lowest block fully covered (null when unknown / not started)
+     * @param coveredToBlock   highest block covered by the history (the live indexer covers the blocks after it)
+     */
+    public record HistoryCoverageDto(String status, List<String> sources, Long coveredFromBlock, Long coveredToBlock,
+                                     Instant coveredFromTime, boolean tokenTransfersCovered, boolean approvalsCovered,
+                                     boolean nativeCovered, boolean internalCovered, boolean truncated, long eventsFound,
+                                     String message, Instant updatedAt) {}
 
     public record TxDto(String network, String hash, long blockNumber, Instant timestamp, String from, String to, String value,
                         String fee, boolean success, String methodSelector, boolean contractInteraction, String nativeSymbol,
@@ -91,7 +110,13 @@ public final class Dto {
                            List<String> matchedEventIds, Map<String, Object> matchedEvent, Map<String, Object> evidence,
                            List<CommentDto> comments, List<HistoryDto> history,
                            /** Demo scenario id (A-E) when the alert comes from fictitious demo data, else null. */
-                           String demoScenario) {}
+                           String demoScenario,
+                           /** Other side of the triggering transfer (counterparty.address, else transaction.to). */
+                           String counterparty,
+                           /** Block of the (latest) triggering event. */
+                           Long blockNumber,
+                           /** One plain-language line: why the rule fired (technical detail in evidence). */
+                           String evidenceSummary) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,

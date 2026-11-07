@@ -68,6 +68,14 @@ public class ModulesConfiguration {
 
     @Bean FieldCatalog fieldCatalog() { return FieldCatalog.defaults(); }
 
+    /** On-demand address history (ADR-0020); history events go to the pipeline without rule evaluation. */
+    @Bean(destroyMethod = "close")
+    io.openchain.app.history.AddressHistoryService addressHistoryService(io.openchain.app.history.AddressHistoryStore store,
+                                                                         io.openchain.app.chain.ChainIngestionService chains, Clock clock) {
+        return new io.openchain.app.history.AddressHistoryService(store, chains::applyHistory, chains::firstIndexedBlock, clock,
+                io.openchain.app.history.AddressHistoryService.defaultExecutor());
+    }
+
     @Bean RuleLimits ruleLimits() { return RuleLimits.defaults(); }
 
     @Bean RuleLoader ruleLoader(FieldCatalog catalog, RuleLimits limits) { return new RuleLoader(catalog, limits); }

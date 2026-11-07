@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, linkedSignal, signal } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
@@ -8,7 +8,10 @@ import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
 import { Crumb, PageHeader } from '../../shared/page-header';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { TableState } from '../../shared/table-state';
+import { signalSummary, signalTitle } from '../../shared/explain';
+import { NetworkNotEnabled, isNetworkNotEnabled } from '../../shared/network-not-enabled';
 import { UI, sentence } from '../../shared/ui';
+import { HISTORY_POLL_MS, HistoryCoverageLine, historyLoading } from './history-coverage';
 import { ScoreSheet } from './score-sheet';
 import { WalletProfile } from './wallet-profile';
 
@@ -16,7 +19,7 @@ const RISK_ORDER = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
 @Component({
   selector: 'oci-wallet',
-  imports: [RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wallet.html',
   styleUrl: './wallet.scss',
@@ -29,6 +32,10 @@ export class WalletPage {
 
   private readonly key = computed(() => ({ address: this.address(), network: this.network() }));
   readonly w = apiResource({ params: this.key, stream: (k) => this.api.walletAnalysis(k.address, k.network) });
+  readonly history = computed(() => this.w.value()?.history ?? null);
+  /** The API refused the network (422 on /network): explain it instead of showing the raw validation error. */
+  readonly notEnabled = computed(() => isNetworkNotEnabled(this.w.error()));
+  private readonly pollMs = inject(HISTORY_POLL_MS);
   readonly exp = apiResource({ params: this.key, stream: (k) => this.api.walletExposure(k.address, k.network) });
 
   /** Transaction pages: the cursor resets when the wallet changes; pages accumulate for "Load more". */
@@ -48,6 +55,8 @@ export class WalletPage {
   readonly units = formatUnits;
   readonly short = (h: string) => shortHash(h, 10, 6);
   readonly sentence = sentence;
+  readonly signalTitle = signalTitle;
+  readonly signalSummary = signalSummary;
   readonly pct = (v: number) => (v * 100).toFixed(0);
 
   readonly tabIndex = signal(0);
@@ -80,6 +89,17 @@ export class WalletPage {
     (c) => `${c.address} ${c.label ?? ''} ${c.token.symbol}`,
     { key: 'txCount', dir: 'desc' },
   );
+
+  constructor() {
+    // While the server loads the address history (PENDING / RUNNING), fetch the analysis again every few seconds.
+    // The effect re-runs on each new response and on an address change; its cleanup cancels the pending timer,
+    // so polling stops at a terminal status, when the wallet changes and when the page is destroyed.
+    effect((onCleanup) => {
+      if (!historyLoading(this.history()) || this.w.loading()) return;
+      const t = setTimeout(() => this.w.reload(), this.pollMs);
+      onCleanup(() => clearTimeout(t));
+    });
+  }
 
   readonly crumbs = computed<Crumb[]>(() => [
     { label: 'Wallets', link: '/risk' }, { label: netLabel(this.network()) }, { label: shortHash(this.address(), 6, 4), mono: true },

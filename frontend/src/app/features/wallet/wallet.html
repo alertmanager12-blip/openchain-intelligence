@@ -24,6 +24,9 @@
     }
   </header>
 
+  @if (notEnabled()) {
+    <oci-network-not-enabled [network]="network()" [address]="address()" base="wallets" searchLink="/explorer" />
+  } @else {
   <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" loadingText="Analysing the wallet">
     @if (w.value(); as a) {
       <dl class="stats" style="--stats: 5">
@@ -33,13 +36,15 @@
         <div class="stat" [class.warn]="a.signals.length > 0"><dt>Signals</dt><dd><span class="stat-v">{{ a.signals.length }}</span></dd></div>
         <div class="stat"><dt>Counterparties</dt><dd><span class="stat-v">{{ a.counterparties.length }}</span></dd></div>
       </dl>
+      @if (a.history; as h) { <oci-history-coverage class="coverage" [history]="h" /> }
 
       <section class="tabs-wrap" aria-label="Wallet records">
         <mat-tab-group [(selectedIndex)]="tabIndex" aria-label="Wallet records" mat-stretch-tabs="false" mat-align-tabs="start">
           <mat-tab label="Score">
             @if (a.risk; as r) {
               <div class="score-tab">
-                <p class="small muted">Each row adds or removes points; the bars stack from 0 and end at the score. Method {{ r.method }}, model {{ r.modelVersion }}, computed {{ ago(r.computedAt) }}.</p>
+                <p class="small muted">Each row adds or removes points; the bars stack from 0 and end at the score.@if (r.methodSummary) { {{ r.methodSummary }} } Computed {{ ago(r.computedAt) }}.</p>
+                <oci-tech label="How the score is computed"><span>Method <span class="mono">{{ r.method }}</span></span><span>Model {{ r.modelVersion }}</span></oci-tech>
                 <oci-score-sheet [risk]="r" />
               </div>
             } @else { <p class="muted">Not enough data to score this wallet yet.</p> }
@@ -155,7 +160,9 @@
               <div class="table-wrap"><table mat-table [dataSource]="a.signals">
                 <ng-container matColumnDef="signal">
                   <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
-                  <td mat-cell *matCellDef="let s"><span class="strong">{{ sentence(s.type) }}</span><div class="sub">{{ s.evidence[0]?.description }} <span class="mono">{{ s.detectorId }}</span></div></td>
+                  <td mat-cell *matCellDef="let s"><span class="strong">{{ signalTitle(s) }}</span>@if (signalSummary(s); as sm) { <div class="sub sig-summary">{{ sm }}</div> }
+                    <oci-tech><span>Type <span class="mono">{{ s.type }}</span>, detector <span class="mono">{{ s.detectorId }}</span>, confidence {{ pct(s.confidence) }}%</span>
+                      @for (e of s.evidence; track $index) { <span>{{ e.kind }}: {{ e.description }} <span class="muted">({{ e.source }})</span></span> }</oci-tech></td>
                 </ng-container>
                 <ng-container matColumnDef="severity">
                   <th mat-header-cell *matHeaderCellDef scope="col">Severity</th>
@@ -186,4 +193,5 @@
       </section>
     }
   </oci-state>
+  }
 </div>

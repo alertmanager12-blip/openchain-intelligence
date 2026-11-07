@@ -2,19 +2,22 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSign
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { EvidenceLevel, NETWORKS, NetworkId, RiskContribution } from '../../core/models';
+import { EnabledNetworks } from '../../core/enabled-networks';
 import { detectQuery } from '../../core/network-detect';
 import { apiResource } from '../../shared/api-resource';
 import { formatAge, timeAgo, netLabel } from '../../shared/format';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
-import { UI, sentence } from '../../shared/ui';
+import { contributionSummary, contributionTitle } from '../../shared/explain';
+import { NetworkNotEnabled, isNetworkNotEnabled } from '../../shared/network-not-enabled';
+import { UI } from '../../shared/ui';
 
 const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL: 1, CONFIRMED_BY_SOURCE: 2 };
 
 @Component({
   selector: 'oci-risk-page',
-  imports: [RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './risk.html',
   styleUrl: './risk.scss',
@@ -25,18 +28,22 @@ export class RiskPage {
   readonly network = input<NetworkId>();
   readonly address = input<string>();
 
-  readonly networks = NETWORKS;
+  private readonly enabledNets = inject(EnabledNetworks);
+  /** Only networks this instance indexes (GET /networks); every network while that list is unknown. */
+  readonly networks = computed<readonly NetworkId[]>(() => this.enabledNets.enabled() ?? NETWORKS);
   readonly netLabel = netLabel;
   /** Form fields follow the route and stay editable. */
   readonly addrInput = linkedSignal(() => this.address() ?? '');
-  readonly netInput = linkedSignal<NetworkId>(() => this.network() ?? 'ethereum');
+  readonly netInput = linkedSignal<NetworkId>(() => this.network() ?? (this.networks().includes('ethereum') ? 'ethereum' : (this.networks()[0] ?? 'ethereum')));
   readonly risk = apiResource({
     params: () => (this.address() && this.network() ? { a: this.address()!, n: this.network()! } : undefined),
     stream: (p) => this.api.walletRisk(p.a, p.n),
   });
+  readonly notEnabled = computed(() => isNetworkNotEnabled(this.risk.error()));
   readonly ago = timeAgo;
   readonly age = formatAge;
-  readonly sentence = sentence;
+  readonly title = contributionTitle;
+  readonly summary = contributionSummary;
   readonly open = signal<string | null>(null);
   readonly cols = ['x', 'factor', 'ev', 'points', 'confidence', 'age'];
   readonly byFactor = (_: number, c: RiskContribution) => c.factor;
@@ -44,7 +51,7 @@ export class RiskPage {
   readonly t = new TableState<RiskContribution>(
     computed(() => this.risk.value()?.contributions ?? []),
     { ev: (c) => EVIDENCE_ORDER[c.evidenceLevel], points: (c) => c.points, confidence: (c) => c.confidence, age: (c) => c.ageSeconds },
-    (c) => c.factor,
+    (c) => `${c.factor} ${c.title ?? ''}`,
     { key: 'points', dir: 'desc' },
   );
   readonly top = computed(() => [...(this.risk.value()?.contributions ?? [])].sort((a, b) => b.points - a.points)[0] ?? null);
@@ -59,7 +66,8 @@ export class RiskPage {
 
   submit(): void {
     const d = detectQuery(this.addrInput());
-    const n = d.candidates.includes(this.netInput()) ? this.netInput() : (d.candidates[0] ?? this.netInput());
+    const candidates = this.enabledNets.enabledCandidates(d.candidates);
+    const n = candidates.includes(this.netInput()) ? this.netInput() : (candidates[0] ?? this.netInput());
     this.router.navigate(['/risk', n, d.normalized || this.addrInput().trim()]);
   }
 }

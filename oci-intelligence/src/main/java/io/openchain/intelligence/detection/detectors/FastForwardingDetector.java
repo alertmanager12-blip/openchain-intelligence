@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -38,7 +39,10 @@ public final class FastForwardingDetector extends AbstractDetector {
         ev.addAll(flowEvidence(outs, "forwarded", ctx.config().maxEvidenceItems() / 2));
         ev.add(new Evidence("pattern", String.format(java.util.Locale.ROOT, "%.0f%% of %s %s received forwarded within %s",
                 ratio * 100, plain(in), t.token().symbol(), human(delay)), t.txHash(), qualifiedId(), t.timestamp()));
+        long recipients = outs.stream().map(ValueFlow::to).distinct().count();
+        String summary = "Forwarded " + percent(ratio) + " of the " + amount(in, t.token().symbol()) + " it received to "
+                + plural(recipients, "address", "addresses") + " within " + duration(delay) + ".";
         return List.of(signal(ctx, SignalType.FAST_FORWARDING, ctx.subject(), t.txHash(), Severity.MEDIUM, 0.6 + 0.3 * speed,
-                EvidenceLevel.RISK_SIGNAL, ev, t.tokenKey() + "|" + first.eventId()));
+                EvidenceLevel.RISK_SIGNAL, ev, t.tokenKey() + "|" + first.eventId(), summary));
     }
 }

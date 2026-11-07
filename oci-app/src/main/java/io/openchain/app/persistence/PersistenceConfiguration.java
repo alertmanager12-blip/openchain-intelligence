@@ -68,6 +68,7 @@ public class PersistenceConfiguration {
         @Bean RuleRepository ruleRepository() { return new InMemoryRuleRepository(); }
         @Bean LabelReportRepository labelReportRepository() { return new InMemoryLabelReportRepository(); }
         @Bean FreezeBackfillStore freezeBackfillStore() { return new InMemoryFreezeBackfillStore(); }
+        @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore() { return new io.openchain.app.history.InMemoryAddressHistoryStore(); }
 
         @Bean @Order(Ordered.HIGHEST_PRECEDENCE)
         ApplicationRunner persistenceReport(OciProperties props) {
@@ -111,6 +112,9 @@ public class PersistenceConfiguration {
         @Bean LabelReportRepository labelReportRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcLabelReportRepository(jdbc); }
         @Bean FreezeBackfillStore freezeBackfillStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, TokenRegistry tokens) {
             return new JdbcFreezeBackfillStore(jdbc, tx, tokens);
+        }
+        @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
+            return new io.openchain.app.history.JdbcAddressHistoryStore(jdbc, tx);
         }
 
         @Bean @Order(Ordered.HIGHEST_PRECEDENCE)

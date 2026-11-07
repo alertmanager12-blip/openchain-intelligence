@@ -60,6 +60,7 @@ public class InvestigationController {
                                               @RequestParam(required = false) String cursor, @RequestParam(required = false) Integer limit) {
         Network n = investigation.network(network);
         Address a = investigation.address(n, address);
+        investigation.ensureHistory(a);
         int l = CursorPage.limit(limit);
         // the provider's own cursor, wrapped opaquely
         String providerCursor = null;
@@ -84,7 +85,9 @@ public class InvestigationController {
     @GetMapping("/wallets/{address}/risk")
     public Dto.RiskScoreDto risk(@PathVariable String address, @RequestParam String network) {
         Network n = investigation.network(network);
-        return investigation.risk(investigation.address(n, address), true);
+        Address a = investigation.address(n, address);
+        investigation.ensureHistory(a);
+        return investigation.risk(a, true);
     }
 
     @GetMapping("/wallets/{address}/exposure")

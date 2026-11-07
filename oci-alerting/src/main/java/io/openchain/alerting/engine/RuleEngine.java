@@ -268,7 +268,7 @@ public final class RuleEngine {
         evidence.put("evidenceLevel", r.evidenceLevel().name());
         String dedupKey = rt.rule.dedupKey().render(r.id(), r.version(), groupKey, e);
         return new RuleMatch(r.id(), r.version(), r.name(), r.severity(), r.evidenceLevel(), e.network(), groupKey,
-                dedupKey, e.eventId(), time, ids, evidence, origin, hop);
+                dedupKey, e.eventId(), time, ids, evidence, origin, hop, io.openchain.alerting.alert.AlertSubject.of(e));
     }
 
     private List<String> explain(Runtime rt, ChainEvent e) {

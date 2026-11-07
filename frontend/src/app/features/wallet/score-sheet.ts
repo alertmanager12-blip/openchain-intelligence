@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { RiskScore } from '../../core/models';
 import { formatAge } from '../../shared/format';
-import { UI, sentence } from '../../shared/ui';
+import { contributionSummary, contributionTitle } from '../../shared/explain';
+import { UI } from '../../shared/ui';
 
 /**
  * Measurement sheet of a risk score: positive contributions first (largest first), then reductions. Each row's
@@ -21,7 +22,8 @@ import { UI, sentence } from '../../shared/ui';
       <tbody>
         @for (c of sheet().rows; track c.factor) {
           <tr>
-            <td><span class="strong">{{ sentence(c.factor) }}</span><div class="sub expl">{{ c.explanation }} <span class="src">Source {{ c.source }}</span></div></td>
+            <td><span class="strong c-title">{{ title(c) }}</span>@if (summary(c); as sm) { <div class="sub expl c-summary">{{ sm }}</div> }
+              <oci-tech><span>Factor <span class="mono">{{ c.factor }}</span></span>@if (c.explanation) { <span class="mono">{{ c.explanation }}</span> }<span>Source {{ c.source }}, weight {{ c.weight.toFixed(2) }}</span>@if (c.signalId) { <span>Signal <span class="mono">{{ c.signalId }}</span></span> }</oci-tech></td>
             <td><oci-evidence [value]="c.evidenceLevel" /></td>
             <td class="right">{{ pct(c.confidence) }}%</td>
             <td class="right nowrap">{{ age(c.ageSeconds) }}</td>
@@ -38,7 +40,7 @@ import { UI, sentence } from '../../shared/ui';
   styles: `
     .sheet { min-width: 760px; }
     .expl { max-width: 56ch; display: block; }
-    .src { color: var(--muted); display: block; }
+    .c-summary { color: var(--ink-2); margin: 2px 0 4px; }
     .pts { font: 600 16px var(--font-display); }
     .neg { color: var(--ok); }
     .bar-col { width: 28%; min-width: 180px; }
@@ -68,7 +70,8 @@ import { UI, sentence } from '../../shared/ui';
 })
 export class ScoreSheet {
   readonly risk = input.required<RiskScore>();
-  readonly sentence = sentence;
+  readonly title = contributionTitle;
+  readonly summary = contributionSummary;
   readonly age = formatAge;
   readonly pct = (v: number) => (v * 100).toFixed(0);
   /** Total before clamping, to explain when the displayed score differs from the plain sum. */

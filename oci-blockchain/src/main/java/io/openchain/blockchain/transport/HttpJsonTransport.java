@@ -74,11 +74,28 @@ public final class HttpJsonTransport {
             throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 429 rate limited", retryAfter(resp));
         }
         if (status >= 500) throw new ProviderException(endpoint.name() + ": HTTP " + status, true);
-        if (status >= 400) throw new ProviderException(endpoint.name() + ": HTTP " + status, false);
+        if (status >= 400) {
+            // some JSON-RPC gateways answer a JSON-RPC error with HTTP 400 (e.g. dRPC "ranges over 10000 blocks are not
+            // supported"): hand that error to JsonRpcClient so that it is classified (range too large, unsupported method...)
+            JsonNode rpcError = "POST".equals(method) ? jsonRpcError(resp.body()) : null;
+            if (rpcError != null) return rpcError;
+            throw new ProviderException(endpoint.name() + ": HTTP " + status, false);
+        }
         try {
             return Json.MAPPER.readTree(resp.body() == null || resp.body().isBlank() ? "null" : resp.body());
         } catch (JacksonException e) {
             throw new ProviderException(endpoint.name() + ": malformed JSON response", false, e);
+        }
+    }
+
+    /** The body when it is a JSON-RPC 2.0 error response, else null. */
+    private static JsonNode jsonRpcError(String body) {
+        if (body == null || body.isBlank()) return null;
+        try {
+            JsonNode n = Json.MAPPER.readTree(body);
+            return n != null && n.isObject() && n.path("error").isObject() && n.has("jsonrpc") ? n : null;
+        } catch (JacksonException e) {
+            return null;
         }
     }
 

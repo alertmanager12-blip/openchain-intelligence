@@ -69,6 +69,7 @@ class EvmAdminChangeAndBackfillTest {
     }
 
     EvmJsonRpcProvider provider(Function<JsonNode, String> handler) throws Exception {
+        if (server != null) server.close();
         server = new StubHttpServer().route("/", req -> {
             JsonNode body = Json.MAPPER.readTree(req.body());
             String method = body.path("method").asString();
@@ -222,6 +223,32 @@ class EvmAdminChangeAndBackfillTest {
         assertThat(new JsonRpcException("x", "eth_getLogs", -32000, "exceed maximum block range: 5000", false).rangeTooLarge()).isTrue();
         assertThat(new JsonRpcException("x", "eth_getLogs", -32005, "daily request count exceeded, request rate limited", true).rangeTooLarge()).isFalse();
         assertThat(new JsonRpcException("x", "eth_getLogs", -32000, "header not found", false).rangeTooLarge()).isFalse();
+        // public gateways observed on 2026-11-07 (dRPC free plan, 1RPC, Cloudflare)
+        assertThat(new JsonRpcException("x", "eth_getLogs", 35, "ranges over 10000 blocks are not supported on free plan", false).rangeTooLarge()).isTrue();
+        assertThat(new JsonRpcException("x", "eth_getLogs", -32602, "eth_getLogs is limited to 0 - 50 blocks range", false).rangeTooLarge()).isTrue();
+        assertThat(new JsonRpcException("x", "eth_getLogs", -32047, "Invalid eth_getLogs request. 'fromBlock'-'toBlock' range too large. Max range: 800", false).rangeTooLarge()).isTrue();
+    }
+
+    @Test void balanceAtABlockUsesEthGetBalanceOrBalanceOfAtThatBlock() throws Exception {
+        String holder = "0x0f2897ec295cb6d6776c10ad16a1d4546c25ec06";
+        EvmJsonRpcProvider p = provider(b -> switch (b.path("method").asString()) {
+            case "eth_getBalance" -> ok("\"0xde0b6b3a7640000\"");                                        // 1 ETH
+            case "eth_call" -> ok("\"0x" + "0".repeat(56) + "05f5e100\"");                              // 100 USDT (6 decimals)
+            default -> err(-32601, "method not found");
+        });
+        Address a = new Address(Network.ETHEREUM, holder);
+        var registry = new DefaultTokenRegistry();
+        assertThat(p.getBalanceAt(a, Token.nativeOf(Network.ETHEREUM), 0x1234)).contains(new java.math.BigInteger("1000000000000000000"));
+        assertThat(params.getLast().path("params").get(0).asString()).isEqualTo(holder);
+        assertThat(params.getLast().path("params").get(1).asString()).isEqualTo("0x1234");
+        assertThat(p.getBalanceAt(a, registry.resolve(Network.ETHEREUM, USDT), 0x1234)).contains(java.math.BigInteger.valueOf(100_000_000));
+        JsonNode call = params.getLast().path("params");
+        assertThat(call.get(0).path("to").asString()).isEqualTo(USDT);
+        assertThat(call.get(0).path("data").asString()).isEqualTo("0x70a08231" + "0".repeat(24) + holder.substring(2));
+        assertThat(call.get(1).asString()).isEqualTo("0x1234");
+        // pruned state / rate limit: the error propagates (the caller then treats the balance as unknown)
+        EvmJsonRpcProvider pruned = provider(b -> err(-32000, "missing trie node"));
+        assertThatThrownBy(() -> pruned.getBalanceAt(a, Token.nativeOf(Network.ETHEREUM), 5)).isInstanceOf(ProviderException.class);
     }
 
     @Test void freezeSourcesCanBeEmptyForANetwork() throws Exception {

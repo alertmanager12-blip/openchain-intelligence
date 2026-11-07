@@ -51,6 +51,7 @@ public final class Alert {
     private final Instant lastEscalatedAt;
     private final List<String> originChain;
     private final int hop;
+    private final AlertSubject subject;
     private final long version;
 
     private Alert(Builder b) {
@@ -79,6 +80,7 @@ public final class Alert {
         this.lastEscalatedAt = b.lastEscalatedAt;
         this.originChain = List.copyOf(b.originChain);
         this.hop = b.hop;
+        this.subject = b.subject;
         this.version = b.version;
     }
 
@@ -107,6 +109,11 @@ public final class Alert {
     public Instant lastEscalatedAt() { return lastEscalatedAt; }
     public List<String> originChain() { return originChain; }
     public int hop() { return hop; }
+    /**
+     * Wallet, counterparty, transaction and field snapshot of the (latest) triggering event; null for alerts created
+     * before subjects were stored (V3 migration) and not yet back-filled.
+     */
+    public AlertSubject subject() { return subject; }
     /**
      * Persistence concurrency token (optimistic locking): the row version this snapshot was read with, 0 for an
      * alert never saved. Repositories that support it reject a save whose version is stale
@@ -138,6 +145,7 @@ public final class Alert {
         private int escalationLevel;
         private List<String> originChain = new ArrayList<>();
         private int hop;
+        private AlertSubject subject;
         private long version;
 
         private Builder() {}
@@ -150,6 +158,7 @@ public final class Alert {
             createdAt = a.createdAt; updatedAt = a.updatedAt; lastEscalatedAt = a.lastEscalatedAt;
             occurrenceCount = a.occurrenceCount; comments = new ArrayList<>(a.comments); history = new ArrayList<>(a.history);
             escalationLevel = a.escalationLevel; originChain = new ArrayList<>(a.originChain); hop = a.hop;
+            subject = a.subject;
             version = a.version;
         }
 
@@ -175,6 +184,7 @@ public final class Alert {
         public Builder lastEscalatedAt(Instant v) { lastEscalatedAt = v; return this; }
         public Builder originChain(List<String> v) { originChain = new ArrayList<>(v); return this; }
         public Builder hop(int v) { hop = v; return this; }
+        public Builder subject(AlertSubject v) { subject = v; return this; }
         public Builder version(long v) { version = v; return this; }
         /** Replaces the comments (persistence adapters rebuilding a snapshot). */
         public Builder comments(List<Comment> v) { comments = new ArrayList<>(v); return this; }

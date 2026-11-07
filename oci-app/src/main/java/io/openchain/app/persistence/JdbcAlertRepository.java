@@ -3,6 +3,7 @@ package io.openchain.app.persistence;
 import io.openchain.alerting.alert.Alert;
 import io.openchain.alerting.alert.AlertRepository;
 import io.openchain.alerting.alert.AlertStatus;
+import io.openchain.alerting.alert.AlertSubject;
 import io.openchain.alerting.alert.ConcurrentAlertModificationException;
 import io.openchain.alerting.alert.Priority;
 import io.openchain.core.detection.Severity;
@@ -29,7 +30,8 @@ public final class JdbcAlertRepository implements AlertRepository {
 
     private static final String COLUMNS = "id, rule_id, rule_version, title, severity, priority, status, evidence_level, network, "
             + "group_key, dedup_key, matched_event_ids, evidence, first_seen, last_seen, occurrence_count, assignee, created_at, "
-            + "updated_at, escalation_level, last_escalated_at, origin_chain, hop, row_version";
+            + "updated_at, escalation_level, last_escalated_at, origin_chain, hop, row_version, subject_event_id, subject_event_type, "
+            + "subject_address, subject_counterparty, subject_tx_hash, subject_block, subject_time, subject_fields";
     private static final String TERMINAL = "('" + AlertStatus.RESOLVED.name() + "','" + AlertStatus.FALSE_POSITIVE.name() + "')";
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -50,7 +52,8 @@ public final class JdbcAlertRepository implements AlertRepository {
                 rows = jdbc.update("insert into alerts (" + COLUMNS + ") values (:id, :ruleId, :ruleVersion, :title, :severity, "
                         + ":priority, :status, :evidenceLevel, :network, :groupKey, :dedupKey, cast(:eventIds as jsonb), "
                         + "cast(:evidence as jsonb), :firstSeen, :lastSeen, :occurrences, :assignee, :createdAt, :updatedAt, "
-                        + ":escalationLevel, :lastEscalatedAt, cast(:originChain as jsonb), :hop, :next) on conflict (id) do nothing", p);
+                        + ":escalationLevel, :lastEscalatedAt, cast(:originChain as jsonb), :hop, :next, :sEventId, :sEventType, "
+                        + ":sAddress, :sCounterparty, :sTxHash, :sBlock, :sTime, cast(:sFields as jsonb)) on conflict (id) do nothing", p);
             } else {
                 rows = jdbc.update("update alerts set rule_version = :ruleVersion, title = :title, severity = :severity, "
                         + "priority = :priority, status = :status, evidence_level = :evidenceLevel, network = :network, "
@@ -58,7 +61,10 @@ public final class JdbcAlertRepository implements AlertRepository {
                         + "evidence = cast(:evidence as jsonb), first_seen = :firstSeen, last_seen = :lastSeen, "
                         + "occurrence_count = :occurrences, assignee = :assignee, updated_at = :updatedAt, "
                         + "escalation_level = :escalationLevel, last_escalated_at = :lastEscalatedAt, "
-                        + "origin_chain = cast(:originChain as jsonb), hop = :hop, row_version = :next "
+                        + "origin_chain = cast(:originChain as jsonb), hop = :hop, row_version = :next, "
+                        + "subject_event_id = :sEventId, subject_event_type = :sEventType, subject_address = :sAddress, "
+                        + "subject_counterparty = :sCounterparty, subject_tx_hash = :sTxHash, subject_block = :sBlock, "
+                        + "subject_time = :sTime, subject_fields = cast(:sFields as jsonb) "
                         + "where id = :id and row_version = :expected", p);
             }
             if (rows != 1) throw new ConcurrentAlertModificationException(a.id(), a.version());
@@ -167,11 +173,24 @@ public final class JdbcAlertRepository implements AlertRepository {
                 .createdAt(Sql.instant(rs, "created_at")).updatedAt(Sql.instant(rs, "updated_at"))
                 .escalationLevel(rs.getInt("escalation_level")).lastEscalatedAt(Sql.instant(rs, "last_escalated_at"))
                 .originChain(TypedJson.readStrings(rs.getString("origin_chain"))).hop(rs.getInt("hop"))
-                .version(rs.getLong("row_version"));
+                .version(rs.getLong("row_version"))
+                .subject(subject(rs));
+    }
+
+    /** Null when nothing was stored (alerts created before V3 that the migration could not back-fill). */
+    private static AlertSubject subject(ResultSet rs) throws SQLException {
+        String eventId = rs.getString("subject_event_id"), address = rs.getString("subject_address");
+        String fields = rs.getString("subject_fields");
+        if (eventId == null && address == null && fields == null) return null;
+        long b = rs.getLong("subject_block");
+        Long block = rs.wasNull() ? null : b;
+        return new AlertSubject(eventId, rs.getString("subject_event_type"), address, rs.getString("subject_counterparty"),
+                rs.getString("subject_tx_hash"), block, Sql.instant(rs, "subject_time"),
+                fields == null ? null : TypedJson.readMap(fields));
     }
 
     private static MapSqlParameterSource params(Alert a) {
-        return new MapSqlParameterSource()
+        MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("id", a.id()).addValue("ruleId", a.ruleId()).addValue("ruleVersion", a.ruleVersion())
                 .addValue("title", a.title()).addValue("severity", a.severity().name()).addValue("priority", a.priority().name())
                 .addValue("status", a.status().name())
@@ -184,6 +203,13 @@ public final class JdbcAlertRepository implements AlertRepository {
                 .addValue("createdAt", Sql.ts(a.createdAt())).addValue("updatedAt", Sql.ts(a.updatedAt()))
                 .addValue("escalationLevel", a.escalationLevel()).addValue("lastEscalatedAt", Sql.ts(a.lastEscalatedAt()))
                 .addValue("originChain", TypedJson.write(a.originChain())).addValue("hop", a.hop());
+        AlertSubject s = a.subject();
+        p.addValue("sEventId", s == null ? null : s.eventId()).addValue("sEventType", s == null ? null : s.eventType())
+                .addValue("sAddress", s == null ? null : s.address()).addValue("sCounterparty", s == null ? null : s.counterparty())
+                .addValue("sTxHash", s == null ? null : s.txHash()).addValue("sBlock", s == null ? null : s.blockNumber())
+                .addValue("sTime", s == null ? null : Sql.ts(s.eventTime()))
+                .addValue("sFields", s == null || s.eventId() == null && s.fields().isEmpty() ? null : TypedJson.write(s.fields()));
+        return p;
     }
 
     private static Map<String, Object> mapOf(String k1, Object v1, String k2, Object v2) {

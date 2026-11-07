@@ -67,7 +67,7 @@ function findRule(id: string): Rule {
 }
 
 on('GET', '/dashboard', () => mockDb().dashboard());
-on('GET', '/networks', () => mockDb().networks());
+on('GET', '/networks', (req) => mockDb().networks(req.params.get('all') === 'true'));
 on('GET', '/signals', (req) => page(mockDb().signals, req, 20));
 on('GET', '/wallets/([^/]+)/analysis', (req, m) => mockDb().wallet(decodeURIComponent(m[1]), net(req)));
 on('GET', '/wallets/([^/]+)/transactions', (req, m) => mockDb().transactions(decodeURIComponent(m[1]), net(req), req.params.get('cursor'), Number(req.params.get('limit') ?? 25)));

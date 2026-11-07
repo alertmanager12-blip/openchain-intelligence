@@ -16,14 +16,24 @@ import java.util.Map;
  * @param evidence        immutable snapshot: function, value, threshold, window bounds, leaf outcomes...
  * @param originChain     rule ids that produced the triggering event (non-empty only for internal events)
  * @param hop             hop count of the triggering event (0 for on-chain events)
+ * @param subject         wallet / counterparty / transaction / field snapshot of the triggering event (stored on the alert)
  */
 public record RuleMatch(String ruleId, String ruleVersion, String ruleName, Severity severity,
                         EvidenceLevel evidenceLevel, Network network, String groupKey, String dedupKey,
                         String triggeringEventId, Instant eventTime, List<String> matchedEventIds,
-                        Map<String, Object> evidence, List<String> originChain, int hop) {
+                        Map<String, Object> evidence, List<String> originChain, int hop,
+                        io.openchain.alerting.alert.AlertSubject subject) {
     public RuleMatch {
         matchedEventIds = List.copyOf(matchedEventIds);
         evidence = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(evidence));
         originChain = List.copyOf(originChain);
+    }
+
+    /** Without a subject (tests, tooling). */
+    public RuleMatch(String ruleId, String ruleVersion, String ruleName, Severity severity, EvidenceLevel evidenceLevel,
+                     Network network, String groupKey, String dedupKey, String triggeringEventId, Instant eventTime,
+                     List<String> matchedEventIds, Map<String, Object> evidence, List<String> originChain, int hop) {
+        this(ruleId, ruleVersion, ruleName, severity, evidenceLevel, network, groupKey, dedupKey, triggeringEventId, eventTime,
+                matchedEventIds, evidence, originChain, hop, null);
     }
 }

@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -50,7 +51,11 @@ public final class CircularFlowDetector extends AbstractDetector {
             List<Evidence> ev = new ArrayList<>(flowEvidence(c, "cycle hop", ctx.config().maxEvidenceItems()));
             ev.add(new Evidence("path", c.size() + "-hop cycle: " + route, c.getLast().txHash(), qualifiedId(), c.getLast().timestamp()));
             Severity sev = c.size() >= 3 ? Severity.MEDIUM : Severity.LOW;
-            out.add(signal(ctx, SignalType.CIRCULAR_FLOW, a, c.getLast().txHash(), sev, 0.6, EvidenceLevel.RISK_SIGNAL, ev, key));
+            ValueFlow first = c.getFirst(), back = c.getLast();
+            String summary = "Sent " + amount(first.amount(), first.token().symbol()) + " that came back to it ("
+                    + amount(back.amount(), back.token().symbol()) + ") through " + plural(c.size() - 1, "intermediary address", "intermediary addresses")
+                    + " within " + duration(java.time.Duration.between(first.timestamp(), back.timestamp())) + ".";
+            out.add(signal(ctx, SignalType.CIRCULAR_FLOW, a, c.getLast().txHash(), sev, 0.6, EvidenceLevel.RISK_SIGNAL, ev, key, summary));
         }
         return out;
     }

@@ -53,7 +53,15 @@ public final class AlertService {
             Optional<Alert> replay = repository.findByMatchedEventId(m.triggeringEventId()).stream()
                     .filter(a -> a.ruleId().equals(m.ruleId()) && Objects.equals(a.dedupKey(), m.dedupKey()))
                     .findFirst();
-            if (replay.isPresent()) return new MatchOutcome(Outcome.GROUPED, replay.get());
+            if (replay.isPresent()) {
+                Alert r = replay.get();
+                // alerts stored before subjects existed get theirs from the replayed (re-indexed) trigger
+                if ((r.subject() == null || r.subject().eventId() == null) && m.subject() != null && m.triggeringEventId().equals(r.matchedEventIds().isEmpty() ? null
+                        : r.matchedEventIds().getLast())) {
+                    r = repository.save(r.toBuilder().subject(m.subject()).build());
+                }
+                return new MatchOutcome(Outcome.GROUPED, r);
+            }
         }
         Optional<Alert> open = repository.findOpenByDedupKey(m.ruleId(), m.dedupKey());
         if (open.isPresent() && withinCooldown(open.get(), m.eventTime(), cooldown)) {
@@ -63,6 +71,7 @@ public final class AlertService {
                     .addEventIds(m.matchedEventIds())
                     .firstSeen(min(a.firstSeen(), m.eventTime()))
                     .lastSeen(max(a.lastSeen(), m.eventTime()))
+                    .subject(m.subject() != null && !m.eventTime().isBefore(a.lastSeen()) ? m.subject() : a.subject())
                     .updatedAt(now)
                     .build();
             return new MatchOutcome(Outcome.GROUPED, repository.save(grouped));
@@ -76,7 +85,7 @@ public final class AlertService {
                 .addEventIds(m.matchedEventIds()).evidence(m.evidence())
                 .firstSeen(m.eventTime()).lastSeen(m.eventTime()).occurrenceCount(1)
                 .createdAt(now).updatedAt(now)
-                .originChain(m.originChain()).hop(m.hop())
+                .originChain(m.originChain()).hop(m.hop()).subject(m.subject())
                 .addHistory(new HistoryEntry(null, AlertStatus.DETECTED, SYSTEM, now,
                         "rule " + m.ruleId() + "@" + m.ruleVersion() + " matched event " + m.triggeringEventId()))
                 .build();

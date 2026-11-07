@@ -49,6 +49,20 @@ class HttpJsonTransportTest {
         assertThat(server.hits).hasValue(1);
     }
 
+    @Test void jsonRpcErrorSentWithHttp400IsClassifiedByTheJsonRpcClient() {
+        // dRPC free plan (observed 2026-11-07): {"error":{"message":"ranges over 10000 blocks are not supported...","code":35}} + HTTP 400
+        server.route("/", r -> new Response(400, "{\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"ranges over 10000 blocks "
+                + "are not supported on free plan\",\"code\":35}}", Map.of()));
+        JsonRpcClient rpc = new JsonRpcClient(transport(fastResilience(4, 10)));
+        assertThatThrownBy(() -> rpc.call("eth_getLogs", Json.MAPPER.createObjectNode()))
+                .isInstanceOf(JsonRpcException.class).satisfies(e -> assertThat(((JsonRpcException) e).rangeTooLarge()).isTrue());
+        assertThat(server.hits).hasValue(1);
+        // a plain 400 on GET (TronGrid style) is still a non-retryable provider error
+        server.route("/x", r -> new Response(400, "{\"error\":{\"code\":1}}", Map.of()));
+        assertThatThrownBy(() -> transport(fastResilience(4, 10)).get("/x")).isInstanceOf(ProviderException.class)
+                .isNotInstanceOf(JsonRpcException.class);
+    }
+
     @Test void timeoutIsRetryable() {
         server.route("/slow", r -> { try { Thread.sleep(800); } catch (InterruptedException e) { } return Response.ok("{}"); });
         HttpJsonTransport t = new HttpJsonTransport(endpoint("stub", server.url(), fastResilience(2, 10))

@@ -52,6 +52,45 @@ class RiskScoringEngineTest {
         assertThat(clean.score()).isZero();
     }
 
+    @Test void contributionsCarryPlainLanguageTitleAndSummary() {
+        Signal drain = new Signal("d1", SignalType.RAPID_DRAIN, me, "0xd", Severity.MEDIUM, 0.7, EvidenceLevel.RISK_SIGNAL,
+                List.of(new Evidence("flow", "flow", "0xd", "chain:ethereum", now)), "rapid-drain@1", now, null,
+                "Sent 95% of its USDT balance (35,000 USDT) to 2 addresses within 2 minutes.");
+        Signal again = new Signal("d2", SignalType.RAPID_DRAIN, me, "0xd", Severity.LOW, 0.5, EvidenceLevel.RISK_SIGNAL,
+                List.of(new Evidence("flow", "flow", "0xd", "chain:ethereum", now)), "rapid-drain@1", now);
+        AddressLabel ofac = new AddressLabel(me, LabelCategory.SANCTIONED, null, "ofac-sdn", 1.0, now, EvidenceLevel.CONFIRMED_BY_SOURCE, null);
+        AddressLabel frozen = new AddressLabel(me, LabelCategory.ISSUER_FROZEN, null, "tether-onchain", 1.0, now, EvidenceLevel.CONFIRMED_BY_SOURCE, "0xf");
+        AddressLabel community = new AddressLabel(me, LabelCategory.FLAGGED_COMMUNITY, null, "community", 0.4, now, EvidenceLevel.RISK_SIGNAL, null);
+        RiskScore s = score(List.of(ofac, frozen, community), List.of(drain, again));
+        assertThat(s.contributions()).anySatisfy(c -> {
+            assertThat(c.factor()).isEqualTo("signal:RAPID_DRAIN");
+            assertThat(c.signalId()).isEqualTo("d1");
+            assertThat(c.title()).isEqualTo("Rapid drain");
+            assertThat(c.summary()).isEqualTo("Sent 95% of its USDT balance (35,000 USDT) to 2 addresses within 2 minutes.");
+            assertThat(c.explanation()).contains("RAPID_DRAIN MEDIUM RISK_SIGNAL by rapid-drain@1").contains("q=");
+        });
+        assertThat(s.contributions()).anySatisfy(c -> {
+            assertThat(c.signalId()).isEqualTo("d2");
+            assertThat(c.summary()).endsWith("Not counted again: the same transactions are already counted for this factor.");
+        });
+        assertThat(s.contributions()).anySatisfy(c -> {
+            assertThat(c.factor()).isEqualTo("label:SANCTIONED");
+            assertThat(c.title()).isEqualTo("Listed as sanctioned");
+            assertThat(c.summary()).isEqualTo("Listed as sanctioned by ofac-sdn (authoritative source).");
+        });
+        assertThat(s.contributions()).anySatisfy(c -> {
+            assertThat(c.title()).isEqualTo("Frozen by the stablecoin issuer");
+            assertThat(c.summary()).isEqualTo("The stablecoin issuer froze this address in its own token contract (source tether-onchain); "
+                    + "the issuer does not publish the reason.");
+        });
+        assertThat(s.contributions()).anySatisfy(c -> assertThat(c.summary())
+                .isEqualTo("Listed as flagged by the community by community (source reliability 40%)."));
+        assertThat(RiskScoringEngine.METHOD_SUMMARY).doesNotContain("prod_f", "q_i");
+        // a signal built without wording gets the type title and an evidence-derived sentence
+        assertThat(again.title()).isEqualTo("Rapid drain");
+        assertThat(again.summary()).isEqualTo("Rapid drain observed.");
+    }
+
     @Test void sanctionedLabelIsCriticalAndDoesNotDecay() {
         RiskScore fresh = score(List.of(label(me, LabelCategory.SANCTIONED, 1.0, now)), List.of());
         RiskScore old = score(List.of(label(me, LabelCategory.SANCTIONED, 1.0, now.minus(Duration.ofDays(3650)))), List.of());

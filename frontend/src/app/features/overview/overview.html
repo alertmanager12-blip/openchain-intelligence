@@ -149,7 +149,7 @@
             <div class="table-wrap"><table mat-table [dataSource]="(d.recentSignals ?? []).slice(0, 6)" [trackBy]="byId">
               <ng-container matColumnDef="signal">
                 <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
-                <td mat-cell *matCellDef="let s"><span class="strong">{{ sentence(s.type) }}</span><div class="sub clamp">{{ s.evidence[0]?.description }}</div></td>
+                <td mat-cell *matCellDef="let s"><span class="strong" [attr.title]="s.type">{{ signalTitle(s) }}</span><div class="sub clamp">{{ signalSummary(s) }}</div></td>
               </ng-container>
               <ng-container matColumnDef="evidence">
                 <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>

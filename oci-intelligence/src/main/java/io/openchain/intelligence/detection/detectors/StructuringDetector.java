@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -30,7 +31,10 @@ public final class StructuringDetector extends AbstractDetector {
         ev.add(new Evidence("pattern", hits.size() + " transfers in [" + plain(lower) + ", " + plain(threshold) + ") "
                 + t.token().symbol() + " within " + human(cfg.window()) + ", total " + plain(total), t.txHash(), qualifiedId(), t.timestamp()));
         double conf = Math.min(0.85, 0.5 + 0.1 * (hits.size() - cfg.minCount()));
+        String sym = t.token().symbol();
+        String summary = "Sent " + plural(hits.size(), "transfer", "transfers") + " just below the " + amount(threshold, sym)
+                + " threshold within " + duration(cfg.window()) + " (total " + amount(total, sym) + ").";
         return List.of(signal(ctx, SignalType.STRUCTURING, ctx.subject(), t.txHash(), Severity.MEDIUM, conf, EvidenceLevel.RISK_SIGNAL, ev,
-                t.tokenKey() + "|" + SignalIds.window(t.timestamp(), cfg.window())));
+                t.tokenKey() + "|" + SignalIds.window(t.timestamp(), cfg.window()), summary));
     }
 }

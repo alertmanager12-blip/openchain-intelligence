@@ -81,6 +81,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final DemoNotificationSink demoSink;
     private final DemoScenarios demoScenarios;
     private final FreezeBackfillService backfills;
+    private final io.openchain.app.history.AddressHistoryService history;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> {
         Thread t = new Thread(r, "oci-background");
         t.setDaemon(true);
@@ -90,8 +91,10 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     public Bootstrap(OciProperties props, LabelCatalog labels, RuleRegistry rules, ChainIngestionService chains,
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
                      UserDirectory users, TokenRegistry tokens, Clock clock, ObjectProvider<DemoNotificationSink> demoSink,
-                     ObjectProvider<DemoScenarios> demoScenarios, FreezeBackfillService backfills) {
+                     ObjectProvider<DemoScenarios> demoScenarios, FreezeBackfillService backfills,
+                     io.openchain.app.history.AddressHistoryService history) {
         this.backfills = backfills;
+        this.history = history;
         this.demoSink = demoSink.getIfAvailable();
         this.demoScenarios = demoScenarios.getIfAvailable();
         this.props = props;
@@ -126,6 +129,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         if (props.getRules().isLoadOnStartup()) loadRules();
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
         props.getChains().forEach(this::startRealChain);
+        int restored = history.restore();
+        if (restored > 0) log.info("address history: {} stored backfill(s) re-applied", restored);
 
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);
@@ -211,6 +216,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         int confirmations = Math.min(n.defaultConfirmations(), 12);
         IndexerConfig cfg = new IndexerConfig("demo-" + n.id(), 1, confirmations, n.maxReorgDepth(), 200);
         ChainIngestionService.NetworkRuntime rt = chains.register(provider, sim, ledger, cfg, blockTime);
+        history.markSimulated(n);
         long t0 = System.nanoTime();
         chains.poll(rt);
         log.info("demo network {}: {} simulated blocks indexed in {} ms ({} overdrafting simulated transfers dropped)", n.id(),
@@ -280,7 +286,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             HttpJsonTransport http = new HttpJsonTransport(new RpcEndpoint(n.id() + "-primary", URI.create(c.getUrl()), headers, null, null, null));
             BlockchainProvider p = switch (n) {
                 case TRON -> new TronGridProvider("tron-trongrid", http, tokens, TronConfig.defaults());
-                case ETHEREUM, BSC, POLYGON -> new EvmJsonRpcProvider(n.id() + "-rpc", n, new JsonRpcClient(http), tokens, EvmConfig.defaults(n));
+                case ETHEREUM, BSC, POLYGON -> new EvmJsonRpcProvider(n.id() + "-rpc", n, new JsonRpcClient(http), tokens,
+                        EvmConfig.defaults(n).withHistoryChunks(c.getHistory().getChunkSize(), c.getHistory().getMinChunkSize()));
                 default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
             };
             long start = c.getStartBlock() >= 0 ? c.getStartBlock() : Math.max(0, p.getNetworkStatus().headBlock() + c.getStartBlock());
@@ -289,6 +296,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                     .withAdminChangesOfAllContracts(c.isAdminChangesOfAllContracts());
             ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, cfg, null);
             startFreezeBackfill(n, p, c.getFreezeBackfill());
+            OciProperties.History h = c.getHistory();
+            if (h.isEnabled() && p instanceof io.openchain.core.history.AddressHistorySource src) {
+                history.register(src, new io.openchain.app.history.AddressHistoryService.Config(h.getMaxBlocks(), h.getMaxPages(),
+                        h.getMaxEvents(), h.getPause()));
+            }
             long every = props.getIngestion().getPollInterval().toMillis();
             scheduler.scheduleWithFixedDelay(guard("poll " + n.id(), () -> chains.poll(rt)), 0, every, TimeUnit.MILLISECONDS);
         } catch (RuntimeException e) {

@@ -39,6 +39,23 @@ import java.util.function.Consumer;
  *       native coin;</li>
  *   <li>a simulated token or native transfer that would overdraw its sender is dropped (deterministic, processed in
  *       block order);</li>
+ *   <li>routine simulated transfers get realistic sizes: the simulator draws amounts uniformly up to 50,000 tokens, so
+ *       young demo wallets routinely moved 100k+ USDT an hour and low-balance wallets were swept several times an hour
+ *       (hundreds of {@code suspicious-wallet} / {@code wallet-draining} alerts on a long-running demo). The ledger keeps
+ *       {@value #LARGE_TRANSFER_PERCENT}% of them as drawn (occasional large payments), scales the others down by
+ *       {@value #ROUTINE_SCALE_DOWN}, and never lets a routine transfer send more than 1/{@value #MAX_SHARE_DIVISOR} of
+ *       the sender's current balance (routine payments do not empty a wallet). Deterministic (derived from the tx hash).
+ *       Scenario transfers are injected as scripted, unchanged;</li>
+ *   <li>on networks with fast blocks (TRON: 3 s) only a share of the routine simulated transfers is kept, so that each
+ *       demo wallet transacts about as often as on Ethereum (12 s blocks) instead of several times a minute (which
+ *       made chance fan-outs of 10+ recipients in 3 minutes, i.e. {@code fund-splitting} alerts, routine);</li>
+ *   <li>routine simulated transfers get realistic sizes: the simulator draws amounts uniformly up to 50,000 tokens,
+ *       so young demo wallets routinely moved 100k+ USDT an hour and wallets were swept empty several times an hour
+ *       (hundreds of {@code suspicious-wallet} / {@code wallet-draining} alerts on a long-running demo). The ledger keeps
+ *       {@value #LARGE_TRANSFER_PERCENT}% of them as drawn (occasional large payments) and scales the others down by
+ *       {@value #ROUTINE_SCALE_DOWN}; no routine transfer sends more than 1/{@value #MAX_SHARE_DIVISOR} of the sender's
+ *       current balance (people do not empty their wallet in routine payments). Deterministic (derived from the tx
+ *       hash). Scenario transfers are injected as scripted, unchanged;</li>
  *   <li>simulated approvals, scheduled freezes and scheduled contract admin changes are passed through; scenario approvals and issuer freezes can be
  *       injected like scenario transfers;</li>
  *   <li>scenario transfers can be injected into a future (not yet processed) block; they carry the block hash so the
@@ -58,6 +75,15 @@ public final class DemoLedgerProvider implements BlockchainProvider {
 
     /** An issuer freeze/unfreeze to add to a block (as the real adapters decode it from the official contract). */
     public record FreezeInjection(String txHash, Address target, Token token, String issuer, TokenFreeze.Action action, String eventName) {}
+
+    /** Share of routine simulated transfers kept at their drawn size (the others are scaled down). */
+    static final int LARGE_TRANSFER_PERCENT = 3;
+    static final int ROUTINE_SCALE_DOWN = 25;
+    /** A routine simulated transfer never sends more than balance / MAX_SHARE_DIVISOR. */
+    static final int MAX_SHARE_DIVISOR = 4;
+
+    /** Percentage of routine simulated transfers kept on fast-block networks (TRON); 100 elsewhere. */
+    static final int FAST_CHAIN_KEEP_PERCENT = 25;
 
     /** Whole native units given to each pool address at block 1. */
     public static final long NATIVE_FUNDING_UNITS = 1_000;
@@ -79,6 +105,7 @@ public final class DemoLedgerProvider implements BlockchainProvider {
     private final Map<Address, Map<Token, BigInteger>> balances = new HashMap<>();
     private long processedUpTo = 0;
     private long dropped;
+    private long thinned;
 
     /**
      * @param faucet       fictional funding source (exempt from balance checks)
@@ -154,21 +181,27 @@ public final class DemoLedgerProvider implements BlockchainProvider {
                 }
             }
             for (ChainTransaction t : simActivity.nativeTransfers()) {
-                if (!t.from().equals(faucet) && balance(t.from(), nat).compareTo(t.value()) < 0) {
+                if (!t.from().equals(faucet) && thinned(t.hash())) continue;
+                BigInteger value = t.from().equals(faucet) ? t.value() : routine(t.hash(), t.value(), balance(t.from(), nat));
+                if (value.signum() <= 0) {
                     dropped++;
                     continue;
                 }
-                natives.add(applyNative(t));
+                natives.add(applyNative(value.equals(t.value()) ? t : new ChainTransaction(t.network(), t.hash(), t.blockNumber(),
+                        t.blockHash(), t.timestamp(), t.from(), t.to(), value, t.fee(), t.success(), t.methodSelector(),
+                        t.contractInteraction())));
             }
             nativeBlocks.put(n, natives);
             List<TokenApproval> approvals = new ArrayList<>(simActivity.approvals());
             List<TokenFreeze> freezes = new ArrayList<>(simActivity.freezes());
             for (TokenTransfer t : simActivity.tokenTransfers()) {
-                if (!t.from().equals(faucet) && balance(t.from(), t.token()).compareTo(t.rawAmount()) < 0) {
+                if (!t.from().equals(faucet) && thinned(t.txHash())) continue;
+                BigInteger raw = t.from().equals(faucet) ? t.rawAmount() : routine(t.txHash(), t.rawAmount(), balance(t.from(), t.token()));
+                if (raw.signum() <= 0) {
                     dropped++;
                     continue;
                 }
-                out.add(apply(entry(ref, t.txHash(), t.logIndex(), t.from(), t.to(), t.token(), t.rawAmount(), ref.timestamp())));
+                out.add(apply(entry(ref, t.txHash(), t.logIndex(), t.from(), t.to(), t.token(), raw, ref.timestamp())));
             }
             for (Injection i : injections.getOrDefault(n, List.of())) {
                 Instant ts = i.backdate() == null ? ref.timestamp() : ref.timestamp().minus(i.backdate());
@@ -213,6 +246,29 @@ public final class DemoLedgerProvider implements BlockchainProvider {
         balances.computeIfAbsent(t.to(), k -> new LinkedHashMap<>()).merge(nat, t.value(), BigInteger::add);
         nativeByTx.put(t.hash(), t);
         return t;
+    }
+
+    /**
+     * Realistic size of a routine simulated transfer (see class doc): kept as drawn for a few, scaled down for the others,
+     * and never more than balance / {@link #MAX_SHARE_DIVISOR}. Zero when the sender cannot afford any of it (dropped).
+     */
+    /** True when a routine simulated transfer is left out to keep a realistic per-wallet rate (fast-block networks). */
+    private boolean thinned(String txHash) {
+        if (sim.network() != Network.TRON) return false;
+        if (Math.floorMod(txHash.hashCode() * 31 + 7, 100) < FAST_CHAIN_KEEP_PERCENT) return false;
+        thinned++;
+        return true;
+    }
+
+    /** Routine simulated transfers left out by {@link #thinned} (realistic per-wallet rate). */
+    public synchronized long thinnedTransfers() { return thinned; }
+
+    static BigInteger routine(String txHash, BigInteger drawn, BigInteger balance) {
+        int bucket = Math.floorMod(txHash.hashCode(), 100);
+        BigInteger v = bucket < LARGE_TRANSFER_PERCENT ? drawn : drawn.divide(BigInteger.valueOf(ROUTINE_SCALE_DOWN));
+        BigInteger cap = balance.divide(BigInteger.valueOf(MAX_SHARE_DIVISOR));
+        if (v.compareTo(cap) > 0) v = cap;
+        return v.signum() > 0 ? v : BigInteger.ZERO;
     }
 
     private BigInteger balance(Address a, Token t) {

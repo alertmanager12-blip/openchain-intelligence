@@ -18,3 +18,5 @@
 .share span { display: block; height: 100%; background: var(--ink-2); }
 .ph { height: 240px; }
 @media (max-width: 720px) { .addr { font-size: 13px; } }
+.coverage { margin-top: -12px; }
+.sig-summary { color: var(--ink-2); max-width: 64ch; }

@@ -1,6 +1,7 @@
 package io.openchain.intelligence.risk;
 
 import io.openchain.core.detection.Signal;
+import io.openchain.core.detection.SignalText;
 import io.openchain.core.detection.SignalType;
 import io.openchain.core.model.Address;
 import io.openchain.core.risk.RiskLevel;
@@ -47,8 +48,14 @@ public final class RiskScoringEngine {
 
     public ScoringConfig config() { return config; }
 
+    /** Plain-language description of {@link #METHOD} for analysts (the formula stays in the score's {@code method}). */
+    public static final String METHOD_SUMMARY = "Each finding adds points according to how strong the factor is (its weight), "
+            + "how reliable the finding is (confidence and severity) and how recent it is (older findings count less, "
+            + "except active sanctions and issuer freezes). Several findings of the same kind add up but never exceed the "
+            + "factor's weight, and the same transactions are never counted twice. The score is between 0 and 100.";
+
     private record Item(String factor, String id, String source, double confidence, double severityMult, long ageSeconds,
-                        double decay, Set<String> refs, String what, String ignoredReason) {
+                        double decay, Set<String> refs, String what, String ignoredReason, String title, String summary) {
         double q() { return ignoredReason != null ? 0 : confidence * severityMult * decay; }
     }
 
@@ -66,7 +73,8 @@ public final class RiskScoringEngine {
             items.add(new Item(f, "label:" + l.key(), l.source(), l.sourceReliability(), 1.0, age, decay(f, age),
                     Set.of("label:" + l.key()), "listed as " + l.category() + " by source '" + l.source() + "'"
                     + (l.evidenceLevel() == Signal.EvidenceLevel.CONFIRMED_BY_SOURCE ? " (authoritative source)" : ""),
-                    config.weight(f) == 0 ? "informational category (weight 0)" : null));
+                    config.weight(f) == 0 ? "informational category (weight 0)" : null,
+                    SignalText.labelTitle(l.category().name()), labelSummary(l)));
         }
         for (Signal s : signals) {
             if (!s.address().equals(address) || !seenIds.add(s.id())) continue;
@@ -80,7 +88,8 @@ public final class RiskScoringEngine {
             if (EXPOSURE.contains(s.type()) && s.evidence().stream().noneMatch(e -> "flow".equals(e.kind()) && e.reference() != null))
                 ignored = "ignored: exposure without value-flow evidence";
             items.add(new Item(f, s.id(), s.detectorId(), s.confidence(), config.severityMultiplier(s.severity()), age, decay(f, age),
-                    refs, s.type() + " " + s.severity() + " " + s.evidenceLevel() + " by " + s.detectorId(), ignored));
+                    refs, s.type() + " " + s.severity() + " " + s.evidenceLevel() + " by " + s.detectorId(), ignored,
+                    s.title(), s.summary()));
         }
 
         // group by factor, strongest first; dedup by evidence references
@@ -123,7 +132,7 @@ public final class RiskScoringEngine {
                         i.what(), i.confidence(), i.severityMult(), human(i.ageSeconds()), i.decay(), i.q(), config.weight(f), p,
                         c.note() == null ? "" : "; " + c.note());
                 contributions.add(new Contribution(f, i.id(), i.source(), config.weight(f), i.confidence(), i.ageSeconds(),
-                        Math.round(points * 100) / 100.0, expl));
+                        Math.round(points * 100) / 100.0, expl, i.title(), humanNote(i.summary(), c.note())));
             }
         }
         int score = (int) Math.max(0, Math.min(100, Math.round(100 * s)));
@@ -131,6 +140,27 @@ public final class RiskScoringEngine {
                 ? RiskLevel.UNKNOWN : RiskLevel.fromScore(score);
         String method = METHOD + "; halfLife=" + human(config.halfLife().toSeconds()) + (level == RiskLevel.UNKNOWN ? "; insufficient data" : "");
         return new RiskScore(address, score, level, contributions, method, config.modelVersion(), now);
+    }
+
+    /** "Listed as sanctioned by ofac-sdn (authoritative source)." / issuer freeze wording. */
+    static String labelSummary(AddressLabel l) {
+        if (l.category() == io.openchain.intelligence.label.LabelCategory.ISSUER_FROZEN) {
+            return "The stablecoin issuer froze this address in its own token contract (source " + l.source()
+                    + "); the issuer does not publish the reason.";
+        }
+        return "Listed as " + SignalText.category(l.category().name()) + " by " + l.source()
+                + (l.evidenceLevel() == Signal.EvidenceLevel.CONFIRMED_BY_SOURCE ? " (authoritative source)."
+                : String.format(Locale.ROOT, " (source reliability %.0f%%).", l.sourceReliability() * 100));
+    }
+
+    /** Adds why an item scored nothing, in plain words. */
+    private static String humanNote(String summary, String note) {
+        if (note == null) return summary;
+        String why = note.startsWith("ignored: exposure") ? "Not counted: no value transfer backs this exposure."
+                : note.startsWith("not counted") ? "Not counted again: the same transactions are already counted for this factor."
+                : note.startsWith("informational") ? "Informational only: this category does not change the score."
+                : SignalText.sentence(note);
+        return summary == null ? why : summary + " " + why;
     }
 
     private double decay(String factor, long ageSeconds) {

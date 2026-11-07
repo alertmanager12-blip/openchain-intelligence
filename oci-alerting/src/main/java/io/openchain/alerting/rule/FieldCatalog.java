@@ -50,7 +50,7 @@ public final class FieldCatalog {
             new FieldDef("transaction.contract_interaction", FieldType.BOOLEAN, "Transaction calls a contract"),
             // wallet (the monitored / sending address)
             new FieldDef("wallet.address", FieldType.STRING, "Wallet the event is attributed to"),
-            new FieldDef("wallet.balance", FieldType.DECIMAL, "Wallet balance of the transferred token BEFORE the event"),
+            new FieldDef("wallet.balance", FieldType.DECIMAL, "Wallet balance of the transferred token BEFORE the event: real chains: balance reported by the provider at the end of the previous block (EVM eth_getBalance / balanceOf); ABSENT when the provider cannot give it (error, rate limit, TronGrid: no historical balance), so balance conditions do not match. Simulated demo chains: demo ledger balance"),
             new FieldDef("wallet.risk_score", FieldType.INTEGER, "Explainable risk score 0..100 (not an accusation)"),
             new FieldDef("wallet.risk_level", FieldType.STRING, "UNKNOWN|LOW|MEDIUM|HIGH|CRITICAL"),
             new FieldDef("wallet.age_days", FieldType.INTEGER, "Days since first on-chain activity"),

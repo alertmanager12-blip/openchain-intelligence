@@ -5,6 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { Alert } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { shortHash } from '../../shared/format';
+import { contributionSummary, contributionTitle } from '../../shared/explain';
 import { UI, sentence } from '../../shared/ui';
 import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, parseStep } from './evidence';
 
@@ -15,6 +16,13 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h3 id="h-why">Why this alert fired</h3>
+    @if (alert().evidenceSummary; as es) { <p class="why-first">{{ es }}</p> }
+    <dl class="subject">
+      <div><dt>Wallet</dt><dd>@if (alert().address; as addr) { <oci-addr [address]="addr" [network]="alert().network" [full]="true" /> } @else { <span class="muted">Not recorded</span> }</dd></div>
+      @if (alert().counterparty; as cp) { <div><dt>Counterparty</dt><dd><oci-addr [address]="cp" [network]="alert().network" [full]="true" /></dd></div> }
+      @if (alert().txHash; as tx) { <div><dt>Transaction</dt><dd><a class="mono tx" [routerLink]="['/explorer']" [queryParams]="{ q: tx, network: alert().network }" [attr.title]="tx">{{ short(tx) }}</a></dd></div> }
+      @if (alert().blockNumber !== null && alert().blockNumber !== undefined) { <div><dt>Block</dt><dd class="mono">{{ alert().blockNumber!.toLocaleString('en-US') }}</dd></div> }
+    </dl>
     <p class="lead">Rule <span class="mono">{{ alert().ruleId }}</span>@if (alert().ruleVersion) { version {{ alert().ruleVersion }} } matched the values below.
       This is not a finding of wrongdoing: record your conclusion with the actions above.</p>
 
@@ -71,8 +79,7 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
     } @else { <p class="muted small">No transaction is attached to this alert.</p> }
 
     @if (alert().address; as addr) {
-      <h4>Subject wallet</h4>
-      <p class="small"><oci-addr [address]="addr" [network]="alert().network" [full]="true" /></p>
+      <h4>Subject wallet score</h4>
       <oci-state [loading]="risk.loading()" [error]="risk.error()" [hasData]="!!risk.value()" skeleton="readout" [skeletonRows]="1" loadingText="Loading the wallet score" (retry)="risk.reload()">
         @if (risk.value(); as r) {
           <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Subject wallet risk score" />
@@ -80,7 +87,9 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
             <caption class="sr-only">Largest contributions to the wallet score</caption>
             <thead><tr><th scope="col">Top contributions</th><th scope="col">Evidence</th><th scope="col" class="right">Points</th></tr></thead>
             <tbody>@for (c of top(); track c.factor) {
-              <tr><td>{{ sentence(c.factor) }}<div class="sub">{{ c.source }}</div></td><td><oci-evidence [value]="c.evidenceLevel" /></td><td class="right strong">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td></tr>
+              <tr><td><span class="strong">{{ cTitle(c) }}</span>@if (cSummary(c); as sm) { <div class="sub c-summary">{{ sm }}</div> }
+                <oci-tech><span>Factor <span class="mono">{{ c.factor }}</span>, source {{ c.source }}</span>@if (c.explanation) { <span class="mono">{{ c.explanation }}</span> }</oci-tech></td>
+                <td><oci-evidence [value]="c.evidenceLevel" /></td><td class="right strong">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td></tr>
             }</tbody>
           </table>
           <a class="small" [routerLink]="['/wallets', alert().network, addr]">Open the wallet to see every contribution</a>
@@ -96,6 +105,12 @@ import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, pars
   styles: `
     :host { display: grid; gap: 12px; align-content: start; min-width: 0; }
     .lead { color: var(--muted); margin: 0; font-size: 12.5px; }
+    .why-first { margin: 0; font-size: 14px; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+    .subject { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 20px; margin: 0; font-size: 12.5px; }
+    .subject div { min-width: 0; }
+    .subject dt { color: var(--muted); font-size: 11.5px; }
+    .subject dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+    .c-summary { color: var(--ink-2); }
     h3 { font-size: 13px; margin-top: 8px; }
     h4 { margin: 14px 0 0; font-size: 12px; color: var(--muted); font-weight: 500; }
     .measure { display: grid; gap: 10px; padding: 16px 18px; }
@@ -123,6 +138,8 @@ export class AlertWhy {
   readonly op = opSymbol;
   readonly scale = compareScale;
   readonly sentence = sentence;
+  readonly cTitle = contributionTitle;
+  readonly cSummary = contributionSummary;
   readonly short = (h: string) => shortHash(h, 10, 8);
 
   /** Score of the alert's subject wallet (GET /wallets/{a}/risk). */

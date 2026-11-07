@@ -1,10 +1,11 @@
 /* In-memory fake data for mock mode. Every address and hash here is fictitious ("fa4ede30" ≈ fake demo). */
 import {
-  ALERT_STATUSES, Alert, AlertStatus, ApiKey, Balance, Dashboard, ChainTransaction, Counterparty, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, Label,
+  ALERT_STATUSES, Alert, AlertStatus, ApiKey, Balance, Dashboard, ChainTransaction, Counterparty, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, HistoryCoverage, Label,
   LabelReport, NETWORKS, NetworkId, NetworkStatus, RiskContribution, RiskLevel, RiskScore, Rule, RuleTestResult, SEVERITIES, Severity,
   Signal, Token, TransactionAnalysis, TokenTransfer, User, WalletAnalysis, Webhook,
 } from '../models';
 import { RuleDraft, emptyRule, newCondition, newGroup } from '../rules/rule-model';
+import { labelTitle, signalTypeTitle } from '../../shared/explain';
 import { ruleToYaml, yamlToRule } from '../rules/rule-yaml';
 
 // ---------------------------------------------------------------- deterministic randomness
@@ -113,6 +114,42 @@ const SIGNAL_TYPES: { type: string; ev: EvidenceLevel; text: string }[] = [
 
 const RISK_FOR = (score: number): RiskLevel => (score >= 85 ? 'CRITICAL' : score >= 65 ? 'HIGH' : score >= 35 ? 'MEDIUM' : 'LOW');
 
+const n0 = (v: number) => v.toLocaleString('en-US');
+
+/**
+ * Plain-language sentence of a signal type, in the wording of oci-core SignalText / the detectors
+ * ("Sent 95% of its USDT balance (35,000 USDT) to 2 addresses within 2 minutes"). Numbers come from `rng`.
+ */
+function plainSummary(type: string, rng: Rng, sym: string): string {
+  const amt = n0(rng.int(5, 400) * 500);
+  switch (type) {
+    case 'UNUSUAL_AMOUNT': return `Sent ${amt} ${sym} in one transfer, ${rng.int(8, 30)} times its median transfer of the last 90 days`;
+    case 'FAST_FORWARDING': return `Forwarded ${rng.int(85, 99)}% of the ${amt} ${sym} it received within ${rng.int(2, 9)} minutes`;
+    case 'STRUCTURING': return `Sent ${rng.int(8, 14)} transfers just below 10,000 ${sym} within 2 hours`;
+    case 'DORMANT_REACTIVATION': return `Became active again after ${rng.int(200, 900)} days without activity and moved ${amt} ${sym}`;
+    case 'MIXER_EXPOSURE': return `Received ${amt} ${sym} directly from an address listed as a mixer by a community source`;
+    case 'SANCTIONED_EXPOSURE': return `Sent ${amt} ${sym} directly to an address listed as sanctioned by demo-official-list`;
+    case 'INDIRECT_EXPOSURE': return `Received ${amt} ${sym} that came ${rng.int(2, 3)} hops from an address listed as sanctioned`;
+    case 'CIRCULAR_FLOW': return `${amt} ${sym} came back to this wallet through ${rng.int(2, 5)} intermediate wallets within ${rng.int(2, 12)} hours`;
+    case 'UNUSUAL_APPROVAL': return `Granted an unlimited ${sym} approval to a contract deployed ${rng.int(1, 6)} hours earlier`;
+    case 'RAPID_DRAIN': return `Sent ${rng.int(90, 99)}% of its ${sym} balance (${amt} ${sym}) to ${rng.int(2, 6)} addresses within ${rng.int(2, 5)} minutes`;
+    case 'FLOW_CONCENTRATION': return `Split ${amt} ${sym} across ${rng.int(12, 40)} new addresses within ${rng.int(10, 50)} minutes`;
+    case 'DUSTING': return `Only linked to a listed address by ${rng.int(2, 9)} unsolicited dust transfers (under 0.01 ${sym}), which says nothing about the owner`;
+    case 'OWNERSHIP_CHANGE': return `Contract ownership moved to a new address ${rng.int(1, 30)} hours ago`;
+    default: return `${signalTypeTitle(type)} observed`;
+  }
+}
+
+/** Short detector id as the backend names them ("RAPID_DRAIN" -> "rapid-drain@1"). */
+const detectorOf = (type: string) => `${type.toLowerCase().replace(/_/g, '-')}@1`;
+
+const humanAge = (sec: number) => (sec < 3600 ? `${Math.round(sec / 60)}m` : sec < 86400 ? `${Math.round(sec / 3600)}h` : `${Math.round(sec / 86400)}d`);
+
+/** Plain-language description of the scoring method (RiskScore.methodSummary). */
+const METHOD_SUMMARY = 'Each factor counts according to its confidence, its severity and its age (evidence loses half its weight every 30 days). '
+  + 'Factors combine so that several independent reasons raise the score more than any single one, without ever exceeding 100.';
+const METHOD = 'noisy-or saturating aggregation: score=100*(1-prod_f(1-p_f)), p_f=w_f*(1-prod_i(1-q_i)), q_i=confidence*severity*0.5^(age/halfLife); dedup by evidence per factor; halfLife=30d';
+
 export class ProblemError {
   constructor(readonly status: number, readonly title: string, readonly detail: string) {}
 }
@@ -169,11 +206,14 @@ export class MockDb {
     const n = rng.pick(['ethereum', 'tron', 'bsc', 'polygon'] as NetworkId[]);
     const t = rng.pick(SIGNAL_TYPES);
     const sev: Severity = t.ev === 'CONFIRMED_BY_SOURCE' ? 'CRITICAL' : rng.pick(['LOW', 'MEDIUM', 'MEDIUM', 'HIGH'] as Severity[]);
+    // Separate RNG for the wording so the seeded data (signals, then alerts) stays identical.
+    const text = { title: signalTypeTitle(t.type), summary: plainSummary(t.type, new Rng(`sigtext:${i}`), tokensOf(n)[1]?.symbol ?? 'USDT') };
     return {
+      ...text,
       id: `sig_${i + 1}`, type: t.type, address: fakeAddress(n, rng.int(1, 40)), network: n, txHash: fakeTxHash(n, rng),
       severity: sev, confidence: Math.round((0.45 + rng.next() * 0.5) * 100) / 100, evidenceLevel: t.ev,
       evidence: [{ kind: 'observation', description: t.text, reference: null, source: t.ev === 'CONFIRMED_BY_SOURCE' ? 'demo-official-list' : 'oci-detector', observedAt: iso(rng.int(1, 72) * H) }],
-      detectorId: `${t.type.toLowerCase().replace(/_/g, '-')}@1`, detectedAt: iso(rng.int(1, 72 * 60) * 60_000),
+      detectorId: detectorOf(t.type), detectedAt: iso(rng.int(1, 72 * 60) * 60_000),
     };
   }
 
@@ -206,6 +246,7 @@ export class MockDb {
       if (status !== 'OPEN') history.push({ at: iso(created - 20 * 60_000), actor: 'analyst@example.invalid', action: status, detail: null });
       this.alerts.push({
         id: `al_${String(i + 1).padStart(4, '0')}`, ruleId: rule.id, ruleName: rule.name, severity: sev, status, network: n, address, txHash: fakeTxHash(n, rng),
+        counterparty: null, blockNumber: null, evidenceSummary: null,
         summary: `${rule.name}: ${tok.symbol} transfer from ${address.slice(0, 12)}…`, evidenceLevel: rule.id === 'mixer-exposure' ? 'RISK_SIGNAL' : 'ANOMALY',
         assignee: status === 'INVESTIGATING' ? 'analyst@example.invalid' : null, createdAt: iso(created), updatedAt: iso(created - 20 * 60_000),
         matchedEvent: { type: 'TOKEN_TRANSFER', network: n, from: address, to: fakeAddress(n, rng.int(41, 80)), 'token.symbol': tok.symbol, amount: rng.raw(0, 6) },
@@ -230,6 +271,9 @@ export class MockDb {
     a.occurrenceCount = 1 + (i % 4 === 0 ? rng.int(1, 5) : 0);
     a.firstSeen = a.createdAt;
     a.lastSeen = a.updatedAt;
+    a.counterparty = typeof a.matchedEvent['to'] === 'string' ? (a.matchedEvent['to'] as string) : null;
+    a.blockNumber = 21_000_000 + rng.int(0, 900_000);
+    const who = a.address ? `${a.address.slice(0, 10)}…` : 'The wallet';
     switch (a.ruleId) {
       case 'structuring-burst': {
         const count = rng.int(8, 14);
@@ -241,6 +285,7 @@ export class MockDb {
           groupBy: ['transaction.from'], evidenceLevel: a.evidenceLevel,
           conditions: [`transaction.token.symbol eq USDT (actual USDT) -> true`, `transaction.amount between [9000, 9999.99] (actual ${a.matchedEvent['amount']}) -> true`],
         };
+        a.evidenceSummary = `${who} sent ${count} USDT transfers just below 10,000 USDT within 2 hours (threshold 8)`;
         break;
       }
       case 'mixer-exposure': {
@@ -251,11 +296,14 @@ export class MockDb {
           kind: 'STATELESS', evidenceLevel: a.evidenceLevel,
           conditions: [`counterparty.labels contains mixer (actual [mixer, community]) -> true`, `transaction.amount_usd gte 10000 (actual ${usd}) -> true`, `counterparty.risk_score gte 65 (actual ${rs}) -> true`],
         };
+        a.evidenceSummary = `${who} received ${n0(Number(usd))} USD of ${symbol} from an address listed as a mixer by a community source (counterparty score ${rs})`;
         break;
       }
       case 'risky-approval': {
         a.matchedEventIds = ids(1);
-        a.evidence = { kind: 'STATELESS', evidenceLevel: a.evidenceLevel, conditions: [`approval.unlimited eq true (actual true) -> true`, `approval.spender_age_days lt 7 (actual ${rng.int(0, 6)}) -> true`] };
+        const days = rng.int(0, 6);
+        a.evidence = { kind: 'STATELESS', evidenceLevel: a.evidenceLevel, conditions: [`approval.unlimited eq true (actual true) -> true`, `approval.spender_age_days lt 7 (actual ${days}) -> true`] };
+        a.evidenceSummary = `${who} granted an unlimited ${symbol} approval to a contract deployed ${days === 0 ? 'less than a day' : days === 1 ? '1 day' : days + ' days'} earlier`;
         break;
       }
       default: {
@@ -265,58 +313,132 @@ export class MockDb {
           kind: 'STATELESS', evidenceLevel: a.evidenceLevel,
           conditions: [`transaction.token.symbol in [USDT, USDC] (actual ${a.matchedEvent['token.symbol']}) -> true`, `transaction.amount gte 250000 (actual ${amount}) -> true`],
         };
+        a.evidenceSummary = `${who} sent ${n0(Math.floor(Number(amount)))} ${a.matchedEvent['token.symbol']} in a single transfer (threshold 250,000)`;
       }
     }
   }
 
   // ---------------------------------------------------------------- read models
 
-  networks(): NetworkStatus[] {
+  /** Networks this mock instance does not index: GET /networks omits them and wallet calls answer 422, like the backend. */
+  static readonly DISABLED: readonly NetworkId[] = ['bitcoin'];
+
+  /** GET /networks: enabled networks only, or every network with `all` (disabled ones flagged, like the backend). */
+  networks(all = false): NetworkStatus[] {
+    return this.allNetworks().filter((n) => all || n.enabled);
+  }
+
+  private allNetworks(): NetworkStatus[] {
     const base: Record<NetworkId, number> = { ethereum: 21_934_120, tron: 71_204_118, bsc: 46_118_430, polygon: 69_502_331, bitcoin: 921_404, solana: 334_120_998 };
     return NETWORKS.map((n, i) => ({
       network: n, headBlock: base[n], finalizedBlock: base[n] - [64, 19, 15, 128, 6, 32][i], healthy: n !== 'solana',
       providerId: n === 'solana' ? 'solana-secondary' : `${n}-primary`, latencyMillis: [180, 95, 140, 210, 420, 2900][i], checkedAt: iso(15_000),
       detail: n === 'solana' ? 'Primary provider timing out; failed over to secondary. Data may lag.' : null,
-      enabled: true, lastIndexedBlock: base[n] - [64, 19, 15, 128, 6, 32][i] - [2, 0, 1, 4, 0, 940][i], indexerLag: [64, 19, 15, 128, 6, 32][i] + [2, 0, 1, 4, 0, 940][i],
+      enabled: !MockDb.DISABLED.includes(n), lastIndexedBlock: base[n] - [64, 19, 15, 128, 6, 32][i] - [2, 0, 1, 4, 0, 940][i], indexerLag: [64, 19, 15, 128, 6, 32][i] + [2, 0, 1, 4, 0, 940][i],
       simulated: n === 'polygon',
     }));
   }
 
   private assertReachable(network: NetworkId): void {
+    // Same answer as the backend (InvestigationService.network): 422 problem+json with a /network field error.
+    if (MockDb.DISABLED.includes(network))
+      throw Object.assign(new ProblemError(422, 'Request validation failed', `network '${network}' is not enabled on this instance`),
+        { errors: [{ pointer: '/network', path: '/network', code: 'unsupported_network', message: 'network not enabled' }] });
     if (network === 'solana') throw new ProblemError(503, 'Provider unavailable', 'All Solana providers are currently failing. Results are temporarily unavailable; retry in a minute.');
   }
 
   risk(address: string, network: NetworkId): RiskScore {
     this.assertReachable(network);
     const rng = new Rng(`risk:${network}:${address}`);
+    const sym = tokensOf(network)[1]?.symbol ?? tokensOf(network)[0].symbol;
     const label = this.labels.find((l) => l.address === address && l.network === network);
-    const factors: Omit<RiskContribution, 'points'>[] = [];
-    const cands: [string, string, EvidenceLevel, string][] = [
-      ['MIXER_EXPOSURE', 'oci-detector', 'RISK_SIGNAL', '14% of inbound volume within 2 hops of addresses labelled "mixer" by community sources'],
-      ['FAST_FORWARDING', 'oci-detector', 'ANOMALY', 'Median holding time of received funds is 3 minutes (population median: 2 days)'],
-      ['STRUCTURING', 'oci-detector', 'RISK_SIGNAL', 'Repeated transfers just below common reporting thresholds'],
-      ['COUNTERPARTY_EXCHANGE', 'oci-curated', 'ANOMALY', 'Most outflows go to labelled exchange deposit addresses (lowers uncertainty)'],
-      ['NEW_WALLET', 'oci-detector', 'ANOMALY', 'Wallet first seen less than 7 days ago'],
+    // Factor keys as the backend scoring engine emits them: "signal:<SignalType>" or "label:<CATEGORY>".
+    const cands: [type: string, ev: EvidenceLevel, sev: Severity][] = [
+      ['MIXER_EXPOSURE', 'RISK_SIGNAL', 'HIGH'], ['FAST_FORWARDING', 'ANOMALY', 'MEDIUM'], ['STRUCTURING', 'RISK_SIGNAL', 'MEDIUM'],
+      ['RAPID_DRAIN', 'RISK_SIGNAL', 'MEDIUM'], ['FLOW_CONCENTRATION', 'ANOMALY', 'MEDIUM'], ['INDIRECT_EXPOSURE', 'RISK_SIGNAL', 'MEDIUM'],
+      ['DUSTING', 'ANOMALY', 'LOW'], ['DORMANT_REACTIVATION', 'ANOMALY', 'LOW'], ['UNUSUAL_AMOUNT', 'ANOMALY', 'LOW'],
+      ['CIRCULAR_FLOW', 'RISK_SIGNAL', 'MEDIUM'], ['UNUSUAL_APPROVAL', 'ANOMALY', 'LOW'], ['OWNERSHIP_CHANGE', 'ANOMALY', 'MEDIUM'],
     ];
-    const k = rng.int(2, cands.length);
-    for (const [factor, source, ev, explanation] of cands.slice(0, k))
-      factors.push({ factor, signalId: `sig_${rng.int(1, 36)}`, source, weight: Math.round((0.1 + rng.next() * 0.4) * 100) / 100, confidence: Math.round((0.4 + rng.next() * 0.55) * 100) / 100, ageSeconds: rng.int(600, 30 * 86400), explanation, evidenceLevel: ev });
+    const SEV_MULT: Record<Severity, number> = { INFO: 0.2, LOW: 0.4, MEDIUM: 0.7, HIGH: 0.85, CRITICAL: 1 };
+    const pool = [...cands];
+    const picked: typeof cands = [];
+    for (let k = rng.int(2, 5); k > 0 && pool.length; k--) picked.push(pool.splice(rng.int(0, pool.length - 1), 1)[0]);
+    const factors: Omit<RiskContribution, 'points'>[] = picked.map(([type, ev, sev]) => {
+      const weight = Math.round((0.1 + rng.next() * 0.4) * 100) / 100;
+      const confidence = Math.round((0.4 + rng.next() * 0.55) * 100) / 100;
+      const ageSeconds = rng.int(600, 30 * 86400);
+      const decay = Math.pow(0.5, ageSeconds / (30 * 86400));
+      const q = confidence * SEV_MULT[sev] * decay;
+      const det = detectorOf(type);
+      return {
+        factor: `signal:${type}`, signalId: `sig_${rng.int(1, 36)}`, source: det, weight, confidence, ageSeconds, evidenceLevel: ev,
+        title: signalTypeTitle(type), summary: plainSummary(type, rng, sym),
+        explanation: `${type} ${sev} ${ev} by ${det}; confidence ${confidence.toFixed(2)}, severity x${SEV_MULT[sev].toFixed(2)}, age ${humanAge(ageSeconds)}, decay ${decay.toFixed(3)} -> q=${q.toFixed(3)}; factor weight ${weight.toFixed(2)}, factor p=${(weight * q).toFixed(3)}`,
+      };
+    });
+    const labelFactor = (category: string, source: string, reliability: number, ev: EvidenceLevel, weight: number, summary: string): Omit<RiskContribution, 'points'> => ({
+      factor: `label:${category}`, signalId: null, source, weight, confidence: reliability, ageSeconds: 86400 * 3, evidenceLevel: ev, title: labelTitle(category), summary,
+      explanation: `listed as ${category.toLowerCase()} by source '${source}'; reliability ${reliability.toFixed(2)}, age 3d, decay ${Math.pow(0.5, 3 / 30).toFixed(3)}; factor weight ${weight.toFixed(2)}`,
+    });
+    if (rng.next() < 0.35) factors.push(labelFactor('EXCHANGE', 'oci-curated', 0.85, 'ANOMALY', 0.3, `Most outflows go to deposit addresses listed as an exchange by oci-curated, which lowers the score`));
+    if ((network === 'ethereum' || network === 'tron') && rng.next() < 0.12)
+      factors.unshift(labelFactor('ISSUER_FROZEN', `${sym.toLowerCase()}-issuer-blacklist`, 0.99, 'CONFIRMED_BY_SOURCE', 0.9, `${sym} held by this address was frozen by the stablecoin issuer (authoritative source)`));
     if (label?.evidenceLevel === 'CONFIRMED_BY_SOURCE')
-      factors.unshift({ factor: 'SANCTIONED_LIST', signalId: null, source: label.source, weight: 1, confidence: label.reliability, ageSeconds: 86400 * 3, explanation: `Listed by ${label.source} (demo). Confirmed by source, see reference.`, evidenceLevel: 'CONFIRMED_BY_SOURCE' });
-    const contributions = factors.map((f) => ({ ...f, points: Math.round(f.weight * f.confidence * 100 * (f.factor === 'COUNTERPARTY_EXCHANGE' ? -0.3 : 1)) }));
+      factors.unshift(labelFactor('SANCTIONED', label.source, label.reliability, 'CONFIRMED_BY_SOURCE', 1, `Listed as sanctioned by ${label.source} (authoritative source)`));
+    const contributions = factors.map((f) => ({ ...f, points: Math.round(f.weight * f.confidence * 100 * (f.factor === 'label:EXCHANGE' ? -0.3 : 1)) }));
     const score = Math.max(0, Math.min(100, contributions.reduce((s, c) => s + c.points, 0)));
     const history = Array.from({ length: 12 }, (_, i) => {
       const s = Math.max(0, Math.min(100, score + rng.int(-15, 8) * (i === 11 ? 0 : 1)));
       return { at: iso((11 - i) * 5 * D), score: i === 11 ? score : s, level: RISK_FOR(i === 11 ? score : s) };
     });
-    return { address, network, score, level: RISK_FOR(score), contributions, method: 'weighted-evidence', modelVersion: 'demo-1.0', computedAt: iso(5 * 60_000), history };
+    return { address, network, score, level: RISK_FOR(score), contributions, method: METHOD, methodSummary: METHOD_SUMMARY, modelVersion: 'demo-1.0', computedAt: iso(5 * 60_000), history };
+  }
+
+  /** Fetch count per wallet, so an Ethereum wallet's history goes RUNNING -> COMPLETE across polls (dev mock mode). */
+  private readonly historyPolls = new Map<string, number>();
+
+  /**
+   * On-demand history coverage (ADR-0020). Simulated chains report NOT_CONFIGURED; Ethereum wallets load in two polls,
+   * then end COMPLETE (or TRUNCATED for some); BSC is COMPLETE, or FAILED for some addresses.
+   */
+  history(address: string, network: NetworkId): HistoryCoverage {
+    const base: HistoryCoverage = {
+      status: 'NOT_CONFIGURED', sources: [], coveredFromBlock: null, coveredToBlock: null, coveredFromTime: null, tokenTransfersCovered: false,
+      approvalsCovered: false, nativeCovered: false, internalCovered: false, truncated: false, eventsFound: 0,
+      message: 'Simulated demo chain: the indexed demo data is the whole history.', updatedAt: null,
+    };
+    const head = this.allNetworks().find((s) => s.network === network)!.headBlock;
+    const rng = new Rng(`hist:${network}:${address}`);
+    const from = head - rng.int(400_000, 3_400_000);
+    const events = rng.int(40, 4000);
+    const logs = { sources: ['eth_getLogs'], tokenTransfersCovered: true, approvalsCovered: true, coveredToBlock: head, updatedAt: iso(10_000) };
+    if (network === 'ethereum') {
+      const key = `${network}:${address}`;
+      const n = (this.historyPolls.get(key) ?? 0) + 1;
+      this.historyPolls.set(key, n);
+      if (n <= 2)
+        return { ...base, ...logs, status: n === 1 ? 'PENDING' : 'RUNNING', coveredFromBlock: n === 1 ? null : head - 200_000, coveredToBlock: n === 1 ? null : head, eventsFound: n === 1 ? 0 : Math.round(events / 3),
+          message: n === 1 ? 'History: queued, loading will start shortly (eth_getLogs).' : `History: loading ERC-20 transfers and approvals back from block ${n0(head)} (eth_getLogs).` };
+      if (rng.next() < 0.25)
+        return { ...base, ...logs, status: 'TRUNCATED', truncated: true, coveredFromBlock: head - 500_000, coveredFromTime: iso(70 * D), eventsFound: 10_000,
+          message: `History: ERC-20 transfers and approvals since block ${n0(head - 500_000)} only: the 10,000-event cap was reached, older history is not loaded. Native and internal transfers are not covered: configure an Erigon node (ADR-0020).` };
+      return { ...base, ...logs, status: 'COMPLETE', coveredFromBlock: from, coveredFromTime: iso(rng.int(100, 900) * D), eventsFound: events,
+        message: `History: ERC-20 transfers and approvals since block ${n0(from)} (eth_getLogs). Native and internal transfers are not covered: configure an Erigon node (ADR-0020).` };
+    }
+    if (network === 'bsc' && rng.next() < 0.3)
+      return { ...base, ...logs, status: 'FAILED', coveredFromBlock: null, coveredToBlock: null, tokenTransfersCovered: false, approvalsCovered: false, updatedAt: iso(60_000),
+        message: 'History could not be loaded: the RPC provider timed out on eth_getLogs. Figures below use indexed data only; retry later.' };
+    if (network === 'bsc')
+      return { ...base, ...logs, status: 'COMPLETE', coveredFromBlock: from, coveredFromTime: iso(rng.int(100, 900) * D), eventsFound: events,
+        message: `History: BEP-20 transfers and approvals since block ${n0(from)} (eth_getLogs). Native and internal transfers are not covered.` };
+    return base;
   }
 
   wallet(address: string, network: NetworkId): WalletAnalysis {
     this.assertReachable(network);
     const rng = new Rng(`wallet:${network}:${address}`);
     const tokens = tokensOf(network);
-    const balances: Balance[] = tokens.map((t) => ({ token: t, rawAmount: rng.raw(t.decimals, 5), atBlock: this.networks().find((s) => s.network === network)!.headBlock, observedAt: iso(30_000) }));
+    const balances: Balance[] = tokens.map((t) => ({ token: t, rawAmount: rng.raw(t.decimals, 5), atBlock: this.allNetworks().find((s) => s.network === network)!.headBlock, observedAt: iso(30_000) }));
     const counterparties: Counterparty[] = Array.from({ length: rng.int(6, 14) }, () => {
       const t = rng.pick(tokens);
       const a = fakeAddress(network, rng.int(1, 60));
@@ -331,6 +453,7 @@ export class MockDb {
       flows: tokens.map((t) => ({ token: t, rawIn: rng.raw(t.decimals, 7), rawOut: rng.raw(t.decimals, 7) })), counterparties,
       activity: Array.from({ length: 30 }, (_, i) => ({ day: iso((29 - i) * D).slice(0, 10), txIn: rng.int(0, 25), txOut: rng.int(0, 25) })),
       signals: this.signals.slice(0, rng.int(1, 5)).map((s) => ({ ...s, address, network })), risk,
+      history: this.history(address, network),
     };
   }
 

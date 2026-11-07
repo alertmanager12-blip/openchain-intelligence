@@ -37,6 +37,7 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -52,7 +53,8 @@ import org.springframework.stereotype.Service;
  * Runs the event pipeline of ADR-0001 in-process:
  * provider -> BlockIndexer -> IntelligencePipeline (profiles, detection, scoring) -> enrichment -> AlertingPipeline.
  * Each indexed transfer (token or native) is enriched with the {@code wallet.*}/{@code counterparty.*} catalog fields
- * computed by the intelligence module before the rule engine sees it; approvals get {@code wallet.*} (owner),
+ * computed by the intelligence module before the rule engine sees it ({@code wallet.balance}: on real networks the
+ * provider's balance at the end of the previous block, absent when unavailable; demo ledger balance on simulated chains); approvals get {@code wallet.*} (owner),
  * {@code counterparty.*} (spender), {@code approval.spender_is_contract} (provider code lookup, when the provider can
  * tell) and {@code approval.spender_age_days} (days since the platform first saw the spender in an indexed value flow;
  * absent when never seen); issuer freezes get {@code wallet.*} (frozen address, after its rescore) and
@@ -123,6 +125,18 @@ public class ChainIngestionService {
     private final AtomicLong spenderLookupFailures = new AtomicLong();
     private final TransferEventMapper backfillMapper;
     private final Set<Address> trackedWallets = ConcurrentHashMap.newKeySet();
+    private final Map<Network, Long> firstIndexedBlock = new ConcurrentHashMap<>();
+    private final AtomicLong historyEventsApplied = new AtomicLong();
+    /** Real balance lookups (provider calls), cache hits and failures (field then absent). */
+    private final AtomicLong balanceLookups = new AtomicLong(), balanceCacheHits = new AtomicLong(), balanceLookupFailures = new AtomicLong();
+    private static final int BALANCE_CACHE_SIZE = 10_000;
+    /** (address, token, block) -> balance at the end of that block; empty = unknown (failure or unsupported). */
+    private final Map<String, Optional<BigDecimal>> balanceCache = java.util.Collections.synchronizedMap(
+            new LinkedHashMap<>(1024, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, Optional<BigDecimal>> eldest) {
+                    return size() > BALANCE_CACHE_SIZE;
+                }
+            });
 
     public ChainIngestionService(IntelligencePipeline intelligence, AlertingPipeline alerting, EventHistory history,
                                  LabelCatalog labels, TokenRegistry tokens, Clock clock, TransactionRunner tx,
@@ -150,6 +164,8 @@ public class ChainIngestionService {
         NetworkRuntime rt = new NetworkRuntime(n, provider, simulator, ledger, indexer, blockTime);
         rt.indexerConfig = config;
         runtimes.put(n, rt);
+        // real chain: balances come from the provider, never from flows seen since the indexer start
+        if (simulator == null) intelligence.balances().markAuthoritative(n);
         log.info("network {} registered (provider {}, start block {}, {} confirmations)", n.id(), provider.id(),
                 config.startBlock(), config.confirmations());
         return rt;
@@ -200,6 +216,7 @@ public class ChainIngestionService {
     /** Indexer sink. Package-visible for tests; called under the {@link #poll} lock. */
     void onEvent(ChainEvent e) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
+        if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (e.removed()) {
             if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
             history.record(e);
@@ -216,9 +233,15 @@ public class ChainIngestionService {
                 trackedWallets.add(f.from());
                 trackedWallets.add(f.to());
                 WalletProfile senderBefore = intelligence.profiles().profileOrEmpty(f.from());
+                Optional<BigDecimal> realBalance = Optional.empty();
+                boolean real = intelligence.balances().authoritative(e.network());
+                if (real) {
+                    realBalance = realBalanceBefore(f.from(), f.token(), e.blockNumber());
+                    realBalance.ifPresent(b -> intelligence.balances().recordSenderBalanceBefore(f.eventId(), b));
+                }
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
                 fresh.addAll(r.newSignals());
-                enriched = enrich(e, f, senderBefore);
+                enriched = enrich(e, f, senderBefore, real, realBalance);
             }
         } else if (isFreeze(e)) {
             Optional<Address> target = address(e, "freeze.address");
@@ -286,6 +309,78 @@ public class ChainIngestionService {
         backfilledFreezesApplied.incrementAndGet();
         r.newSignals().forEach(this::remember);
     }
+
+    /**
+     * Address history sink (ADR-0020): historical transfers and approvals of one address, applied in chronological order
+     * to the intelligence pipeline (flows, profiles, detection, scoring) exactly like live ones, but WITHOUT rule
+     * evaluation: history never raises alerts. Idempotent on event ids (an event already indexed live is a no-op).
+     * New signals are kept in {@link #recentSignals()}. Serialised with ingestion.
+     */
+    public synchronized void applyHistory(List<ChainEvent> events) {
+        List<ChainEvent> ordered = new ArrayList<>(events);
+        ordered.sort(Comparator.comparing((ChainEvent x) -> x.eventTime() == null ? Instant.EPOCH : x.eventTime())
+                .thenComparingLong(ChainEvent::blockNumber).thenComparing(ChainEvent::eventId));
+        for (ChainEvent e : ordered) {
+            if (e.removed()) continue;
+            IntelligencePipeline.Result r;
+            if (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER) {
+                Optional<ValueFlow> f = toFlow(e);
+                if (f.isEmpty()) continue;
+                trackedWallets.add(f.get().from());
+                trackedWallets.add(f.get().to());
+                r = intelligence.onFlow(f.get());
+            } else if (e.type() == ChainEvent.EventType.APPROVAL) {
+                r = intelligence.onEvent(e);
+            } else {
+                continue;
+            }
+            if (r.duplicate()) continue;
+            historyEventsApplied.incrementAndGet();
+            r.newSignals().forEach(this::remember);
+        }
+    }
+
+    /**
+     * Balance of {@code token} held by {@code a} at the end of block {@code block - 1} (i.e. before every transfer of
+     * {@code block}), from the network's provider; cached per (address, token, block) in a bounded LRU, so several
+     * transfers of one block cost one call. Empty when the provider cannot tell or fails (counted).
+     */
+    Optional<BigDecimal> realBalanceBefore(Address a, Token token, long block) {
+        NetworkRuntime rt = runtimes.get(a.network());
+        if (rt == null || block <= 0) return Optional.empty();
+        long at = block - 1;
+        String key = a.value() + "|" + ValueFlow.tokenKey(token) + "|" + at;
+        Optional<BigDecimal> cached = balanceCache.get(key);
+        if (cached != null) {
+            balanceCacheHits.incrementAndGet();
+            return cached;
+        }
+        Optional<BigDecimal> v;
+        try {
+            balanceLookups.incrementAndGet();
+            v = rt.provider().getBalanceAt(a, token, at).map(raw -> new BigDecimal(raw, token.decimals()));
+            if (v.isEmpty()) balanceLookupFailures.incrementAndGet();
+        } catch (RuntimeException ex) {
+            balanceLookupFailures.incrementAndGet();
+            log.debug("balance of {} {} at block {} unavailable: {}", a, token.symbol(), at, ex.getMessage());
+            v = Optional.empty();
+        }
+        balanceCache.put(key, v);
+        return v;
+    }
+
+    public long balanceLookups() { return balanceLookups.get(); }
+    public long balanceCacheHits() { return balanceCacheHits.get(); }
+    /** Lookups that gave no balance (provider error or unsupported): {@code wallet.balance} was then absent. */
+    public long balanceLookupFailures() { return balanceLookupFailures.get(); }
+
+    /** First block indexed live on a network (the address history covers the blocks before it). */
+    public java.util.OptionalLong firstIndexedBlock(Network n) {
+        Long b = firstIndexedBlock.get(n);
+        return b == null ? java.util.OptionalLong.empty() : java.util.OptionalLong.of(b);
+    }
+
+    public long historyEventsApplied() { return historyEventsApplied.get(); }
 
     public long backfilledFreezesApplied() { return backfilledFreezesApplied.get(); }
     /** Approval spender code lookups that failed (the field is then absent from the event). */
@@ -378,11 +473,18 @@ public class ChainIngestionService {
     }
 
     /** Adds the wallet (sender) and counterparty (recipient) catalog fields. */
-    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore) {
+    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore, boolean real, Optional<BigDecimal> realBalance) {
         Map<String, Object> fields = new LinkedHashMap<>(e.fields());
         fields.put("wallet.address", f.from().value());
-        TokenFlowStats stats = senderBefore.tokens().get(f.tokenKey());
-        fields.put("wallet.balance", stats == null ? BigDecimal.ZERO : stats.balanceEstimate());
+        if (real) {
+            // real chain: the provider's balance at the end of the previous block, or NO field (balance conditions and
+            // RATIO_OF_BALANCE then never match): an estimate from flows seen since the start would make every wallet
+            // funded earlier look drained
+            realBalance.ifPresent(b -> fields.put("wallet.balance", b));
+        } else {
+            TokenFlowStats stats = senderBefore.tokens().get(f.tokenKey());
+            fields.put("wallet.balance", stats == null ? BigDecimal.ZERO : stats.balanceEstimate()); // demo ledger: exact
+        }
         fields.put("wallet.tx_count", senderBefore.transactionCount());
         fields.put("wallet.age_days", ageDays(senderBefore.firstActivity(), e.eventTime()));
         putRisk(fields, "wallet", f.from());
@@ -425,6 +527,8 @@ public class ChainIngestionService {
         f.put("signal.evidence_level", s.evidenceLevel().name());
         f.put("wallet.address", s.address().value());
         if (s.txHash() != null) f.put("transaction.hash", s.txHash());
+        if (s.title() != null) f.put("signal.title", s.title());
+        if (s.summary() != null) f.put("signal.summary", s.summary());
         return new ChainEvent("signal:" + s.id(), ChainEvent.EventType.DETECTION_SIGNAL, cause.network(), cause.blockNumber(),
                 cause.blockHash(), cause.eventTime(), clock.instant(), false, f);
     }

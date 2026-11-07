@@ -100,6 +100,10 @@ export interface Signal {
   evidence: Evidence[];
   detectorId: string;
   detectedAt: string;
+  /** Short plain-language name ("Rapid drain"). May be missing on older payloads: fall back to the type. */
+  title: string;
+  /** One plain-language sentence built from the evidence. May be missing on older payloads. */
+  summary: string;
 }
 
 export interface RiskContribution {
@@ -110,8 +114,13 @@ export interface RiskContribution {
   confidence: number;
   ageSeconds: number;
   points: number;
+  /** Technical trace of the computation (q, decay, weights...). Shown under "Technical detail". */
   explanation: string;
   evidenceLevel: EvidenceLevel;
+  /** Plain-language name ("Rapid drain", "Listed as sanctioned"). May be missing on older payloads. */
+  title: string;
+  /** Plain-language sentence explaining the contribution. May be missing on older payloads. */
+  summary: string;
 }
 
 export interface RiskScore {
@@ -120,7 +129,10 @@ export interface RiskScore {
   score: number;
   level: RiskLevel;
   contributions: RiskContribution[];
+  /** Formula of the scoring method (technical). */
   method: string;
+  /** Plain-language description of the scoring method. */
+  methodSummary: string;
   modelVersion: string;
   computedAt: string;
   history?: { at: string; score: number; level: RiskLevel }[];
@@ -151,6 +163,32 @@ export interface WalletAnalysis {
   activity: { day: string; txIn: number; txOut: number }[];
   signals: Signal[];
   risk: RiskScore | null;
+  /** Coverage of the on-demand address history (ADR-0020); null when the server does not report it. */
+  history: HistoryCoverage | null;
+}
+
+export type HistoryStatus = 'NOT_CONFIGURED' | 'PENDING' | 'RUNNING' | 'COMPLETE' | 'TRUNCATED' | 'FAILED';
+
+/** How much of an address's history the server has loaded, from which sources (ADR-0020). */
+export interface HistoryCoverage {
+  status: HistoryStatus;
+  /** e.g. ["eth_getLogs"], ["trongrid"], [] when not configured. */
+  sources: string[];
+  /** Lowest block fully covered by the on-demand history (null if unknown / not started). */
+  coveredFromBlock: number | null;
+  coveredToBlock: number | null;
+  /** RFC 3339, when known. */
+  coveredFromTime: string | null;
+  tokenTransfersCovered: boolean;
+  approvalsCovered: boolean;
+  nativeCovered: boolean;
+  internalCovered: boolean;
+  /** Caps reached: older history not loaded. */
+  truncated: boolean;
+  eventsFound: number;
+  /** Plain-language coverage sentence produced by the server. */
+  message: string;
+  updatedAt: string | null;
 }
 
 export interface Exposure {
@@ -268,7 +306,12 @@ export interface Alert {
   network: NetworkId;
   address: string | null;
   txHash: string | null;
+  /** Other side of the matched transfer, when there is one. */
+  counterparty: string | null;
+  blockNumber: number | null;
   summary: string;
+  /** One plain-language line explaining why the rule fired. */
+  evidenceSummary: string | null;
   evidenceLevel: EvidenceLevel;
   assignee: string | null;
   createdAt: string;

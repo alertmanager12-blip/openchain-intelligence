@@ -2,6 +2,7 @@ package io.openchain.intelligence.detection.detectors;
 
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
+import io.openchain.core.detection.SignalText;
 import io.openchain.core.detection.Signal.Evidence;
 import io.openchain.core.detection.Signal.EvidenceLevel;
 import io.openchain.core.detection.SignalType;
@@ -28,8 +29,17 @@ public abstract class AbstractDetector implements Detector {
 
     protected Signal signal(DetectionContext ctx, SignalType type, Address address, String txHash, Severity severity,
                             double confidence, EvidenceLevel level, List<Evidence> evidence, String discriminator) {
+        return signal(ctx, type, address, txHash, severity, confidence, level, evidence, discriminator, null);
+    }
+
+    /**
+     * @param summary one plain-language sentence describing what was observed (analyst-facing; the technical trace
+     *                stays in {@code evidence}); null = derived from the evidence
+     */
+    protected Signal signal(DetectionContext ctx, SignalType type, Address address, String txHash, Severity severity,
+                            double confidence, EvidenceLevel level, List<Evidence> evidence, String discriminator, String summary) {
         return new Signal(SignalIds.of(qualifiedId(), address, type + "|" + discriminator), type, address, txHash, severity,
-                clamp(confidence), level, evidence, qualifiedId(), ctx.now());
+                clamp(confidence), level, evidence, qualifiedId(), ctx.now(), SignalText.title(type), summary);
     }
 
     protected static Evidence flowEvidence(ValueFlow f, String description) {

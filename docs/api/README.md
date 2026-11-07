@@ -124,6 +124,62 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 }
 ```
 
+#### Plain-language fields (additive)
+
+Every signal and every risk contribution carries a human `title` and a one-sentence `summary` built from the detector's
+evidence; the technical material keeps its meaning and its fields (`factor`, `explanation`, `evidence[]`, `detectorId`,
+`method`). Clients should show `title` / `summary` first and the technical fields as detail. The wording describes
+observed behaviour, never the owner of an address.
+
+| Object | New field | Example |
+|---|---|---|
+| Signal | `title` | `"Rapid drain"` |
+| Signal | `summary` | `"Sent 95% of its USDT balance (95,000 USDT) to 2 addresses within 1 hour."` |
+| Contribution | `title` | `"Rapid drain"`, `"Listed as sanctioned"`, `"Frozen by the stablecoin issuer"` |
+| Contribution | `summary` | `"Received 20,000 USDT directly from an address listed as sanctioned by demo-sanctions-list."`; contributions that scored nothing say why (`"Not counted again: the same transactions are already counted for this factor."`) |
+| RiskScore | `methodSummary` | plain description of the scoring (`method` keeps the formula) |
+
+Contribution as returned by the demo (`GET /wallets/{address}/risk`):
+
+```json
+{ "factor": "signal:RAPID_DRAIN", "signalId": "sig_d7b4…", "source": "rapid-drain@1", "weight": 0.3, "confidence": 0.7,
+  "ageSeconds": 363, "points": 14.7, "evidenceLevel": "RISK_SIGNAL",
+  "explanation": "RAPID_DRAIN MEDIUM RISK_SIGNAL by rapid-drain@1; confidence 0.70, severity x0.70, age 6m, decay 1.000 -> q=0.490; factor weight 0.30, factor p=0.147",
+  "title": "Rapid drain",
+  "summary": "Sent 95% of its USDT balance (95,000 USDT) to 2 addresses within 1 hour." }
+```
+
+Titles by detector / factor: Unusual amount, Possible structuring, Fast forwarding, Dormant wallet reactivated, Rapid drain,
+Fan-out to many recipients, Circular flow, Direct exposure to a sanctioned address / a mixer / a scam-reported address /
+a flagged address, Indirect exposure to a listed address, Dusting from a listed address, Unlimited token approval,
+Contract ownership change, and for labels "Listed as <category>" / "Frozen by the stablecoin issuer".
+
+#### Address history coverage (`history`, additive, ADR-0020)
+
+`GET /wallets/{address}/analysis` returns `history`, the coverage of the on-demand address history. Opening an address
+(analysis, risk or transactions endpoint) on a network with a real provider starts a background backfill when the
+address is not covered yet; the client polls the analysis while `status` is `PENDING` or `RUNNING`.
+
+| Field | Meaning |
+|---|---|
+| `status` | `NOT_CONFIGURED` (simulated demo chain, or no history source for the network), `PENDING`, `RUNNING`, `COMPLETE`, `TRUNCATED` (caps reached: older history not loaded), `FAILED` (progress kept, resumes on the next analysis) |
+| `sources` | e.g. `["eth_getLogs"]`, `["trongrid"]`, `[]` |
+| `coveredFromBlock` / `coveredToBlock` | every event of the address in this block range is loaded (the live indexer covers the blocks after `coveredToBlock`); null when unknown |
+| `coveredFromTime` | same lower bound in time when the source gives it (TronGrid) |
+| `tokenTransfersCovered`, `approvalsCovered`, `nativeCovered`, `internalCovered` | what the source can see (eth_getLogs: ERC-20 transfers and approvals only; TronGrid: TRC-20 and TRX transfers) |
+| `truncated`, `eventsFound`, `updatedAt` | caps reached, events loaded, last progress |
+| `message` | plain-language coverage sentence to display |
+
+```json
+"history": { "status": "COMPLETE", "sources": ["eth_getLogs"], "coveredFromBlock": 25865009, "coveredToBlock": 26365008,
+  "coveredFromTime": null, "tokenTransfersCovered": true, "approvalsCovered": true, "nativeCovered": false,
+  "internalCovered": false, "truncated": false, "eventsFound": 37, "updatedAt": "2026-11-07T12:00:00Z",
+  "message": "History: ERC-20 transfers and approvals since block 25,865,009 (eth_getLogs, 37 event(s)). Native transfers and internal transfers are not covered: configure an Erigon node (ADR-0020)." }
+```
+
+History events go through profiles, detection, scoring and labels like live ones, but rules are not evaluated for them:
+history never raises alerts.
+
 ### Rules
 
 | Method | Path | Scope | Description |
@@ -149,6 +205,19 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
 | POST | `/alerts/{id}/status` | alerts:write | `{ "status": "IN_PROGRESS\|RESOLVED\|FALSE_POSITIVE\|OPEN", "reason": "..." }` (validated transitions) |
 | POST | `/alerts/{id}/assign` | alerts:write | `{ "assigneeId": "uuid" \| null }` |
 | POST | `/alerts/{id}/comments` | alerts:write | `{ "body": "markdown text" }` (rendered as plain text/sanitised) |
+
+Rule field `wallet.balance` (see `GET /rules/fields`): on real chains, the provider-reported balance of the sender at
+the end of the previous block; **absent** when unavailable (error, rate limit, TRON), so balance conditions do not match.
+Simulated demo chains: the demo ledger balance.
+
+Alert fields (additive): `address` (wallet the alert is about), `txHash`, `matchedEvent` (field snapshot of the
+triggering event) are now **stored with the alert** (V3 migration) instead of being looked up in the in-memory event
+history, so they survive a restart. New: `counterparty` (other side of the triggering transfer), `blockNumber`, and
+`evidenceSummary`, one plain-language line saying why the rule fired (the technical detail stays in `evidence`), e.g.
+`"TQrq…DoQM sent 92% of its USDT balance within 2 minutes (3 transfers)."` For a grouped alert, the subject is the
+latest trigger. Alerts stored before the V3 migration: the migration fills `address` where the grouping key is the
+wallet (aggregation / sequence rules grouped by `transaction.from` / `wallet.address`); the rest is filled when the
+triggering event is re-indexed, otherwise these fields stay null.
 
 ### Webhooks, networks, graph, labels
 

@@ -32,7 +32,8 @@ public final class PopulatedFields {
             // TransferEventMapper: issuer freezes, + freeze.known_counterparties from enrichment
             "freeze.address", "freeze.token", "freeze.token_contract", "freeze.action", "freeze.issuer", "freeze.event",
             "freeze.known_counterparties",
-            // enrichment
+            // enrichment; wallet.balance: real chains = provider balance at block - 1 (EVM eth_getBalance / balanceOf),
+            // ABSENT when unavailable (provider error, rate limit, TRON: TronGrid has no historical balance); demo = ledger
             "wallet.address", "wallet.balance", "wallet.risk_score", "wallet.risk_level", "wallet.age_days", "wallet.tx_count",
             "wallet.labels", "wallet.sanctioned", "counterparty.address", "counterparty.risk_score", "counterparty.labels",
             "counterparty.age_days", "counterparty.sanctioned",

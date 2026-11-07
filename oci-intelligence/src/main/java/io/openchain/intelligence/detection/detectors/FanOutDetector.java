@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -31,7 +32,8 @@ public final class FanOutDetector extends AbstractDetector {
         ev.add(new Evidence("pattern", n + " distinct recipients within " + human(cfg.window()) + " (threshold " + cfg.minDistinctRecipients() + ")",
                 t.txHash(), qualifiedId(), t.timestamp()));
         Severity sev = n >= 2 * cfg.minDistinctRecipients() ? Severity.MEDIUM : Severity.LOW;
+        String summary = "Sent funds to " + n + " different addresses within " + duration(cfg.window()) + ".";
         return List.of(signal(ctx, SignalType.FLOW_CONCENTRATION, ctx.subject(), t.txHash(), sev, 0.6, EvidenceLevel.RISK_SIGNAL, ev,
-                "fan-out|" + SignalIds.window(t.timestamp(), cfg.window())));
+                "fan-out|" + SignalIds.window(t.timestamp(), cfg.window()), summary));
     }
 }

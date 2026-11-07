@@ -9,9 +9,9 @@ Conventions:
 - Tenant-owned tables carry `tenant_id uuid not null` and have Row-Level Security (`USING (tenant_id = current_setting('app.tenant_id')::uuid)`).
 - Migrations: Flyway (`oci-app/src/main/resources/db/migration`). The DDL below is the reference design; migrations are authoritative.
 
-## Implemented schema (V1 operator state, V2 freeze backfill)
+## Implemented schema (V1 operator state, V2 freeze backfill, V3 alert subject, V4 address history)
 
-`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables. It differs from the reference design below:
+`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables; `V3__alert_subject.sql` stores what each alert is about; `V4__address_history.sql` adds the on-demand address history tables (ADR-0020). It differs from the reference design below:
 
 | Area | Implemented (V1) | Reference design |
 |---|---|---|
@@ -21,11 +21,12 @@ Conventions:
 | `api_keys` | as designed (prefix + `secret_hash`, expiry, revocation, `last_used_at`) with `env`, `scopes jsonb`, `created_by text` | `scopes text[]`, `created_by` FK |
 | `connectors` | `type`, `name`, `events jsonb`, `target_masked`; target and WEBHOOK secret AES-256-GCM encrypted in separate columns (`enc_key_id`, `target_nonce`/`target_ciphertext`, `secret_nonce`/`secret_ciphertext`) | `config jsonb` + one `secret_ciphertext` |
 | `rules` / `rule_versions` | rule id = rule slug; `origin` (repository/api), soft delete `deleted_at`, `row_version`; versions keep the source as submitted (`source` + `format` YAML/JSON), `compiled_hash` (sha256 of the source), `rule_semver` | `name` unique per tenant, `source_yaml`, `schema_version` |
-| `alerts` | full alert snapshot: engine lifecycle statuses (DETECTED…FALSE_POSITIVE), priority, escalation, `matched_event_ids jsonb` (GIN index), `evidence jsonb` (typed JSON keeping exact decimals), `origin_chain`, `hop`, `row_version` (optimistic locking) | `OPEN/…/RETRACTED`, `explanation`, `event_ids text[]`, `subject_address` |
+| `alerts` | full alert snapshot: engine lifecycle statuses (DETECTED…FALSE_POSITIVE), priority, escalation, `matched_event_ids jsonb` (GIN index), `evidence jsonb` (typed JSON keeping exact decimals), `origin_chain`, `hop`, `row_version` (optimistic locking); since V3 the **subject** of the (latest) triggering event: `subject_event_id`, `subject_event_type`, `subject_address` (indexed), `subject_counterparty`, `subject_tx_hash`, `subject_block`, `subject_time`, `subject_fields jsonb` (typed JSON snapshot of the enriched event fields), so wallet / transaction / matched event survive a restart | `OPEN/…/RETRACTED`, `explanation`, `event_ids text[]`, `subject_address` |
 | History / comments | `alert_history` (status changes and annotations, append-only) and `alert_comments` (`author text`), keyed `(alert_id, seq)` | `alert_events` (kind + jsonb), `alert_comments.author_id` FK |
 | `deliveries` | outbox with `notification jsonb` snapshot, statuses PENDING/DELIVERED/DEAD_LETTER, `next_attempt_at`, claim lease (`claimed_by`, `claimed_until`, `FOR UPDATE SKIP LOCKED`); the delivery `id` is the receivers' idempotency key; no FK to `connectors` (built-in connectors are not rows) | `idempotency_key`, `payload`, RETRY/FAILED/DEAD |
 | `label_reports` | community reports in moderation (added) | not in the design |
 | `backfill_progress` / `backfill_freeze_events` (V2) | freeze backfill progress (`id` = `freezes:<network>`, `from_block`, `last_scanned_block`, `freezes_found`) and the issuer freeze/unfreeze events it found (PK `(backfill_id, event_id)`, `event_id` = `network:txHash:logIndex`; `target`, `token_contract`, `issuer`, `action` FREEZE/UNFREEZE, `event_name`, `block_number`, `block_time`); re-applied at startup without RPC | not in the design |
+| `address_history_progress` / `address_history_events` (V4) | on-demand address history (ADR-0020): one progress row per (network, address) (`id` = `history:<network>:<address>`, `source`, `status` PENDING/RUNNING/COMPLETE/TRUNCATED/FAILED, target range `from_block`..`to_block`, `covered_from_block` / `covered_from_time`, resume `cursor`, `events_found`, `pages`, `truncated`, `last_error`) and the events found (PK `(history_id, event_id)`, `event_type`, `block_number` (-1 when the source has none), `block_hash`, `event_time`, `fields jsonb`); re-applied at startup without RPC, unfinished backfills resume from the cursor | not in the design |
 | Not implemented yet | `tenants`, `audit_log` (audit is the `oci.audit` log stream), all chain-data and intelligence tables (`networks`, `index_checkpoints`, `blocks`, `token_transfers`, `address_edges`, `wallet_profiles`, `address_labels`, `signals`, `risk_scores`) | |
 
 Chain-derived state stays in memory and is rebuilt by re-indexing from the configured start block at restart; alert
@@ -353,6 +354,48 @@ create table backfill_freeze_events (
 
 A chunk's events and the new progress are written in one transaction before the events are applied; inserts are
 `on conflict do nothing`, so rescans are idempotent.
+
+### Alert subject (implemented, V3)
+
+```sql
+alter table alerts
+  add column subject_event_id text, add column subject_event_type text,
+  add column subject_address text, add column subject_counterparty text, add column subject_tx_hash text,
+  add column subject_block bigint, add column subject_time timestamptz,
+  add column subject_fields jsonb;                -- TypedJson snapshot of the triggering event fields
+create index alerts_subject_address on alerts (subject_address);
+```
+
+Written at alert creation and refreshed from the latest trigger when an occurrence is grouped. Back-fill of rows created
+before V3: the migration sets `subject_address` only where it is unambiguous (aggregation / sequence alerts whose first
+grouping field is `transaction.from` / `wallet.address`, read from `group_key`); the application fills the whole subject
+when the triggering event is replayed by re-indexing (`AlertService.onMatch`); otherwise the subject stays null.
+
+### Address history (implemented, V4)
+
+```sql
+create table address_history_progress (
+  id text primary key,                            -- history:<network>:<address>
+  network text not null, address text not null, source text not null,   -- eth_getLogs, trongrid
+  status text not null check (status in ('PENDING', 'RUNNING', 'COMPLETE', 'TRUNCATED', 'FAILED')),
+  from_block bigint not null, to_block bigint not null,                 -- target range (lookback .. first live block - 1)
+  covered_from_block bigint, covered_from_time timestamptz,            -- [covered_from_block, to_block] fully loaded
+  cursor text, events_found bigint not null default 0, pages int not null default 0,
+  truncated boolean not null default false, last_error text,
+  created_at timestamptz not null, updated_at timestamptz not null
+);
+create table address_history_events (
+  history_id text not null references address_history_progress (id),
+  event_id text not null,                         -- live indexer id when the source exposes it
+  event_type text not null, block_number bigint not null, block_hash text, event_time timestamptz not null,
+  fields jsonb not null,
+  primary key (history_id, event_id)
+);
+create index address_history_events_order on address_history_events (history_id, event_time, event_id);
+```
+
+Each page's events and the progress are written in one transaction; when the backfill ends (COMPLETE / TRUNCATED) the
+stored events are applied to the intelligence pipeline in chronological order, without rule evaluation.
 
 ### Intelligence
 

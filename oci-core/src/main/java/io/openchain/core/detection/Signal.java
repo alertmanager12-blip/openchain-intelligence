@@ -18,11 +18,21 @@ public record Signal(
         EvidenceLevel evidenceLevel,
         List<Evidence> evidence,
         String detectorId,       // rule/detector that produced it, with version, e.g. "fast-forward@1"
-        Instant detectedAt) {
+        Instant detectedAt,
+        String title,            // short plain-language name, e.g. "Rapid drain"
+        String summary) {        // one plain-language sentence built from the evidence (what was observed)
 
     public Signal {
         if (confidence < 0 || confidence > 1) throw new IllegalArgumentException("confidence must be in [0,1]");
         evidence = List.copyOf(evidence);
+        if (title == null || title.isBlank()) title = SignalText.title(type);
+        if (summary == null || summary.isBlank()) summary = SignalText.fallbackSummary(type, evidence);
+    }
+
+    /** Without explicit wording: the title is derived from the type and the summary from the evidence. */
+    public Signal(String id, SignalType type, Address address, String txHash, Severity severity, double confidence,
+                  EvidenceLevel evidenceLevel, List<Evidence> evidence, String detectorId, Instant detectedAt) {
+        this(id, type, address, txHash, severity, confidence, evidenceLevel, evidence, detectorId, detectedAt, null, null);
     }
 
     public enum EvidenceLevel {

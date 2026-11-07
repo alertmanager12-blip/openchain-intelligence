@@ -9,11 +9,14 @@ import io.openchain.blockchain.backfill.RangeTooLargeException;
 import io.openchain.blockchain.evm.EvmCodec;
 import io.openchain.blockchain.provider.ContractTypeCache;
 import io.openchain.blockchain.evm.LogDecoder;
+import io.openchain.blockchain.indexer.TransferEventMapper;
 import io.openchain.blockchain.provider.PollingSubscription;
 import io.openchain.blockchain.token.StablecoinFreezeSources;
 import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.blockchain.transport.HttpJsonTransport;
 import io.openchain.blockchain.transport.Json;
+import io.openchain.core.event.ChainEvent;
+import io.openchain.core.history.AddressHistorySource;
 import io.openchain.core.model.*;
 import io.openchain.core.provider.BlockchainProvider;
 import io.openchain.core.provider.ProviderException;
@@ -40,8 +43,10 @@ import tools.jackson.databind.node.ObjectNode;
  * {@code order_by=block_timestamp,asc}, {@code limit=200} and {@code fingerprint} paging
  * (https://developers.tron.network/reference/get-events-by-contract-address). The API has no block-range filter: the
  * range is converted to block timestamps (two {@code getblockbynum} calls) and results are re-filtered by block number.
+ * <p>{@link #fetch} (address history, ADR-0020): TronGrid account endpoints, TRC-20 transfers then native TRX
+ * transfers (see the method).
  */
-public final class TronGridProvider implements BlockchainProvider, FreezeLogScanner {
+public final class TronGridProvider implements BlockchainProvider, FreezeLogScanner, AddressHistorySource {
     /** Pages of 200 events per (contract, event name, chunk) before the chunk is reported as too large. */
     static final int MAX_EVENT_PAGES = 25;
     private static final Token TRX = Token.nativeOf(Network.TRON, "TRX", 6);
@@ -53,6 +58,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     private final LogDecoder decoder;
     private final StablecoinFreezeSources freezeSources;
     private final ContractTypeCache contractTypes;
+    private final TransferEventMapper mapper;
 
     public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config) {
         this(id, http, tokens, config, StablecoinFreezeSources.defaults());
@@ -73,6 +79,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
         this.config = config;
         this.decoder = new LogDecoder(Network.TRON, tokens, freezeSources, hex -> new Address(Network.TRON, TronAddress.fromHex(hex)),
                 TronAddress::fromHex);
+        this.mapper = new TransferEventMapper(tokens);
     }
 
     @Override public String id() { return id; }
@@ -365,14 +372,157 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     }
 
     private static String accountPath(Address address, String suffix, String cursor, int limit) {
-        if (address.network() != Network.TRON || !TronAddress.isValid(address.value())) {
-            throw new ProviderException("invalid TRON address", false);
-        }
-        StringBuilder p = new StringBuilder("/v1/accounts/").append(address.value()).append(suffix);
+        StringBuilder p = new StringBuilder(accountPath(address)).append(suffix);
         if (limit <= 0) return p.toString(); // account lookup: no paging
         p.append("?limit=").append(Math.min(limit, 200));
         if (cursor != null) p.append("&fingerprint=").append(URLEncoder.encode(cursor, StandardCharsets.UTF_8));
         return p.toString();
+    }
+
+    private static String accountPath(Address address) {
+        if (address.network() != Network.TRON || !TronAddress.isValid(address.value())) {
+            throw new ProviderException("invalid TRON address", false);
+        }
+        return "/v1/accounts/" + address.value();
+    }
+
+    // ---- address history (ADR-0020) -----------------------------------------------------------------------------
+
+    private static final Coverage HISTORY_COVERAGE = new Coverage(true, false, true, false);
+    private static final String PHASE_TRC20 = "trc20", PHASE_NATIVE = "native";
+
+    @Override public String sourceId() { return "trongrid"; }
+
+    @Override public Coverage coverage() { return HISTORY_COVERAGE; }
+
+    /** Solidified block, as for the freeze backfill. */
+    @Override public long historySafeHead() { return backfillSafeHead(); }
+
+    /**
+     * One TronGrid page (200 entries max) of the history of {@code address}, newest first, confirmed only. TronGrid
+     * account endpoints filter by time, not block: the first call converts {@code [fromBlock, toBlock]} to the block
+     * timestamps (two {@code getblockbynum}), which the cursor then carries. Phase 1 pages
+     * {@code /v1/accounts/{address}/transactions/trc20}, phase 2 {@code /v1/accounts/{address}/transactions}, both with
+     * {@code only_confirmed=true&order_by=block_timestamp,desc&limit=200&min_timestamp&max_timestamp&fingerprint}.
+     * <ul>
+     *   <li>TRC-20: TronGrid exposes neither the block number nor the log index, so the event id is
+     *       {@code tron:<txid>:trc20:<h>:<n>} ({@code h} = 16 hex chars of SHA-256 over {@code from|to|contract|value},
+     *       {@code n} = occurrence of that same tuple within the tx in that page), stable whatever the order of the
+     *       entries, and never colliding with live ids ({@code tron:<txid>:<logIndex>}): a transfer already indexed live
+     *       is seen twice under two ids (and two identical transfers of one tx split across two pages share n = 0). Block number is -1 and block hash null (no {@code block.number},
+     *       {@code block.hash}, {@code transaction.log_index} fields); entries whose {@code type} is not
+     *       {@code Transfer} are skipped.</li>
+     *   <li>Native TRX: successful {@code TransferContract} amounts and {@code TriggerSmartContract} call values above
+     *       zero, as the live path; id {@code tron:<txid>:native} (same as live); block hash null (not returned).</li>
+     * </ul>
+     * Cursor format: {@code <trc20|native>:<fromBlockTimeMs>:<toBlockTimeMs>:<fingerprint>} (empty fingerprint = first
+     * page of the phase). {@code coveredFromBlock} stays {@code toBlock + 1} until the last native page, then is
+     * {@code fromBlock}, with {@code coveredFromTime} = time of {@code fromBlock}.
+     */
+    @Override public HistoryPage fetch(Address address, long fromBlock, long toBlock, String cursor) {
+        String base = accountPath(address);
+        if (fromBlock < 0 || toBlock < fromBlock) return new HistoryPage(List.of(), fromBlock, null, null, 0);
+        int queries = 0;
+        String phase = PHASE_TRC20, fingerprint = null;
+        long fromMs, toMs;
+        if (cursor == null) {
+            fromMs = blockTime(fromBlock);
+            toMs = fromBlock == toBlock ? fromMs : blockTime(toBlock);
+            queries += fromBlock == toBlock ? 1 : 2;
+        } else {
+            String[] c = cursor.split(":", 4);
+            try {
+                if (c.length != 4 || !(PHASE_TRC20.equals(c[0]) || PHASE_NATIVE.equals(c[0]))) throw new NumberFormatException();
+                phase = c[0];
+                fromMs = Long.parseLong(c[1]);
+                toMs = Long.parseLong(c[2]);
+                fingerprint = c[3].isEmpty() ? null : c[3];
+            } catch (NumberFormatException e) {
+                throw new ProviderException(id + ": invalid history cursor " + cursor, false);
+            }
+        }
+        long minTs = fromMs - 1, maxTs = toMs + 999; // same window as scanFreezes: blocks are >= 3 s apart
+        boolean trc20 = PHASE_TRC20.equals(phase);
+        StringBuilder q = new StringBuilder(base).append(trc20 ? "/transactions/trc20" : "/transactions")
+                .append("?only_confirmed=true&order_by=block_timestamp,desc&limit=200&min_timestamp=").append(minTs)
+                .append("&max_timestamp=").append(maxTs);
+        if (fingerprint != null) q.append("&fingerprint=").append(URLEncoder.encode(fingerprint, StandardCharsets.UTF_8));
+        JsonNode r = http.get(q.toString());
+        queries++;
+        if (present(r.path("success")) && !r.path("success").asBoolean(true)) {
+            throw new ProviderException(id + ": account history query failed", true);
+        }
+        Instant now = Instant.now();
+        List<ChainEvent> events = trc20 ? trc20Events(r.path("data"), minTs, maxTs, now)
+                : nativeEvents(r.path("data"), fromBlock, toBlock, minTs, maxTs, now);
+        String nextFp = text(r.path("meta"), "fingerprint");
+        boolean more = nextFp != null && !nextFp.isBlank();
+        String next = more ? phase + ":" + fromMs + ":" + toMs + ":" + nextFp
+                : trc20 ? PHASE_NATIVE + ":" + fromMs + ":" + toMs + ":" : null;
+        return next == null ? new HistoryPage(events, fromBlock, Instant.ofEpochMilli(fromMs), null, queries)
+                : new HistoryPage(events, toBlock + 1, null, next, queries);
+    }
+
+    private List<ChainEvent> trc20Events(JsonNode data, long minTs, long maxTs, Instant ingestedAt) {
+        List<ChainEvent> out = new ArrayList<>();
+        Map<String, Integer> occurrences = new HashMap<>();
+        for (JsonNode t : data) {
+            String type = text(t, "type");
+            if (type != null && !"Transfer".equals(type)) continue;
+            String txId = text(t, "transaction_id"), from = text(t, "from"), to = text(t, "to"), value = text(t, "value");
+            String contract = text(t.path("token_info"), "address");
+            long ms = longValue(t, "block_timestamp", -1);
+            if (txId == null || from == null || to == null || value == null || contract == null || ms < minTs || ms > maxTs) continue;
+            String tuple = tupleHash(from, to, contract, value);
+            int n = occurrences.merge(txId + ":" + tuple, 1, Integer::sum) - 1;
+            Instant ts = Instant.ofEpochMilli(ms);
+            TokenTransfer tt = new TokenTransfer(Network.TRON, txId, n, -1, null, ts, addr(from), addr(to),
+                    tokens.resolve(Network.TRON, contract), new BigInteger(value));
+            ChainEvent e = mapper.map(tt, new BlockRef(Network.TRON, -1, "", null, ts), ingestedAt);
+            out.add(withoutBlock(e, "tron:" + txId + ":trc20:" + tuple + ":" + n, -1, "block.number", "transaction.log_index"));
+        }
+        return out;
+    }
+
+    /** First 8 bytes (hex) of SHA-256 over {@code from|to|contract|value}: tells apart distinct transfers of one tx. */
+    static String tupleHash(String from, String to, String contract, String value) {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(String.join("|", from, to, contract, value).getBytes(StandardCharsets.UTF_8));
+            return EvmCodec.encodeHex(Arrays.copyOf(h, 8));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private List<ChainEvent> nativeEvents(JsonNode data, long fromBlock, long toBlock, long minTs, long maxTs, Instant ingestedAt) {
+        List<ChainEvent> out = new ArrayList<>();
+        for (JsonNode tx : data) {
+            if (!present(tx.path("txID")) || !present(tx.path("raw_data"))) continue; // internal transactions: other layout
+            if (!"SUCCESS".equals(text(tx.path("ret").path(0), "contractRet"))) continue;
+            JsonNode c = tx.path("raw_data").path("contract").path(0);
+            String type = text(c, "type");
+            JsonNode v = c.path("parameter").path("value");
+            long amount = "TransferContract".equals(type) ? longValue(v, "amount", 0)
+                    : "TriggerSmartContract".equals(type) ? longValue(v, "call_value", 0) : 0;
+            if (amount <= 0) continue;
+            long bn = longValue(tx, "blockNumber", -1), ms = longValue(tx, "block_timestamp", -1);
+            if (bn >= 0 ? bn < fromBlock || bn > toBlock : ms < minTs || ms > maxTs) continue;
+            Instant ts = Instant.ofEpochMilli(ms);
+            ChainTransaction ct = toTransaction(tx, bn, null, ts, BigInteger.valueOf(longValue(tx.path("ret").path(0), "fee", 0)), true);
+            if (ct.from() == null || ct.to() == null) continue;
+            ChainEvent e = mapper.mapNative(ct, new BlockRef(Network.TRON, bn, "", null, ts), ingestedAt);
+            out.add(withoutBlock(e, e.eventId(), bn));
+        }
+        return out;
+    }
+
+    /** TronGrid account endpoints do not return block hashes: rebuilds the event with a null hash, minus those fields. */
+    private static ChainEvent withoutBlock(ChainEvent e, String eventId, long blockNumber, String... dropFields) {
+        Map<String, Object> f = new LinkedHashMap<>(e.fields());
+        f.remove("block.hash");
+        for (String d : dropFields) f.remove(d);
+        return new ChainEvent(eventId, e.type(), e.network(), blockNumber, null, e.eventTime(), e.ingestedAt(), false, f);
     }
 
     @Override public List<Balance> getAddressBalance(Address address) {

@@ -1,5 +1,6 @@
 package io.openchain.intelligence.detection.detectors;
 
+import static io.openchain.core.detection.SignalText.*;
 import io.openchain.core.detection.Severity;
 import io.openchain.core.detection.Signal;
 import io.openchain.core.detection.Signal.Evidence;
@@ -51,7 +52,11 @@ public final class UnusualAmountDetector extends AbstractDetector {
                 new Evidence("statistic", "amount " + plain(x) + " " + t.token().symbol() + " vs own median " + plain(med)
                         + " (" + method + ", n=" + hist.size() + "), robust z=" + zs + " >= " + cfg.zThreshold(),
                         t.txHash(), qualifiedId(), t.timestamp()));
-        return List.of(signal(ctx, SignalType.UNUSUAL_AMOUNT, ctx.subject(), t.txHash(), sev, conf, EvidenceLevel.ANOMALY, ev, t.eventId()));
+        String sym = t.token().symbol();
+        String summary = (t.from().equals(ctx.subject()) ? "Sent " : "Received ") + amount(x, sym)
+                + " in one transfer, far above its usual amount (median " + amount(med, sym) + " over "
+                + plural(hist.size(), "earlier transfer", "earlier transfers") + ").";
+        return List.of(signal(ctx, SignalType.UNUSUAL_AMOUNT, ctx.subject(), t.txHash(), sev, conf, EvidenceLevel.ANOMALY, ev, t.eventId(), summary));
     }
 
     static BigDecimal median(List<BigDecimal> values) {

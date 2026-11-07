@@ -137,12 +137,14 @@ public class OciProperties {
         /** Ingest admin changes of every contract (default false: registry tokens + watched contracts only). */
         private boolean adminChangesOfAllContracts;
         private final FreezeBackfill freezeBackfill = new FreezeBackfill();
+        private final History history = new History();
 
         public List<String> getWatchedContracts() { return watchedContracts; }
         public void setWatchedContracts(List<String> watchedContracts) { this.watchedContracts = watchedContracts; }
         public boolean isAdminChangesOfAllContracts() { return adminChangesOfAllContracts; }
         public void setAdminChangesOfAllContracts(boolean adminChangesOfAllContracts) { this.adminChangesOfAllContracts = adminChangesOfAllContracts; }
         public FreezeBackfill getFreezeBackfill() { return freezeBackfill; }
+        public History getHistory() { return history; }
 
         public boolean isApprovalsOfUnknownTokens() { return approvalsOfUnknownTokens; }
         public void setApprovalsOfUnknownTokens(boolean approvalsOfUnknownTokens) { this.approvalsOfUnknownTokens = approvalsOfUnknownTokens; }
@@ -164,6 +166,43 @@ public class OciProperties {
      * Bounded historical scan of the issuer freeze events of {@code StablecoinFreezeSources} contracts
      * ({@code oci.chains.<network>.freeze-backfill.*}). Disabled unless {@code from-block} is set.
      */
+    /**
+     * On-demand address history (ADR-0020, {@code oci.chains.<network>.history.*}): when an analyst opens an address of a
+     * real network, its past ERC-20 transfers and approvals ({@code eth_getLogs} by topic) or TRC-20/TRX transfers
+     * (TronGrid account endpoints) are loaded in the background through the chain's own provider. Native and internal
+     * EVM transfers are NOT covered by eth_getLogs.
+     */
+    public static class History {
+        /** Load address history on demand for this real network (default true; uses the configured provider). */
+        private boolean enabled = true;
+        /** Lookback: blocks below the first live-indexed block (or the finalized head) that are searched. */
+        private long maxBlocks = 500_000;
+        /** Source pages per address (EVM: one chunk of blocks = two eth_getLogs calls). */
+        private int maxPages = 200;
+        /** Events stored per address; reaching it marks the history TRUNCATED (older events not loaded). */
+        private long maxEvents = 5_000;
+        /** EVM: blocks per eth_getLogs query at the start (halved on "range too large" down to min-chunk-size). */
+        private int chunkSize = 10_000;
+        private int minChunkSize = 50;
+        /** Pause between two pages (rate-limit friendliness, on top of the transport rate limiter). */
+        private Duration pause = Duration.ofMillis(100);
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public long getMaxBlocks() { return maxBlocks; }
+        public void setMaxBlocks(long maxBlocks) { this.maxBlocks = maxBlocks; }
+        public int getMaxPages() { return maxPages; }
+        public void setMaxPages(int maxPages) { this.maxPages = maxPages; }
+        public long getMaxEvents() { return maxEvents; }
+        public void setMaxEvents(long maxEvents) { this.maxEvents = maxEvents; }
+        public int getChunkSize() { return chunkSize; }
+        public void setChunkSize(int chunkSize) { this.chunkSize = chunkSize; }
+        public int getMinChunkSize() { return minChunkSize; }
+        public void setMinChunkSize(int minChunkSize) { this.minChunkSize = minChunkSize; }
+        public Duration getPause() { return pause; }
+        public void setPause(Duration pause) { this.pause = pause; }
+    }
+
     public static class FreezeBackfill {
         /** First block to scan; null (default) = backfill disabled for this network. */
         private Long fromBlock;

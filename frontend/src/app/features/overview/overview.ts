@@ -8,6 +8,7 @@ import { shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { RISK_THRESHOLDS, levelLabel } from '../../shared/risk-gauge';
+import { signalSummary, signalTitle } from '../../shared/explain';
 import { UI, sentence } from '../../shared/ui';
 import { ActivityChart } from './activity-chart';
 
@@ -42,6 +43,8 @@ export class OverviewPage {
 
   readonly ago = timeAgo;
   readonly sentence = sentence;
+  readonly signalTitle = signalTitle;
+  readonly signalSummary = signalSummary;
   readonly short = (a: string) => shortHash(a, 8, 6);
   readonly n = (v: number) => v.toLocaleString('en-US');
   readonly thr = RISK_THRESHOLDS;
