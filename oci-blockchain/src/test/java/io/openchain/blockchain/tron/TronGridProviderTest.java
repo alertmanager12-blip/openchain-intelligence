@@ -87,6 +87,29 @@ class TronGridProviderTest {
         assertThat(t.eventId()).isEqualTo("tron:" + TX + ":0");
     }
 
+    @Test void getBlockThenActivityOfTheSameBlockFetchesItOnceAndInfosInParallel() {
+        java.util.concurrent.atomic.AtomicInteger blocks = new java.util.concurrent.atomic.AtomicInteger(), infos = new java.util.concurrent.atomic.AtomicInteger();
+        server.route("/wallet/getblockbynum", r -> { blocks.incrementAndGet(); return Response.ok(block(80000015, BLOCK_ID)); })
+              .route("/wallet/gettransactioninfobyblocknum", r -> { infos.incrementAndGet(); return Response.ok("[" + INFO + "]"); });
+        assertThat(provider.getBlock(80000015)).isPresent();
+        var activity = provider.getBlockActivity(80000015, 80000015);
+        assertThat(activity.tokenTransfers()).hasSize(1);
+        assertThat(blocks).as("the indexer's getBlock + getBlockActivity pair downloads the block once").hasValue(1);
+        assertThat(infos).hasValue(1);
+        // the memo is consumed: a later activity read (e.g. after a reorg check) fetches fresh data
+        provider.getBlockActivity(80000015, 80000015);
+        assertThat(blocks).hasValue(2);
+        assertThat(infos).hasValue(2);
+    }
+
+    @Test void headIsReadOnceForSeveralStatusChecksWithinOneSecond() {
+        java.util.concurrent.atomic.AtomicInteger heads = new java.util.concurrent.atomic.AtomicInteger();
+        server.route("/wallet/getnowblock", r -> { heads.incrementAndGet(); return Response.ok(block(80000020, "f".repeat(64))); });
+        provider.headBlock();
+        provider.headBlock();
+        assertThat(heads).hasValue(1);
+    }
+
     @Test void transactionAndReceipt() {
         TransactionReceipt r = provider.getTransactionReceipt(TX).orElseThrow();
         assertThat(r.success()).isTrue();

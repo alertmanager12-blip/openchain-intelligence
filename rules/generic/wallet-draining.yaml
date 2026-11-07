@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: wallet-draining
-version: 1.1.0
+version: 1.2.0
 name: Wallet drained (>80% of balance out in 2 minutes)
 description: Outgoing transfers from one wallet exceed 80% of its starting balance within a 2 minute window.
 author: openchain-community
@@ -17,6 +17,26 @@ conditions:
     - field: transaction.amount
       operator: GREATER_THAN
       value: "0"
+  groups:
+    # minimum balance worth draining, per token family (amounts in token units: no price feed is used)
+    - logic: OR
+      groups:
+        - logic: AND
+          rules:
+            - { field: transaction.token.symbol, operator: IN, value: [ETH, WETH] }
+            - { field: wallet.balance, operator: GREATER_THAN_OR_EQUAL, value: "1" }
+        - logic: AND
+          rules:
+            - { field: transaction.token.symbol, operator: IN, value: [BNB, WBNB] }
+            - { field: wallet.balance, operator: GREATER_THAN_OR_EQUAL, value: "3" }
+        - logic: AND
+          rules:
+            - { field: transaction.token.symbol, operator: IN, value: [TRX] }
+            - { field: wallet.balance, operator: GREATER_THAN_OR_EQUAL, value: "10000" }
+        - logic: AND
+          rules:
+            - { field: transaction.token.symbol, operator: IN, value: [USDT, USDC, DAI] }
+            - { field: wallet.balance, operator: GREATER_THAN_OR_EQUAL, value: "2000" }
 aggregation:
   window: 2m
   groupBy: [transaction.from, transaction.token.symbol]
@@ -37,6 +57,11 @@ documentation: |
   of the earliest transfer in the window (the balance BEFORE the first outflow). Fires above 80%.
   Typical of compromised keys / drainer scripts sweeping a wallet, but also of users consolidating funds or
   migrating wallets. Exact decimal arithmetic; a zero or missing balance never triggers.
+  Minimum balance (1.2.0): only wallets holding at least 1 ETH/WETH, 3 BNB/WBNB, 10,000 TRX or 2,000 USDT/USDC/DAI
+  before the outflow. On Ethereum mainnet the rule otherwise fired mostly on exchange deposit addresses sweeping their
+  whole (small) ETH balance: in production 642 alerts in about an hour, median balance 0.026 ETH, 99% below 1.83 ETH.
+  Other tokens never match (no price feed): copy the rule and add your own thresholds. Large deposit-address sweeps
+  still match; exclude known exchange addresses with labels or a NOT group in your copy.
 examples:
   - name: outgoing transfer with a known balance passes the filter
     expect: MATCH
@@ -47,7 +72,26 @@ examples:
         transaction.from: "0xvictim0000000000000000000000000000000001"
         transaction.token.symbol: USDC
         transaction.amount: "500"
-        wallet.balance: "1000"
+        wallet.balance: "5000"
+  - name: a small ETH balance swept by a deposit address is ignored
+    expect: NO_MATCH
+    event:
+      type: NATIVE_TRANSFER
+      network: ethereum
+      fields:
+        transaction.from: "0xdeposit000000000000000000000000000000001"
+        transaction.token.symbol: ETH
+        transaction.amount: "0.11560344"
+        wallet.balance: "0.11564544"
+  - name: a token without a configured minimum is ignored
+    expect: NO_MATCH
+    event:
+      type: TOKEN_TRANSFER
+      network: ethereum
+      fields:
+        transaction.token.symbol: PEPE
+        transaction.amount: "900000"
+        wallet.balance: "1000000"
   - name: transfer without balance enrichment is ignored
     expect: NO_MATCH
     event:
@@ -61,42 +105,56 @@ tests:
       - offset: 0s
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "400", wallet.balance: "1000" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "4000", wallet.balance: "10000" }
       - offset: 20s
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "300", wallet.balance: "600" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "3000", wallet.balance: "6000" }
       - offset: 40s
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "200", wallet.balance: "300" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "2000", wallet.balance: "3000" }
     expectTriggers: 1
   - name: 70% outflow does not trigger
     events:
       - offset: 0s
         type: NATIVE_TRANSFER
         network: tron
-        fields: { transaction.from: TVictim11111111111111111111111111, transaction.token.symbol: TRX, transaction.amount: "700", wallet.balance: "1000" }
+        fields: { transaction.from: TVictim11111111111111111111111111, transaction.token.symbol: TRX, transaction.amount: "70000", wallet.balance: "100000" }
     expectTriggers: 0
   - name: 85% drained slowly over 10 minutes does not trigger (no 2m window above 80%)
     events:
       - offset: 0s
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "450", wallet.balance: "1000" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "4500", wallet.balance: "10000" }
       - offset: 10m
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "400", wallet.balance: "550" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "4000", wallet.balance: "5500" }
     expectTriggers: 0
   - name: a single sweep of 90% of the remaining balance triggers even after earlier outflows
     events:
       - offset: 0s
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "450", wallet.balance: "1000" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "4500", wallet.balance: "10000" }
       - offset: 10m
         type: TOKEN_TRANSFER
         network: ethereum
-        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "500", wallet.balance: "550" }
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000001", transaction.token.symbol: USDC, transaction.amount: "5000", wallet.balance: "5500" }
+    expectTriggers: 1
+  - name: a deposit address sweeping 99.9% of 0.12 ETH does not trigger (below the 1 ETH minimum)
+    events:
+      - offset: 0s
+        type: NATIVE_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xdeposit000000000000000000000000000000001", transaction.token.symbol: ETH, transaction.amount: "0.11560344", wallet.balance: "0.11564544" }
+    expectTriggers: 0
+  - name: 95% of 12 ETH swept in one transfer triggers
+    events:
+      - offset: 0s
+        type: NATIVE_TRANSFER
+        network: ethereum
+        fields: { transaction.from: "0xvictim0000000000000000000000000000000002", transaction.token.symbol: ETH, transaction.amount: "11.4", wallet.balance: "12" }
     expectTriggers: 1

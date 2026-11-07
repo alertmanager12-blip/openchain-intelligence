@@ -60,6 +60,20 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     private final ContractTypeCache contractTypes;
     private final TransferEventMapper mapper;
 
+    /**
+     * Each TronGrid call is a full block (~0.8 s, 70-260 kB on the public endpoint) and a TRON block comes every 3 s, so
+     * the indexer's {@code getBlock(n)} then {@code getBlockActivity(n)} must not fetch block n twice: getBlock keeps
+     * the payload and starts fetching the block's transaction infos on a virtual thread; getBlockActivity(n) consumes
+     * both if called within {@link #MEMO_TTL_NANOS} (otherwise it fetches fresh data, e.g. for reorg checks).
+     */
+    private record BlockMemo(long number, JsonNode block, java.util.concurrent.CompletableFuture<JsonNode> infos, long at) {}
+    private static final long MEMO_TTL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+    private static final long HEAD_TTL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(1);
+    private static final java.util.concurrent.Executor PREFETCH = runnable -> Thread.ofVirtual().name("tron-prefetch").start(runnable);
+    private final java.util.concurrent.atomic.AtomicReference<BlockMemo> memo = new java.util.concurrent.atomic.AtomicReference<>();
+    /** {head, nanoTime}: the head is read several times per indexer pass (status, lag checks). */
+    private volatile long[] cachedHead;
+
     public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config) {
         this(id, http, tokens, config, StablecoinFreezeSources.defaults());
     }
@@ -102,11 +116,35 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     }
 
     public long headBlock() {
-        return blockRef(post("/wallet/getnowblock", null, null))
+        long[] c = cachedHead;
+        if (c != null && System.nanoTime() - c[1] < HEAD_TTL_NANOS) return c[0];
+        long head = blockRef(post("/wallet/getnowblock", null, null))
                 .orElseThrow(() -> new ProviderException(id + ": empty getnowblock", true)).number();
+        cachedHead = new long[]{head, System.nanoTime()};
+        return head;
     }
 
-    @Override public Optional<BlockRef> getBlock(long number) { return blockRef(post("/wallet/getblockbynum", "num", number)); }
+    @Override public Optional<BlockRef> getBlock(long number) {
+        JsonNode b = post("/wallet/getblockbynum", "num", number);
+        Optional<BlockRef> ref = blockRef(b);
+        if (ref.isPresent()) {
+            var infos = java.util.concurrent.CompletableFuture.supplyAsync(() -> transactionInfos(number), PREFETCH);
+            BlockMemo old = memo.getAndSet(new BlockMemo(number, b, infos, System.nanoTime()));
+            if (old != null) old.infos().cancel(false);
+        }
+        return ref;
+    }
+
+    private JsonNode transactionInfos(long n) {
+        return http.post("/wallet/gettransactioninfobyblocknum", Json.MAPPER.createObjectNode().put("num", n));
+    }
+
+    /** The memo of block n if fresh, consumed (each payload serves exactly one getBlock + getBlockActivity pair). */
+    private Optional<BlockMemo> takeMemo(long n) {
+        BlockMemo m = memo.get();
+        if (m == null || m.number() != n || System.nanoTime() - m.at() > MEMO_TTL_NANOS || !memo.compareAndSet(m, null)) return Optional.empty();
+        return Optional.of(m);
+    }
 
     @Override public Optional<ChainTransaction> getTransaction(String hash) {
         return getTransactionReceipt(hash).map(TransactionReceipt::transaction);
@@ -205,9 +243,10 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
         List<ChainTransaction> natives = new ArrayList<>();
         for (long blockNo = fromBlock; blockNo <= toBlock; blockNo++) {
             final long n = blockNo;
-            JsonNode b = post("/wallet/getblockbynum", "num", n);
+            Optional<BlockMemo> m = takeMemo(n);
+            JsonNode b = m.isPresent() ? m.get().block() : post("/wallet/getblockbynum", "num", n);
             BlockRef ref = blockRef(b).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available yet", true));
-            JsonNode infos = http.post("/wallet/gettransactioninfobyblocknum", Json.MAPPER.createObjectNode().put("num", n));
+            JsonNode infos = m.isPresent() ? joinInfos(m.get().infos()) : transactionInfos(n);
             Map<String, Long> fees = new HashMap<>();
             if (present(infos) && infos.isArray()) {
                 for (JsonNode info : infos) {
@@ -238,6 +277,15 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
             }
         }
         return new BlockActivity(d.transfers, natives, d.approvals, d.freezes, d.adminChanges);
+    }
+
+    private static JsonNode joinInfos(java.util.concurrent.CompletableFuture<JsonNode> f) {
+        try {
+            return f.join();
+        } catch (java.util.concurrent.CompletionException e) {
+            if (e.getCause() instanceof RuntimeException re) throw re; // ProviderException keeps its retryable flag
+            throw e;
+        }
     }
 
     /** Contract lookups (cache hits vs /wallet/getcontract calls). */
