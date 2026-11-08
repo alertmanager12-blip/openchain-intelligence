@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(4);
-        assertThat(first.targetSchemaVersion).isEqualTo("4");
+        assertThat(first.migrationsExecuted).isEqualTo(5);
+        assertThat(first.targetSchemaVersion).isEqualTo("5");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -265,6 +265,13 @@ class JdbcRepositoriesPersistenceTest {
         assertThat(loaded.current().number()).isEqualTo(2);
         assertThat(loaded.versions()).extracting(RuleRepository.VersionRow::source).containsExactly("src-1", "src-2");
         assertThat(loaded.current().ruleVersion()).isEqualTo("1.0.2");
+
+        // operator actions (V5): stored with the rule, survive a new repository instance (restart), and can be cleared
+        assertThat(repo.actionsOverride("r1")).isEmpty();
+        repo.setActionsOverride("r1", "[{\"type\":\"TELEGRAM\",\"connectorId\":\"wh-t\"}]");
+        assertThat(new JdbcRuleRepository(jdbc, tx).actionsOverride("r1")).hasValue("[{\"type\":\"TELEGRAM\",\"connectorId\":\"wh-t\"}]");
+        repo.setActionsOverride("r1", null);
+        assertThat(repo.actionsOverride("r1")).isEmpty();
 
         // soft delete keeps the versions
         repo.save(new RuleRepository.RuleRow("r1", "api", false, loaded.versions(), T0, T0, T0.plusSeconds(60), loaded.rowVersion()));

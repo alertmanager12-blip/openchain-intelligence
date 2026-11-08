@@ -79,6 +79,7 @@ public class WebhookRegistry {
     private final OutboundHttp http;
     private final Clock clock;
     private final String telegramBotToken;
+    private final String publicUrl;
     private final ConnectorRepository repository;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Webhook> webhooks = new ConcurrentHashMap<>();
@@ -92,6 +93,7 @@ public class WebhookRegistry {
         this.repository = repository;
         String token = props.getNotifications().getTelegram().getBotToken();
         this.telegramBotToken = token == null || token.isBlank() ? null : token.strip();
+        this.publicUrl = props.getNotifications().getPublicUrl();
         for (ConnectorRepository.Stored s : repository.findAll()) {
             Webhook w = s.webhook();
             NotificationConnector c;
@@ -148,7 +150,7 @@ public class WebhookRegistry {
             case "DISCORD" -> new DiscordConnector(id, target, http);
             case "TELEGRAM" -> {
                 if (telegramBotToken == null) throw new IllegalArgumentException("TELEGRAM is not configured on this server (OCI_TELEGRAM_BOT_TOKEN)");
-                yield new TelegramConnector(id, telegramBotToken, target, http);
+                yield new TelegramConnector(id, telegramBotToken, target, http, publicUrl);
             }
             default -> throw new IllegalArgumentException("unsupported connector type " + type);
         };

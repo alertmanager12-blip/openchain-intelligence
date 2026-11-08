@@ -123,6 +123,14 @@ is_contract,age_days,sanctioned*}`, `contract.{address,event,method,new_owner,ve
 `signal.{type,severity,confidence,evidence_level}`, `internal.{hop,origin_chain}`, `alert.{id,rule_id,severity,
 group_key}` (`*` = source-backed). The authoritative list is `FieldCatalog.defaults()`; deployments may extend it.
 
+## Your notification routing survives rule pack updates
+
+Rules of this pack ship with `actions: [{type: WEBHOOK, connectorId: default-webhook}]`. When an operator changes the
+**actions** of a pack rule through the API (`PUT /api/v1/rules/{id}`, e.g. to route it to a Telegram connector), the
+new actions are recorded (`rules.actions_override`) and re-applied to every newer version of the pack file loaded at
+start-up: thresholds and conditions come from the pack, the routing stays yours. Changing anything else than `actions`
+records nothing. The merged version is recognised at the next start, so restarts do not create versions.
+
 ## Testing a rule locally
 
 ```java

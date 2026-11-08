@@ -51,6 +51,7 @@ services:
       OCI_CRYPTO_MASTER_KEY: ${OCI_CRYPTO_MASTER_KEY:-b2NpLWRldi1vbmx5LW1hc3Rlci1rZXktMDAwMDAwMDA=}
       OCI_SECURITY_OIDC_ISSUER_URI: ${OCI_SECURITY_OIDC_ISSUER_URI:-}
       OCI_TELEGRAM_BOT_TOKEN: ${OCI_TELEGRAM_BOT_TOKEN:-}
+      OCI_PUBLIC_URL: ${OCI_PUBLIC_URL:-http://localhost:4200}
       # Production: an administrator API key provisioned from the environment (format oci_live_<8 chars>_<32+ chars>;
       # only its hash is stored). Demo mode generates one instead and prints it in the logs.
       OCI_SECURITY_KEYS_0_NAME: ${OCI_ADMIN_KEY_NAME:-admin}

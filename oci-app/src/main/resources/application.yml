@@ -94,6 +94,8 @@ oci:
   persistence:
     delivery-claim-lease: 2m
   notifications:
+    # Public URL of the console, for links in notifications (Telegram). Unset = no console link.
+    public-url: ${OCI_PUBLIC_URL:}
     telegram:
       # Bot token used by TELEGRAM connectors (destination chat id is given per connector). Unset = channel disabled.
       bot-token: ${OCI_TELEGRAM_BOT_TOKEN:}

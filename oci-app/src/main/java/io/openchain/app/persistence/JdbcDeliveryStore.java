@@ -131,6 +131,19 @@ public final class JdbcDeliveryStore implements DeliveryStore {
         m.put("originChain", n.originChain());
         m.put("hop", n.hop());
         m.put("createdAt", n.createdAt());
+        if (n.subject() != null) {
+            var s = n.subject();
+            Map<String, Object> sm = new LinkedHashMap<>();
+            sm.put("eventId", s.eventId());
+            sm.put("eventType", s.eventType());
+            sm.put("address", s.address());
+            sm.put("counterparty", s.counterparty());
+            sm.put("txHash", s.txHash());
+            sm.put("blockNumber", s.blockNumber());
+            sm.put("eventTime", s.eventTime());
+            sm.put("fields", s.fields());
+            m.put("subject", sm);
+        }
         return TypedJson.write(m);
     }
 
@@ -148,6 +161,17 @@ public final class JdbcDeliveryStore implements DeliveryStore {
                 (String) m.get("groupKey"), (String) m.get("dedupKey"), ((Number) m.get("occurrenceCount")).longValue(),
                 (Instant) m.get("firstSeen"), (Instant) m.get("lastSeen"), (List<String>) m.get("matchedEventIds"),
                 (Map<String, Object>) m.get("evidence"), params, (List<String>) m.get("originChain"),
-                ((Number) m.get("hop")).intValue(), (Instant) m.get("createdAt"));
+                ((Number) m.get("hop")).intValue(), (Instant) m.get("createdAt"), subject(m.get("subject")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static io.openchain.alerting.alert.AlertSubject subject(Object o) {
+        if (!(o instanceof Map<?, ?> raw)) return null; // deliveries queued before the subject was carried
+        Map<String, Object> s = (Map<String, Object>) raw;
+        Object block = s.get("blockNumber");
+        return new io.openchain.alerting.alert.AlertSubject((String) s.get("eventId"), (String) s.get("eventType"),
+                (String) s.get("address"), (String) s.get("counterparty"), (String) s.get("txHash"),
+                block instanceof Number b ? b.longValue() : null, (Instant) s.get("eventTime"),
+                (Map<String, Object>) s.getOrDefault("fields", Map.of()));
     }
 }

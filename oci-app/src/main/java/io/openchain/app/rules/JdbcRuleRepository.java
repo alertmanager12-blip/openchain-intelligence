@@ -29,6 +29,16 @@ public final class JdbcRuleRepository implements RuleRepository {
 
     @Override public List<RuleRow> findAll() { return load(null); }
 
+    @Override public Optional<String> actionsOverride(String id) {
+        return jdbc.query("select actions_override from rules where id = :id", Map.of("id", id), rs -> rs.next()
+                ? Optional.ofNullable(rs.getString(1)) : Optional.<String>empty());
+    }
+
+    @Override public void setActionsOverride(String id, String actionsJson) {
+        jdbc.update("update rules set actions_override = :a where id = :id", new MapSqlParameterSource().addValue("id", id)
+                .addValue("a", actionsJson));
+    }
+
     @Override public Optional<RuleRow> find(String id) { return load(id).stream().findFirst(); }
 
     private List<RuleRow> load(String id) {

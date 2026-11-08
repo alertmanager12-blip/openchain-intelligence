@@ -331,8 +331,15 @@ public class OciProperties {
     /** Server-side credentials of notification channels (never returned by the API). */
     public static class Notifications {
         private final Telegram telegram = new Telegram();
+        /**
+         * OCI_PUBLIC_URL: public address of the console (e.g. https://chainsentinel.example.com), used for the links in
+         * notifications (Telegram "Console" line). Unset = no console link.
+         */
+        private String publicUrl;
 
         public Telegram getTelegram() { return telegram; }
+        public String getPublicUrl() { return publicUrl; }
+        public void setPublicUrl(String publicUrl) { this.publicUrl = publicUrl; }
     }
 
     public static class Telegram {

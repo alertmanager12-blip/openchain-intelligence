@@ -186,6 +186,22 @@ public class RuleRegistry {
                     RuleRepository.RuleRow row = rows.get(id);
                     StoredRule old = rules.get(id);
                     String hash = "sha256:" + sha256(src);
+                    // operator's actions (e.g. Telegram routing) re-applied to the pack's source; the merged version is
+                    // recognised at the next start (merged hash), so no version is created at every restart
+                    String merged = src;
+                    RuleLoader.LoadResult mr = r;
+                    Optional<String> override = row == null ? Optional.empty() : repository.actionsOverride(id);
+                    if (override.isPresent()) {
+                        try {
+                            String m = RuleActions.replace(src, fmt, override.get());
+                            RuleLoader.LoadResult ml = loader.tryLoad(m, fmt);
+                            if (ml.valid()) { merged = m; mr = ml; }
+                            else log.warn("rule '{}': operator actions no longer valid ({}), pack actions used", id, ml.errors());
+                        } catch (RuntimeException e) {
+                            log.warn("rule '{}': operator actions not applied: {}", id, e.getMessage());
+                        }
+                    }
+                    String mergedHash = "sha256:" + sha256(merged);
                     Instant now = clock.instant();
                     if (row == null) {
                         StoredRule sr = new StoredRule(id, List.of(version(1, src, fmt, r.rule(), now)), r.rule().rule().enabled(),
@@ -198,11 +214,11 @@ public class RuleRegistry {
                         log.info("rule file {} skipped: rule '{}' was deleted by an operator", p, id);
                     } else if (old == null || !"repository".equals(row.origin())) {
                         log.warn("rule file {} ignored: id '{}' already exists ({})", p, id, old == null ? "not compilable" : "created through the API");
-                    } else if (row.versions().stream().anyMatch(v -> v.compiledHash().equals(hash))) {
+                    } else if (row.versions().stream().anyMatch(v -> v.compiledHash().equals(hash) || v.compiledHash().equals(mergedHash))) {
                         unchanged++;
                     } else {
                         List<Version> versions = new ArrayList<>(old.versions());
-                        versions.add(version(row.versions().getLast().number() + 1, src, fmt, r.rule(), now));
+                        versions.add(version(row.versions().getLast().number() + 1, merged, fmt, mr.rule(), now));
                         StoredRule sr = new StoredRule(id, versions, old.enabled(), old.origin(), old.createdAt(), now);
                         persist(sr, null);
                         rules.put(id, sr);
@@ -262,7 +278,26 @@ public class RuleRegistry {
         persist(sr, null);
         rules.put(id, sr);
         syncEngine(sr);
+        rememberOperatorActions(old, source, format);
         return sr;
+    }
+
+    /**
+     * An operator who changes the actions of a repository rule (e.g. routes it to Telegram) keeps them across rule pack
+     * updates: they are recorded and re-applied by {@link #loadDirectory} to every newer version of the pack file.
+     */
+    private void rememberOperatorActions(StoredRule old, String source, Format format) {
+        if (!"repository".equals(old.origin())) return;
+        try {
+            var before = RuleActions.of(old.current().source(), old.current().format());
+            var after = RuleActions.of(source, format);
+            if (!before.equals(after)) {
+                repository.setActionsOverride(old.id(), RuleActions.json(after));
+                log.info("rule '{}': operator actions recorded, kept across rule pack updates", old.id());
+            }
+        } catch (RuntimeException e) {
+            log.warn("rule '{}': operator actions not recorded: {}", old.id(), e.getMessage());
+        }
     }
 
     /** Create or new version (enabled flag kept for existing rules, disabled for new ones). */

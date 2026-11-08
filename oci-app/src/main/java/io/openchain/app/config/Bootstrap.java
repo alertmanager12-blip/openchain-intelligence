@@ -130,8 +130,12 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         if (props.getRules().isLoadOnStartup()) loadRules();
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
         props.getChains().forEach(this::startRealChain);
-        int restored = history.restore();
-        if (restored > 0) log.info("address history: {} stored backfill(s) re-applied", restored);
+        // stored address histories are re-applied in the background: with a few dozen of them this takes minutes
+        // (each event goes through the intelligence pipeline, serialised with live ingestion) and must not hold readiness
+        scheduler.execute(guard("history restore", () -> {
+            int restored = history.restore();
+            if (restored > 0) log.info("address history: {} stored backfill(s) re-applied", restored);
+        }));
 
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);

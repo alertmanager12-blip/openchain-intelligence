@@ -10,6 +10,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class InMemoryRuleRepository implements RuleRepository {
 
     private final Map<String, RuleRow> rows = new ConcurrentHashMap<>();
+    private final Map<String, String> actionsOverrides = new ConcurrentHashMap<>();
+
+    @Override public Optional<String> actionsOverride(String id) { return Optional.ofNullable(actionsOverrides.get(id)); }
+
+    @Override public void setActionsOverride(String id, String actionsJson) {
+        if (actionsJson == null) actionsOverrides.remove(id); else actionsOverrides.put(id, actionsJson);
+    }
 
     @Override public List<RuleRow> findAll() { return new ArrayList<>(rows.values()); }
 

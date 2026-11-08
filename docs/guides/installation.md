@@ -66,7 +66,8 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_SECURITY_OIDC_ISSUER_URI` / `OCI_SECURITY_OIDC_AUDIENCE` | — | OIDC issuer (enables JWT bearer authentication) and optional audience |
 | `OCI_CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Allowed browser origins |
 | `OCI_RULES_DIRS` | `rules,../rules` | Rule pack directories (first existing wins); the image ships `/app/rules` |
-| `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector) |
+| `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector; a group id is negative, e.g. `-100…`) |
+| `OCI_PUBLIC_URL` | `http://localhost:4200` (Compose) | Public URL of the console, used for the "Console" link of Telegram messages; unset = no link |
 | `OCI_CHAINS_TRON_ENABLED`, `OCI_CHAINS_TRON_PROVIDER=trongrid`, `OCI_CHAINS_TRON_URL`, `OCI_CHAINS_TRON_API_KEY_HEADER`, `OCI_CHAINS_TRON_API_KEY` | off | Live TRON indexing through a TronGrid-compatible API |
 | `OCI_CHAINS_ETHEREUM_ENABLED`, `OCI_CHAINS_ETHEREUM_PROVIDER=json-rpc`, `OCI_CHAINS_ETHEREUM_URL`, `OCI_CHAINS_ETHEREUM_START_BLOCK` | off | Live EVM indexing through JSON-RPC (also `bsc`, `polygon`) |
 | `OCI_CHAINS_<NETWORK>_HISTORY_ENABLED` | `true` | On-demand address history (ADR-0020) for a real network: see "Address history" below |

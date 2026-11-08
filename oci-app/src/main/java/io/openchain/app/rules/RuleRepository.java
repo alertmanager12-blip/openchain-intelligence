@@ -36,4 +36,10 @@ public interface RuleRepository {
      * @throws io.openchain.app.persistence.OptimisticLockException when {@code rowVersion} is stale
      */
     RuleRow save(RuleRow row);
+
+    /** Operator's actions for a repository rule (JSON array), kept across rule pack updates; empty = the pack's own. */
+    Optional<String> actionsOverride(String id);
+
+    /** Records ({@code actionsJson} non-null) or clears the operator's actions of a rule. */
+    void setActionsOverride(String id, String actionsJson);
 }

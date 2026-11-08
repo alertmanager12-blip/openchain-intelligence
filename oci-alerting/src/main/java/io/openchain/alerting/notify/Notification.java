@@ -21,7 +21,19 @@ public record Notification(String deliveryId, ActionType actionType, String conn
                            EvidenceLevel evidenceLevel, Network network, String groupKey, String dedupKey,
                            long occurrenceCount, Instant firstSeen, Instant lastSeen, List<String> matchedEventIds,
                            Map<String, Object> evidence, Map<String, String> params, List<String> originChain, int hop,
-                           Instant createdAt) {
+                           Instant createdAt, io.openchain.alerting.alert.AlertSubject subject) {
+
+    /** Without subject (deliveries stored before the subject was carried, tests). */
+    public Notification(String deliveryId, ActionType actionType, String connectorId, String alertId, String ruleId,
+                        String ruleVersion, String title, Severity severity, Priority priority,
+                        EvidenceLevel evidenceLevel, Network network, String groupKey, String dedupKey,
+                        long occurrenceCount, Instant firstSeen, Instant lastSeen, List<String> matchedEventIds,
+                        Map<String, Object> evidence, Map<String, String> params, List<String> originChain, int hop,
+                        Instant createdAt) {
+        this(deliveryId, actionType, connectorId, alertId, ruleId, ruleVersion, title, severity, priority, evidenceLevel, network,
+                groupKey, dedupKey, occurrenceCount, firstSeen, lastSeen, matchedEventIds, evidence, params, originChain, hop,
+                createdAt, null);
+    }
 
     public Notification {
         matchedEventIds = List.copyOf(matchedEventIds);
@@ -35,6 +47,6 @@ public record Notification(String deliveryId, ActionType actionType, String conn
         return new Notification(deliveryId, type, connectorId, a.id(), a.ruleId(), a.ruleVersion(), a.title(),
                 a.severity(), a.priority(), a.evidenceLevel(), a.network(), a.groupKey(), a.dedupKey(),
                 a.occurrenceCount(), a.firstSeen(), a.lastSeen(), a.matchedEventIds(), a.evidence(), params,
-                a.originChain(), a.hop(), now);
+                a.originChain(), a.hop(), now, a.subject());
     }
 }
