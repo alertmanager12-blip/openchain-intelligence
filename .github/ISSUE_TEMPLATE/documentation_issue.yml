@@ -1,0 +1,41 @@
+name: Documentation issue
+description: Wrong, missing or outdated documentation, or an installation step that fails
+labels: ["documentation", "status:triage"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - Incorrect information
+        - Missing information
+        - Outdated procedure
+        - Installation or setup step that fails
+        - Unclear or hard to follow
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Page or file
+      description: Link or path, with the section if possible.
+      placeholder: "docs/guides/installation.md, section Ethereum"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+      description: For a failing step, include the command you ran and the output (redact secrets).
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested correction
+      description: Optional. You are welcome to open a pull request directly for documentation fixes.
+  - type: input
+    id: version
+    attributes:
+      label: ChainSentinel version or commit
+      description: Optional, helpful for setup problems.

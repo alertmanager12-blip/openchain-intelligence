@@ -1,22 +1,44 @@
 name: Feature request
 description: Suggest an improvement or a new capability
-labels: [enhancement, triage]
+labels: ["feature", "status:triage"]
 body:
+  - type: markdown
+    attributes:
+      value: Check the [roadmap](https://github.com/alertmanager12-blip/openchain-intelligence/blob/main/docs/strategy/FEATURE_ROADMAP.md) and existing issues first; your idea may already be planned.
   - type: textarea
     id: problem
     attributes:
-      label: Problem / use case
-      description: Who needs this and why? What do you do today?
+      label: Problem to solve
+      description: What can you not do today, or what is painful? Describe the problem before the solution.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
+      label: Proposed feature
+      description: What should ChainSentinel do? How would you use it (screen, API call, rule, configuration)?
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Value
+      description: Who benefits (exchange, payment platform, security team, compliance analyst, researcher…) and how much?
+  - type: textarea
+    id: use_cases
+    attributes:
+      label: Use cases
+      description: One or more concrete scenarios. Use public or fictitious addresses only.
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
+      description: Workarounds you use today, other tools, other designs.
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Possible architectural impact
+      description: Optional. Modules affected, new dependencies, data stored, API or rule schema changes, performance or memory concerns.
   - type: checkboxes
     id: principles
     attributes:

@@ -1,37 +1,104 @@
-# OpenChain Intelligence
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="64" height="64" alt="ChainSentinel logo">
+</p>
 
-**English** · [Français](README.fr.md)
+<h1 align="center">ChainSentinel</h1>
 
-**Open source blockchain investigation, risk intelligence and programmable monitoring — self-hosted.**
+<p align="center">
+  <strong>Open source, self-hosted blockchain intelligence: explainable risk signals, fund flows and alerts.</strong>
+</p>
 
-OpenChain Intelligence (OCI) watches TRON and EVM blockchains, detects risk signals you can explain, scores wallets
-with traceable contributions, and lets you write monitoring rules in YAML that raise alerts and notify your systems
-(webhooks, Slack, Discord, Telegram). Everything runs on your own machine or server with Docker.
+<p align="center">
+  <a href="https://github.com/alertmanager12-blip/openchain-intelligence/actions/workflows/ci.yml"><img src="https://github.com/alertmanager12-blip/openchain-intelligence/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/alertmanager12-blip/openchain-intelligence" alt="Licence: Apache-2.0"></a>
+</p>
 
-> **Status: 0.1.0 — unreleased MVP.** It works end to end, but APIs and schemas may still change before 1.0.
-> Licence: [Apache-2.0](LICENSE).
+<p align="center"><strong>English</strong> · <a href="README.fr.md">Français</a></p>
 
-**Contents:** [What you get](#what-you-get) · [Step 1 — Fork and clone](#step-1--fork-and-clone) ·
+ChainSentinel indexes TRON and Ethereum itself, profiles every wallet it sees, explains each risk signal with the
+transactions behind it, scores wallets with traceable contributions, and turns your YAML rules into alerts delivered to
+webhooks, Slack, Discord or Telegram. Everything runs on your own machine or server with Docker.
+
+> **Status: 0.1.0-SNAPSHOT, no release yet.** It works end to end on mainnet data, but APIs and schemas may still
+> change before 1.0. Licence: [Apache-2.0](LICENSE).
+>
+> **Naming:** the project was started as *OpenChain Intelligence*. Module names (`oci-*`), Java packages
+> (`io.openchain`), environment variables (`OCI_*`) and the repository name keep that technical prefix.
+
+**Contents:** [Why](#why-chainsentinel) · [What works today](#what-works-today) ·
+[Supported blockchains](#supported-blockchains) · [Known limitations](#known-limitations) ·
+[In development](#in-development) · [Step 1 — Fork and clone](#step-1--fork-and-clone) ·
 [Step 2 — Install the tools](#step-2--install-the-tools) · [Step 3 — Try the demo](#step-3--try-the-demo-5-minutes) ·
 [Step 4 — Run it for real](#step-4--run-it-for-real-production) · [Step 5 — Develop](#step-5--develop-and-test) ·
 [Step 6 — Keep your fork up to date](#step-6--keep-your-fork-up-to-date) · [Troubleshooting](#troubleshooting) ·
-[How it is built](#how-it-is-built) · [Contributing](#contributing)
+[How it is built](#how-it-is-built) · [Documentation](#documentation) · [Contributing](#contributing) ·
+[Licence](#licence)
 
 ---
 
-## What you get
+## Why ChainSentinel
+
+Every transfer on a public blockchain is visible, yet turning raw blocks into a decision still takes hours: millions of
+transfers a day without context, wallets that act together through splits and relays, static blocklists that lag behind
+behaviour, evidence scattered across tools, and scores nobody can explain to a customer or an auditor.
+
+ChainSentinel's aim is an intelligence engine you can run, read and audit yourself:
+
+- **Explainable first:** every signal names its detector, its evidence (transactions, amounts, time window) and its
+  evidence level (`ANOMALY`, `RISK_SIGNAL`, `CONFIRMED_BY_SOURCE`). Every point of a risk score names its source.
+- **Neutral wording:** it reports observed behaviour, never accusations. Decisions stay with your analysts.
+- **Self-hosted:** your data, your nodes or providers, no external scoring service.
+- **Programmable:** detection rules are declarative YAML (no user code execution), tested on recorded data before you
+  enable them.
+
+The longer-term vision and roadmap are in [docs/strategy](docs/strategy/README.md) (French).
+
+## What works today
 
 | Area | What it does today |
 |---|---|
-| Ingestion | TRON and EVM (Ethereum, BSC, Polygon) indexers with confirmations and reorg handling: token transfers (USDT, USDC…), native transfers of successful transactions, ERC-20/TRC-20 approvals, stablecoin issuer freezes (Tether, Circle — official contracts only), contract ownership changes |
+| Ingestion | TRON and EVM indexers with confirmations, reorg handling and gap-free resume after a restart: token transfers (USDT, USDC…), native transfers of successful transactions, ERC-20/TRC-20 approvals, stablecoin issuer freezes (Tether, Circle — official contracts only), contract ownership changes |
 | Investigation | Wallet page (profile, counterparties, signals, labels), transaction page, fund-flow graph (up to 3 hops), on-demand ERC-20 history of an address you open |
-| Risk | Detectors (structuring, fast forwarding, unusual amounts, dormant reactivation, rapid drain, fan-out, circular flows, exposure to listed addresses, unlimited approvals, issuer freezes…) and a 0–100 score where every point names its source |
-| Monitoring | Rules as YAML or with a visual builder, dry-run simulation on recorded data, versioning, alert inbox (acknowledge, assign, comment, resolve, false positive) |
+| Risk | Ten detectors (structuring, fan-out, fast forwarding, rapid drain, circular flows, unusual amounts, unusual approvals, dormant reactivation, ownership changes, exposure to listed addresses) and a 0–100 score where every point names its source |
+| Monitoring | Rules as YAML or with a visual builder, dry-run simulation on recorded data, versioning, watchlist of your own wallets, alert inbox (acknowledge, assign, comment, resolve, false positive) |
 | Notifications | Signed webhooks (HMAC-SHA256, SSRF-guarded, retries), Slack, Discord, Telegram |
-| Platform | REST API v1, API keys (hashed, scoped, expiring, revocable) and optional OIDC, PostgreSQL persistence, audit log stream |
+| Platform | REST API v1, API keys (hashed, scoped, expiring, revocable) and optional OIDC, PostgreSQL persistence, audit log stream, Prometheus metrics (optional Grafana profile) |
 
-Not there yet (honestly): internal transactions and full native history of old addresses (needs an Erigon node, see
-[ADR-0020](docs/adr/0020-address-history-sources.md)), Bitcoin and Solana, multi-tenancy, rate limiting, metrics.
+## Supported blockchains
+
+| Network | Status |
+|---|---|
+| Ethereum mainnet | Indexed and used in production by the maintainer |
+| TRON mainnet | Indexed and used in production by the maintainer (TronGrid or your own node). No historical balances, so the rapid-drain detector is inactive on TRON |
+| BSC, Polygon | Same EVM indexer, can be enabled in `.env`, **not validated in production yet** |
+| Demo simulator | Simulated chains with fictitious labels, for trying the product (`OCI_DEMO_MODE=true`, never in production) |
+
+Bitcoin and Solana are not supported.
+
+## Known limitations
+
+- **Wallet profiles, signals and risk scores live in memory.** Alerts, rules, labels, keys and indexing checkpoints are
+  stored in PostgreSQL, but the intelligence working set is rebuilt from new blocks after a restart (the persistence
+  journal of [ADR-0024](docs/adr/0024-persist-chain-derived-state.md) is off by default because its reload does not
+  scale to chain-wide volumes yet). At full Ethereum + TRON volume this working set grows by several hundred megabytes
+  per hour; plan memory accordingly.
+- **Indexing speed depends on your provider.** Public endpoints are rate-limited; TRON through TronGrid can fall behind
+  the chain head.
+- **Old native transfers and internal transactions** of an address need an archive/Erigon node
+  ([ADR-0020](docs/adr/0020-address-history-sources.md)).
+- **Single organisation:** no multi-tenancy, no API rate limiting yet.
+- **Email notifications** are not available (Telegram, Slack, Discord and webhooks are).
+
+## In development
+
+Work in progress and next steps, in the order of the [roadmap](docs/strategy/FEATURE_ROADMAP.md):
+
+- **Bounded memory and durable intelligence** (ADR-0024, steps 3a/3b): keep the in-memory working set within a fixed
+  budget and reload state after a restart.
+- **Graph intelligence:** shortest paths between wallets, relationships.
+- **Reproducible investigations** ([ADR-0022](docs/adr/0022-investigations-as-reproducible-artifacts.md)).
+- **Developer ecosystem:** a read-only MCP server on top of the API ([ADR-0025](docs/adr/0025-mcp-as-api-adapter.md))
+  and SDKs. Not available yet.
 
 ---
 
@@ -55,7 +122,7 @@ Not there yet (honestly): internal transactions and full native history of old a
 
 ## Step 2 — Install the tools
 
-To **run** OCI you only need Docker. To **develop** it you also need Java, Maven and Node.js.
+To **run** ChainSentinel you only need Docker. To **develop** it you also need Java, Maven and Node.js.
 
 | Tool | Version | Needed for | Check with |
 |---|---|---|---|
@@ -117,7 +184,7 @@ A guided tour is in [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
 ## Step 4 — Run it for real (production)
 
-In production OCI reads **real** blockchains and contains **no demo data**. You configure everything in one file, `.env`.
+In production ChainSentinel reads **real** blockchains and contains **no demo data**. You configure everything in one file, `.env`.
 
 ### 4.1 Create your `.env`
 
@@ -186,7 +253,7 @@ docker compose logs app | grep -E "Persistence mode|Started|ERROR"
 Open **http://localhost:4200**, go to **Settings → Connection → API key** and paste your `OCI_ADMIN_API_KEY`.
 Then create narrower keys for your colleagues and integrations in **Settings → API keys**.
 
-What to expect at first: OCI indexes from the current block onwards, so pages fill up as new blocks arrive. When you
+What to expect at first: ChainSentinel indexes from the current block onwards, so pages fill up as new blocks arrive. When you
 open an address, its past ERC-20 transfers and approvals are fetched on demand; its older native transfers stay
 invisible unless you connect an Erigon node ([ADR-0020](docs/adr/0020-address-history-sources.md)).
 
@@ -325,7 +392,7 @@ first in production. Read [CHANGELOG.md](CHANGELOG.md) for changes that need you
 
 ## How it is built
 
-A modular monolith: one Java 21 / Spring Boot application made of independent modules, an Angular console, and
+A modular monolith: one Spring Boot application (compiled for Java 21, run on Java 25 in the Docker image) made of independent modules, an Angular console, and
 PostgreSQL. Blockchain events flow through the indexer to detection and scoring, then to the rule engine, which raises
 alerts and delivers notifications through an outbox.
 
@@ -341,21 +408,43 @@ flowchart LR
   UI[Angular console] --> API[REST API v1] --> PG
 ```
 
-More: [architecture overview](docs/architecture/overview.md) · [data model](docs/architecture/data-model.md) ·
-[rule engine](docs/architecture/rule-engine.md) · [API contract](docs/api/README.md) ·
-[architecture decisions (ADRs)](docs/adr/) · [licensing policy](docs/adr/0012-licensing-policy.md) ·
-[testing strategy](docs/testing-strategy.md)
+More: [architecture overview](docs/architecture/overview.md) · [rule engine](docs/architecture/rule-engine.md) ·
+[architecture decisions (ADRs)](docs/adr/README.md).
+
+---
+
+## Documentation
+
+Start with the [documentation index](docs/README.md). The most used pages:
+
+| You want to… | Read |
+|---|---|
+| Install and operate it | [Installation guide](docs/guides/installation.md), [quickstart](docs/guides/quickstart.md), [security hardening](docs/guides/security-hardening.md) |
+| Write detection rules | [Writing rules](docs/guides/writing-rules.md), [rule pack](rules/README.md) |
+| Use the API | [API contract](docs/api/README.md) |
+| Understand the design | [Architecture overview](docs/architecture/overview.md), [data model](docs/architecture/data-model.md), [ADRs](docs/adr/README.md) |
+| Test your changes | [Testing strategy](docs/testing-strategy.md) |
+| Get help | [SUPPORT.md](SUPPORT.md) |
 
 ---
 
 ## Contributing
 
-Contributions of code, rules and documentation are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) (commits must be
-signed off, DCO) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in
-[SECURITY.md](SECURITY.md).
+Contributions of code, rules, documentation and reviews are welcome, including from first-time contributors.
+
+- How to set up, branch, test and open a pull request: [CONTRIBUTING.md](CONTRIBUTING.md).
+- How decisions are made: [GOVERNANCE.md](GOVERNANCE.md).
+- Expected behaviour: [Code of Conduct](CODE_OF_CONDUCT.md).
+- Questions and help: [SUPPORT.md](SUPPORT.md).
+- **Security vulnerabilities:** never in a public issue; report them privately as described in [SECURITY.md](SECURITY.md).
+
+## Licence
+
+ChainSentinel is licensed under the [Apache License 2.0](LICENSE). Third-party notices are in [NOTICE](NOTICE); the
+dependency licence policy (checked in CI) is [ADR-0012](docs/adr/0012-licensing-policy.md).
 
 ## Disclaimer
 
-OCI outputs are risk indicators derived from public blockchain data and attributed third-party sources. They are not
+ChainSentinel outputs are risk indicators derived from public blockchain data and attributed third-party sources. They are not
 legal determinations, do not identify any person, and must be reviewed by a qualified human before any decision
 affecting someone.

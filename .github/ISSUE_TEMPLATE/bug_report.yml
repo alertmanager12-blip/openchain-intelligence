@@ -1,43 +1,83 @@
 name: Bug report
-description: Something does not work as documented
-labels: [bug, triage]
+description: Something does not work as documented, or an incompatibility with your environment
+labels: ["bug", "status:triage"]
 body:
   - type: markdown
     attributes:
-      value: "Security vulnerabilities must NOT be reported here — see SECURITY.md."
+      value: |
+        **Security vulnerabilities must not be reported here.** Report them privately: see [SECURITY.md](https://github.com/alertmanager12-blip/openchain-intelligence/blob/main/SECURITY.md).
+        Remove API keys, tokens, `.env` values and personal data from everything you paste.
   - type: textarea
-    id: what
+    id: description
     attributes:
-      label: What happened?
-      description: Observed vs. expected behaviour.
+      label: Description
+      description: What is the problem, in one or two sentences?
     validations:
       required: true
   - type: textarea
     id: repro
     attributes:
       label: Steps to reproduce
-      placeholder: "1. docker compose up\n2. POST /api/v1/rules ...\n3. ..."
+      placeholder: "1. docker compose up -d --build\n2. Open the wallet page of …\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happened instead? Include error messages and screenshots if useful.
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Version / commit
+      label: ChainSentinel version or commit
+      description: Output of `git rev-parse --short HEAD`, or the release version.
+      placeholder: "5abe1f2"
     validations:
       required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How do you run it?
+      options:
+        - Docker Compose, production mode
+        - Docker Compose, demo mode
+        - From source (Maven / npm)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: java
+    attributes:
+      label: Java version
+      description: Only if you build or run from source (`java -version`). The Docker image ships its own Java.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Docker and Compose versions, Node version if you build the frontend, memory given to Docker, RPC provider or node type.
+      placeholder: "macOS 15, Docker Desktop 4.x, Compose v2.x, 8 GB for Docker, Ethereum via <provider>, TRON via TronGrid"
+  - type: dropdown
+    id: network
+    attributes:
+      label: Blockchain concerned
+      multiple: true
+      options: ["Not specific to a chain", "Ethereum", "TRON", "BSC", "Polygon", "Demo simulator"]
   - type: dropdown
     id: area
     attributes:
       label: Area
-      options: [indexing / providers, detection / scoring, rule engine / alerts, notifications, API, frontend, deployment, docs]
-  - type: dropdown
-    id: network
-    attributes:
-      label: Network
-      options: [n/a, tron, ethereum, bsc, polygon, demo simulator]
+      options: ["Indexing / providers", "Detection / risk scoring", "Rules / alerts", "Notifications / webhooks", "REST API", "Frontend (console or landing page)", "Deployment / Docker", "Documentation", "Not sure"]
   - type: textarea
     id: logs
     attributes:
-      label: Logs / traces
-      description: Redact API keys, secrets and personal data.
+      label: Relevant logs
+      description: For example `docker compose logs app --since 10m`. Redact secrets, API keys and personal data.
       render: text

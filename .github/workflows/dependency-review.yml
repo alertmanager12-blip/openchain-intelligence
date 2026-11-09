@@ -1,0 +1,21 @@
+name: Dependency review
+
+# Blocks pull requests that add a dependency with a known vulnerability of high or critical severity.
+# Licences are checked by the "Dependency licence policy" job of ci.yml (ADR-0012).
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high

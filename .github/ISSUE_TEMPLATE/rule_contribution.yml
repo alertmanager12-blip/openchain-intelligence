@@ -1,6 +1,6 @@
 name: Rule contribution
-description: Propose a detection rule or rule pack (oci.rules/v1)
-labels: [rule, triage]
+description: Propose a detection rule or rule pack (schema openchain.io/rule/v1)
+labels: ["rule", "status:triage"]
 body:
   - type: input
     id: name

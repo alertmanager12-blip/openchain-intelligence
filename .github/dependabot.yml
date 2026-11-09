@@ -1,26 +1,49 @@
+# Dependency updates. Minor and patch updates are grouped into one pull request per ecosystem; major updates arrive one
+# by one so they can be evaluated (breaking changes, licence of new transitive dependencies). Every pull request runs
+# the full CI (tests, licence policy, Docker smoke test, dependency review) before a maintainer merges it.
+# Security updates for vulnerable dependencies are separate and not limited by these settings.
 version: 2
 updates:
   - package-ecosystem: maven
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
     groups:
-      spring:
-        patterns: ["org.springframework*"]
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: npm
     directory: "/frontend"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
     groups:
+      # Angular packages must move together, majors included.
       angular:
-        patterns: ["@angular/*", "@angular-devkit/*"]
+        patterns: ["@angular/*", "@angular-devkit/*", "@schematics/angular"]
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: docker
     directory: "/deploy"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns: ["*"]
