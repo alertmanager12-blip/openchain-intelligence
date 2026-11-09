@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # OpenChain Intelligence — backend image (build context: repository root)
 # Stage 1: build with Maven on JDK 21
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /src
 # POMs first for better layer caching
 COPY pom.xml ./
