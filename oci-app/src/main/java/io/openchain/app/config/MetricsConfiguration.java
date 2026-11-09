@@ -33,6 +33,12 @@ public class MetricsConfiguration {
                         .tag("network", id).register(registry);
                 FunctionCounter.builder("oci.reorg", chains, c -> c.reorgs(n)).description("Chain reorganisations handled")
                         .tag("network", id).register(registry);
+                FunctionCounter.builder("oci.indexer.poll.seconds", chains, c -> c.pollSeconds(n))
+                        .description("Time spent in indexer passes (fetch and processing)").tag("network", id).register(registry);
+                FunctionCounter.builder("oci.process.seconds", chains, c -> c.processSeconds(n))
+                        .description("Time spent processing events under the processing lock").tag("network", id).register(registry);
+                FunctionCounter.builder("oci.process.lock.wait.seconds", chains, c -> c.lockWaitSeconds(n))
+                        .description("Time events waited for the processing lock").tag("network", id).register(registry);
             }
             FunctionCounter.builder("oci.events.indexed", chains, ChainIngestionService::eventsIndexed).register(registry);
             FunctionCounter.builder("oci.events.retracted", chains, ChainIngestionService::eventsRetracted).register(registry);

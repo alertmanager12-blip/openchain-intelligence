@@ -303,6 +303,23 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     // ---- real providers -----------------------------------------------------------------------------------------
 
     /**
+     * Polls a real chain on its own (virtual) thread: again at once while it is behind the head, after the poll
+     * interval once caught up. Rescheduled in a finally block, so an error never stops indexing.
+     */
+    private void schedulePolling(String id, ChainIngestionService.NetworkRuntime rt, long everyMillis, long delayMillis) {
+        scheduler.schedule(() -> {
+            boolean more = false;
+            try {
+                more = chains.poll(rt);
+            } catch (RuntimeException e) {
+                log.error("poll {} failed: {}", id, e.toString());
+            } finally {
+                if (!scheduler.isShutdown()) schedulePolling(id, rt, everyMillis, more ? 0 : everyMillis);
+            }
+        }, delayMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /**
      * Demo mode runs with publicly known development secrets (API key pepper, master key) and generated keys: real chain
      * data must never be processed under it. Refuses to start instead of silently mixing them.
      */
@@ -367,7 +384,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                         h.getMaxEvents(), h.getPause()));
             }
             long every = props.getIngestion().getPollInterval().toMillis();
-            scheduler.scheduleWithFixedDelay(guard("poll " + n.id(), () -> chains.poll(rt)), 0, every, TimeUnit.MILLISECONDS);
+            schedulePolling(n.id(), rt, every, 0);
         } catch (RuntimeException e) {
             log.error("chain {} not started: {}", id, e.getMessage());
         }

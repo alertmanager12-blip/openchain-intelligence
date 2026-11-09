@@ -102,6 +102,44 @@ class TronGridProviderTest {
         assertThat(infos).hasValue(2);
     }
 
+    /** Block ids are 64 hex chars; derive a distinct one per block number. */
+    static String id(long n) { return String.format("%064x", n); }
+
+    static long num(String body) { return Long.parseLong(body.replaceAll("[^0-9]", "")); }
+
+    @Test void confirmedBlocksAreFetchedAheadInParallelAndServedWithoutAnotherCall() throws Exception {
+        java.util.Map<Long, java.util.concurrent.atomic.AtomicInteger> fetches = new java.util.concurrent.ConcurrentHashMap<>();
+        server.route("/wallet/getnowblock", r -> Response.ok(block(80000100, "f".repeat(64)))) // head: 80000100, safe: 80000081
+              .route("/wallet/getblockbynum", r -> {
+                  long n = num(r.body());
+                  fetches.computeIfAbsent(n, k -> new java.util.concurrent.atomic.AtomicInteger()).incrementAndGet();
+                  return Response.ok(block(n, id(n)));
+              })
+              .route("/wallet/gettransactioninfobyblocknum", r -> Response.ok("[]"));
+        provider.headBlock();
+        assertThat(provider.getBlock(80000015)).isPresent();
+        // the next AHEAD_BLOCKS confirmed blocks are being fetched in the background
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (fetches.keySet().stream().filter(n -> n > 80000015).count() < TronGridProvider.AHEAD_BLOCKS && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(fetches).containsKeys(80000016L, 80000017L, 80000018L, 80000019L);
+        assertThat(provider.getBlock(80000016)).hasValueSatisfying(b -> assertThat(b.hash()).isEqualTo(id(80000016)));
+        provider.getBlockActivity(80000016, 80000016);
+        assertThat(fetches.get(80000016L)).hasValue(1); // served from the prefetch: no second download
+    }
+
+    @Test void nothingIsFetchedAheadBeyondTheConfirmedHead() throws Exception {
+        java.util.Set<Long> fetched = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        server.route("/wallet/getnowblock", r -> Response.ok(block(80000035, "f".repeat(64)))) // safe head 80000016
+              .route("/wallet/getblockbynum", r -> { long n = num(r.body()); fetched.add(n); return Response.ok(block(n, id(n))); })
+              .route("/wallet/gettransactioninfobyblocknum", r -> Response.ok("[]"));
+        provider.headBlock();
+        provider.getBlock(80000015);
+        Thread.sleep(300);
+        assertThat(fetched).containsExactlyInAnyOrder(80000015L, 80000016L); // 80000017+ may still be reorganised
+    }
+
     @Test void headIsReadOnceForSeveralStatusChecksWithinOneSecond() {
         java.util.concurrent.atomic.AtomicInteger heads = new java.util.concurrent.atomic.AtomicInteger();
         server.route("/wallet/getnowblock", r -> { heads.incrementAndGet(); return Response.ok(block(80000020, "f".repeat(64))); });

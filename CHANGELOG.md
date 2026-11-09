@@ -8,6 +8,12 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (after phase 0)
+
+- **TRON fell behind during business hours** (TronGrid ~2.3 s and ~675 kB per block, measured 2026-11-09; indexing 6 blocks/min for 20 produced). Measured with new per-network timers (`oci_indexer_poll_seconds`, `oci_process_seconds`, `oci_process_lock_wait_seconds`): processing was not the bottleneck, the pass rhythm was. A real chain is now polled again at once while it is behind (it waited the poll interval after every short pass), indexes 10 blocks per pass (was 2, a limit from the shared-thread era), TRON fetches the next 4 confirmed blocks ahead in parallel, and the head is cached for one TRON block (3 s).
+- **App killed under memory pressure**: the compose app service had no memory limit, so the JVM sized its heap from the whole Docker VM (6.2 GB of 7.7) and the kernel killed it while a test suite ran on the same host. `mem_limit` (`OCI_APP_MEMORY_LIMIT`, default 4g).
+- **Stored address histories re-applied at start-up stalled both chains for minutes** (32 histories, ~26k events under the processing lock): re-applied in chunks of 200 events, releasing the lock between chunks.
+
 ### Phase 0 — consolidation (docs/strategy/FEATURE_ROADMAP.md)
 
 - **No more silently lost notifications** (production: 5,675 dead letters "unknown connector 'default-webhook'"): the rule pack's placeholder `default-webhook` resolves to `OCI_DEFAULT_CONNECTOR` (with that connector's own type: Telegram, Slack…); without it the delivery is recorded `SKIPPED` with its reason (`V6__delivery_skipped`), never attempted and dead-lettered. The start-up log lists the enabled rules that cannot notify anyone.

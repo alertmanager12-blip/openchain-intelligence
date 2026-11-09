@@ -70,7 +70,8 @@ public class ChainIngestionService {
     private static final Logger log = LoggerFactory.getLogger(ChainIngestionService.class);
     private static final int MAX_SIGNALS_KEPT = 10_000;
     private static final int MAX_POLLS_PER_TICK = 1_000;
-    private static final java.time.Duration REAL_CHAIN_TICK = java.time.Duration.ofSeconds(2);
+    /** A real chain's pass loop returns after this long so its status (head, lag) is refreshed regularly. */
+    private static final java.time.Duration REAL_CHAIN_TICK = java.time.Duration.ofSeconds(20);
 
     /** One indexed network. */
     public static final class NetworkRuntime {
@@ -212,17 +213,25 @@ public class ChainIngestionService {
     // ---- polling ----------------------------------------------------------------------------------------------
 
     /** Indexes everything currently available on one network (bounded), recording errors instead of throwing. */
-    public void poll(NetworkRuntime rt) {
-        synchronized (rt) { pollLocked(rt); }
+    /** @return true when the network still has blocks to index (the caller should poll again without waiting) */
+    public boolean poll(NetworkRuntime rt) {
+        long t0 = System.nanoTime();
+        try {
+            synchronized (rt) { return pollLocked(rt); }
+        } finally {
+            add(pollNanos, rt.network(), System.nanoTime() - t0);
+        }
     }
 
-    private void pollLocked(NetworkRuntime rt) {
+    private boolean pollLocked(NetworkRuntime rt) {
         rt.lastPollAt = clock.instant();
+        boolean more = false;
         try {
             // head known BEFORE indexing, so real balance lookups can be skipped while catching up (withinBalanceBudget)
             rt.lastStatus = rt.provider.getNetworkStatus();
-            // a real chain yields after REAL_CHAIN_TICK so other networks (same scheduler thread, same lock) keep up;
-            // simulated and demo chains drain everything available, as before
+            // a real chain returns after REAL_CHAIN_TICK (status refresh) and tells the scheduler whether it is still
+            // behind, so that it is polled again at once instead of after the poll interval; simulated and demo chains
+            // drain everything available, as before
             boolean real = rt.simulator == null && rt.ledger == null;
             long deadline = System.nanoTime() + REAL_CHAIN_TICK.toNanos();
             for (int i = 0; i < MAX_POLLS_PER_TICK; i++) {
@@ -230,7 +239,10 @@ public class ChainIngestionService {
                 rt.lastIndexedBlock = r.lastBlock();
                 if (r.reorgs() > 0) reorgCount.merge(rt.network(), (long) r.reorgs(), Long::sum);
                 if (r.blocksIndexed() == 0) break;
-                if (real && System.nanoTime() > deadline) break;
+                if (real && System.nanoTime() > deadline) {
+                    more = true;
+                    break;
+                }
             }
             rt.lastStatus = rt.provider.getNetworkStatus();
             rt.lastError = null;
@@ -238,6 +250,7 @@ public class ChainIngestionService {
             rt.lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
             log.warn("indexing {} failed: {}", rt.network().id(), rt.lastError);
         }
+        return more;
     }
 
     /** Current status (refreshed from the provider; falls back to the last known one). */
@@ -267,10 +280,21 @@ public class ChainIngestionService {
             Optional<ValueFlow> flow = toFlow(e);
             if (flow.isPresent()) balance = realBalanceBefore(flow.get().from(), flow.get().token(), e.blockNumber());
         }
-        process(e, balance);
+        long waitFrom = System.nanoTime();
+        process(e, balance, waitFrom);
     }
 
-    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
+    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance, long waitFrom) {
+        long start = System.nanoTime();
+        add(lockWaitNanos, e.network(), start - waitFrom);
+        try {
+            processLocked(e, prefetchedBalance);
+        } finally {
+            add(processNanos, e.network(), System.nanoTime() - start);
+        }
+    }
+
+    private void processLocked(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (!e.removed() && e.eventTime() != null) observationStart.merge(e.network(), e.eventTime(), (a, b) -> a.isBefore(b) ? a : b);
@@ -373,10 +397,23 @@ public class ChainIngestionService {
      * evaluation: history never raises alerts. Idempotent on event ids (an event already indexed live is a no-op).
      * New signals are kept in {@link #recentSignals()}. Serialised with ingestion.
      */
-    public synchronized void applyHistory(List<ChainEvent> events) {
+    /**
+     * Applies stored or freshly loaded address history, oldest first, in chunks of {@link #HISTORY_CHUNK} events: the
+     * processing lock is released between chunks so live indexing keeps going while dozens of histories are re-applied
+     * at start-up (production 2026-11-09: 31 histories, ~26k events, held the lock for minutes and stalled both chains).
+     */
+    public void applyHistory(List<ChainEvent> events) {
         List<ChainEvent> ordered = new ArrayList<>(events);
         ordered.sort(Comparator.comparing((ChainEvent x) -> x.eventTime() == null ? Instant.EPOCH : x.eventTime())
                 .thenComparingLong(ChainEvent::blockNumber).thenComparing(ChainEvent::eventId));
+        for (int i = 0; i < ordered.size(); i += HISTORY_CHUNK) {
+            applyHistoryChunk(ordered.subList(i, Math.min(ordered.size(), i + HISTORY_CHUNK)));
+        }
+    }
+
+    static final int HISTORY_CHUNK = 200;
+
+    private synchronized void applyHistoryChunk(List<ChainEvent> ordered) {
         for (ChainEvent e : ordered) {
             if (e.removed()) continue;
             IntelligencePipeline.Result r;
@@ -512,6 +549,26 @@ public class ChainIngestionService {
     public long eventsIndexed() { return eventsIndexed.get(); }
 
     private final Map<Network, Long> reorgCount = new ConcurrentHashMap<>();
+
+    /** Time spent per network (nanoseconds): indexer passes, event processing, and waiting for the processing lock. */
+    private final Map<Network, java.util.concurrent.atomic.LongAdder> pollNanos = new ConcurrentHashMap<>(),
+            processNanos = new ConcurrentHashMap<>(), lockWaitNanos = new ConcurrentHashMap<>();
+
+    private static void add(Map<Network, java.util.concurrent.atomic.LongAdder> m, Network n, long nanos) {
+        m.computeIfAbsent(n, k -> new java.util.concurrent.atomic.LongAdder()).add(nanos);
+    }
+
+    private static double seconds(Map<Network, java.util.concurrent.atomic.LongAdder> m, Network n) {
+        var a = m.get(n);
+        return a == null ? 0 : a.sum() / 1e9;
+    }
+
+    /** Seconds spent in indexer passes (fetch + processing) on this network since start (metrics). */
+    public double pollSeconds(Network n) { return seconds(pollNanos, n); }
+    /** Seconds spent processing this network's events under the processing lock (metrics). */
+    public double processSeconds(Network n) { return seconds(processNanos, n); }
+    /** Seconds this network's events waited for the processing lock (metrics). */
+    public double lockWaitSeconds(Network n) { return seconds(lockWaitNanos, n); }
 
     /** Chain reorganisations handled on this network since start (metrics). */
     public long reorgs(Network n) { return reorgCount.getOrDefault(n, 0L); }

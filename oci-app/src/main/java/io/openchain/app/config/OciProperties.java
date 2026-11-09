@@ -161,8 +161,8 @@ public class OciProperties {
          * lookup leaves the field absent, so balance-based rules and detectors stay silent instead of guessing.
          */
         private int realBalanceMaxLookupsPerBlock = 5;
-        /** Blocks per indexer pass on a real chain: small, so the 2 s tick budget is respected and other networks get their turn. */
-        private int maxBlocksPerPoll = 2;
+        /** Blocks per indexer pass on a real chain (each network is polled on its own thread). */
+        private int maxBlocksPerPoll = 10;
 
         public int getMaxBlocksPerPoll() { return maxBlocksPerPoll; }
         public void setMaxBlocksPerPoll(int v) { this.maxBlocksPerPoll = v; }

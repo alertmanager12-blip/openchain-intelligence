@@ -68,11 +68,22 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
      */
     private record BlockMemo(long number, JsonNode block, java.util.concurrent.CompletableFuture<JsonNode> infos, long at) {}
     private static final long MEMO_TTL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
-    private static final long HEAD_TTL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(1);
+    private static final long HEAD_TTL_NANOS = java.util.concurrent.TimeUnit.SECONDS.toNanos(3); // one TRON block
     private static final java.util.concurrent.Executor PREFETCH = runnable -> Thread.ofVirtual().name("tron-prefetch").start(runnable);
     private final java.util.concurrent.atomic.AtomicReference<BlockMemo> memo = new java.util.concurrent.atomic.AtomicReference<>();
     /** {head, nanoTime}: the head is read several times per indexer pass (status, lag checks). */
     private volatile long[] cachedHead;
+
+    /**
+     * Blocks fetched ahead of the indexer, in parallel (block payload and transaction infos), so that a slow endpoint
+     * (production 2026-11-09: ~2.3 s and ~675 kB per call during business hours) does not cap indexing at one block per
+     * round trip. Only blocks at least {@code confirmations} below the last known head are fetched ahead: they can no
+     * longer be reorganised. An empty or failed prefetch is never used (fresh fetch instead); entries expire.
+     */
+    private record Ahead(java.util.concurrent.CompletableFuture<JsonNode> block, java.util.concurrent.CompletableFuture<JsonNode> infos, long at) {}
+    static final int AHEAD_BLOCKS = 4;
+    private static final long AHEAD_TTL_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(2);
+    private final java.util.Map<Long, Ahead> ahead = new java.util.concurrent.ConcurrentHashMap<>();
 
     public TronGridProvider(String id, HttpJsonTransport http, TokenRegistry tokens, TronConfig config) {
         this(id, http, tokens, config, StablecoinFreezeSources.defaults());
@@ -125,14 +136,48 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     }
 
     @Override public Optional<BlockRef> getBlock(long number) {
-        JsonNode b = post("/wallet/getblockbynum", "num", number);
+        JsonNode b = null;
+        java.util.concurrent.CompletableFuture<JsonNode> infos = null;
+        Ahead a = ahead.remove(number);
+        if (a != null && System.nanoTime() - a.at() <= AHEAD_TTL_NANOS) {
+            try {
+                JsonNode pre = a.block().join();
+                if (blockRef(pre).isPresent()) {
+                    b = pre;
+                    infos = a.infos();
+                }
+            } catch (RuntimeException e) { // failed prefetch: fetched fresh below
+                b = null;
+            }
+        }
+        if (b == null) {
+            if (a != null) a.infos().cancel(false);
+            b = post("/wallet/getblockbynum", "num", number);
+        }
         Optional<BlockRef> ref = blockRef(b);
         if (ref.isPresent()) {
-            var infos = java.util.concurrent.CompletableFuture.supplyAsync(() -> transactionInfos(number), PREFETCH);
+            if (infos == null) infos = java.util.concurrent.CompletableFuture.supplyAsync(() -> transactionInfos(number), PREFETCH);
             BlockMemo old = memo.getAndSet(new BlockMemo(number, b, infos, System.nanoTime()));
-            if (old != null) old.infos().cancel(false);
+            if (old != null && old.number() != number) old.infos().cancel(false);
+            prefetchAfter(number);
         }
         return ref;
+    }
+
+    /** Starts fetching the next confirmed blocks after {@code n} (see {@link Ahead}); uses the cached head only. */
+    private void prefetchAfter(long n) {
+        long[] c = cachedHead;
+        if (c == null) return;
+        long safe = c[0] - config.confirmations();
+        long now = System.nanoTime();
+        ahead.entrySet().removeIf(e -> e.getKey() <= n || now - e.getValue().at() > AHEAD_TTL_NANOS);
+        for (int k = 1; k <= AHEAD_BLOCKS; k++) {
+            long m = n + k;
+            if (m > safe) break;
+            ahead.computeIfAbsent(m, x -> new Ahead(
+                    java.util.concurrent.CompletableFuture.supplyAsync(() -> post("/wallet/getblockbynum", "num", x), PREFETCH),
+                    java.util.concurrent.CompletableFuture.supplyAsync(() -> transactionInfos(x), PREFETCH), now));
+        }
     }
 
     private JsonNode transactionInfos(long n) {
@@ -246,7 +291,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
             Optional<BlockMemo> m = takeMemo(n);
             JsonNode b = m.isPresent() ? m.get().block() : post("/wallet/getblockbynum", "num", n);
             BlockRef ref = blockRef(b).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available yet", true));
-            JsonNode infos = m.isPresent() ? joinInfos(m.get().infos()) : transactionInfos(n);
+            JsonNode infos = m.isPresent() ? infosOrFresh(m.get().infos(), n) : transactionInfos(n);
             Map<String, Long> fees = new HashMap<>();
             if (present(infos) && infos.isArray()) {
                 for (JsonNode info : infos) {
@@ -277,6 +322,15 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
             }
         }
         return new BlockActivity(d.transfers, natives, d.approvals, d.freezes, d.adminChanges);
+    }
+
+    /** The prefetched infos, or a fresh call when the prefetch failed (a transient error must not fail the block). */
+    private JsonNode infosOrFresh(java.util.concurrent.CompletableFuture<JsonNode> f, long n) {
+        try {
+            return joinInfos(f);
+        } catch (RuntimeException e) {
+            return transactionInfos(n);
+        }
     }
 
     private static JsonNode joinInfos(java.util.concurrent.CompletableFuture<JsonNode> f) {

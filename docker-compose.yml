@@ -35,6 +35,9 @@ services:
       context: .
       dockerfile: deploy/Dockerfile
     image: openchain-intelligence/app:0.1.0-SNAPSHOT
+    # Without a limit the JVM sizes its heap from the whole Docker VM (75%) and the kernel kills it under memory pressure
+    # (observed 2026-11-09 while a test suite ran on the same Docker host). Heap = 75% of this limit.
+    mem_limit: ${OCI_APP_MEMORY_LIMIT:-4g}
     depends_on:
       postgres:
         condition: service_healthy
