@@ -4,6 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { App } from '../app';
 import { authInterceptor, errorInterceptor } from '../core/interceptors';
 import { mockBackendInterceptor } from '../core/mock/mock-backend.interceptor';
+import { ApiService } from '../core/api.service';
 import { SettingsService } from '../core/settings.service';
 import { NAV_ITEMS } from './navigation';
 import { Shell } from './shell';
@@ -14,7 +15,11 @@ const SECRET = 'oci_demo_7f3a_9c1d2e3f4a5b6c7d8e9f';
 describe('App shell', () => {
   let router: Router;
   let settings: SettingsService;
+  let initialUrl: string;
   beforeEach(() => {
+    // the shell (sidebar, shortcuts, palette) belongs to the console pages; '/' is the public landing page
+    initialUrl = location.pathname + location.search;
+    history.replaceState(null, '', '/overview');
     TestBed.configureTestingModule({
       providers: [provideRouter([]), provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, mockBackendInterceptor]))],
     });
@@ -25,7 +30,10 @@ describe('App shell', () => {
     vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
   });
 
-  afterEach(() => document.querySelectorAll('.cdk-overlay-container').forEach((c) => c.replaceChildren()));
+  afterEach(() => {
+    document.querySelectorAll('.cdk-overlay-container').forEach((c) => c.replaceChildren());
+    history.replaceState(null, '', initialUrl);
+  });
 
   const settle = async (f: ComponentFixture<unknown>, ms = 300) => {
     await f.whenStable();
@@ -109,5 +117,31 @@ describe('App shell', () => {
     expect(pop.textContent).toContain('Mock data');
     expect(pop.textContent?.toLowerCase()).not.toContain('workspace');
     f.destroy();
+  });
+
+  describe('on the public landing page', () => {
+    beforeEach(() => history.replaceState(null, '', '/'));
+
+    it('renders without the console chrome and ignores console shortcuts', async () => {
+      const f = await mount();
+      const el = f.nativeElement as HTMLElement;
+      expect(el.classList).toContain('bare');
+      expect(el.querySelector('.side')).toBeNull();
+      expect(el.querySelector('main#main')).not.toBeNull();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g' }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
+      await settle(f);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(TestBed.inject(Shell).help()).toBe(false);
+      f.destroy();
+    });
+
+    it('does not call the API before the visitor opens the console', async () => {
+      const api = TestBed.inject(ApiService);
+      const spy = vi.spyOn(api, 'dashboard');
+      TestBed.inject(Shell).refresh();
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,12 +1,12 @@
 import { Routes } from '@angular/router';
 import { MATERIAL_DEFAULTS } from '../material-defaults';
 
-const t = (s: string) => `${s} – OpenChain Intelligence`;
+const t = (s: string) => `${s} – ChainSentinel`;
 
 /** Every page, under one parent route whose environment injector carries the Material defaults (loaded lazily). */
 export const FEATURE_ROUTES: Routes = [
   { path: '', providers: MATERIAL_DEFAULTS, children: [
-  { path: '', title: t('Overview'), loadComponent: () => import('./overview/overview').then((m) => m.OverviewPage) },
+  { path: 'overview', title: t('Overview'), loadComponent: () => import('./overview/overview').then((m) => m.OverviewPage) },
   { path: 'explorer', title: t('Explorer'), loadComponent: () => import('./explorer/explorer').then((m) => m.ExplorerPage) },
   { path: 'wallets/:network/:address', title: t('Wallet'), loadComponent: () => import('./wallet/wallet').then((m) => m.WalletPage) },
   { path: 'risk', title: t('Wallet risk'), loadComponent: () => import('./risk/risk').then((m) => m.RiskPage) },

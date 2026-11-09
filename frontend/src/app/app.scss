@@ -1,6 +1,7 @@
 :host { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); min-height: 100vh; background: var(--bg); transition: grid-template-columns var(--t-med) var(--ease); }
 :host(.collapsed) { grid-template-columns: var(--rail-w-collapsed) minmax(0, 1fr); }
 :host(.mobile) { grid-template-columns: minmax(0, 1fr); }
+:host(.bare) { display: block; background: none; }
 .skip { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--surface); padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-control); }
 .skip:focus { left: 8px; }
 main { min-width: 0; }
@@ -31,6 +32,8 @@ button { font: inherit; color: inherit; }
 .mark { width: 22px; height: 22px; flex: none; }
 .mark-bg { fill: var(--accent); }
 .m-bar { fill: var(--accent-ink); }
+.m-line { fill: none; stroke: var(--accent-ink); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.m-ring { fill: none; stroke: var(--accent-ink); stroke-width: 1.6; }
 .env-text, .user-text { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
 .product { font-weight: 600; font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
 .env-line { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

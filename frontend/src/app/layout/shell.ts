@@ -1,5 +1,6 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ApiService } from '../core/api.service';
 import { Dashboard } from '../core/models';
@@ -27,6 +28,11 @@ export interface EnvironmentInfo {
  * sidebar collapse (persisted) and mobile drawer, command palette and shortcut help, plus the counts and environment
  * read from GET /dashboard (refreshed every minute and after alert changes).
  */
+/** True for the public landing page URL ('/', with or without query string or fragment). */
+export function isLandingUrl(url: string): boolean {
+  return url.split(/[?#]/)[0].replace(/\/+$/, '') === '';
+}
+
 @Injectable({ providedIn: 'root' })
 export class Shell {
   private readonly api = inject(ApiService);
@@ -68,6 +74,8 @@ export class Shell {
   });
 
   constructor() {
+    // the public landing page shows no counts: no API call (and no 401) before the visitor opens the console
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => { if (this.dash() === null) this.refresh(); });
     this.refresh();
     this.timer = setInterval(() => this.refresh(), REFRESH_MS);
     inject(DestroyRef).onDestroy(() => this.timer && clearInterval(this.timer));
@@ -75,6 +83,7 @@ export class Shell {
 
   /** Re-reads the counts (called after an alert changes status). Failures keep the last value: counts are optional. */
   refresh(): void {
+    if (typeof location !== 'undefined' && isLandingUrl(location.pathname)) return;
     this.api.dashboard().subscribe({ next: (d) => this.dash.set(d), error: () => undefined });
   }
 

@@ -1,0 +1,4 @@
+# The landing page is public; the console pages need credentials and hold nothing to index.
+User-agent: *
+Allow: /$
+Disallow: /

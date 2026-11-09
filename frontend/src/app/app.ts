@@ -6,7 +6,7 @@ import { filter, map } from 'rxjs';
 import { ThemeService } from './core/theme.service';
 import { CommandPalette } from './layout/command-palette';
 import { NAV, NAV_ITEMS, NavItem } from './layout/navigation';
-import { Shell, isTypingTarget } from './layout/shell';
+import { Shell, isLandingUrl, isTypingTarget } from './layout/shell';
 import { ShortcutHelp } from './layout/shortcut-help';
 import { ToastOutlet } from './layout/toast-outlet';
 
@@ -27,17 +27,19 @@ type Menu = 'env' | 'user' | null;
     '(document:click)': 'outsideClick($event)',
     '[class.collapsed]': 'docked() && shell.collapsed()',
     '[class.mobile]': '!docked()',
+    '[class.bare]': 'bare()',
   },
   template: `
     <a class="skip" href="#main">Skip to content</a>
+    @if (!bare()) {
     <aside class="side" id="sidebar" aria-label="Sidebar" [class.open]="!docked() && shell.drawerOpen()" [attr.inert]="!docked() && !shell.drawerOpen() ? '' : null"
       (keydown.escape)="closeDrawer()">
       <div class="side-top">
         <div class="pop-wrap">
           <button class="env" type="button" (click)="toggle('env', $event)" [attr.aria-expanded]="menu() === 'env'" aria-controls="env-pop"
-            [attr.aria-label]="'OpenChain Intelligence, ' + shell.env().label + '. Environment details'">
-            <svg class="mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" class="mark-bg"/><rect x="5" y="11" width="2.4" height="4" rx="1" class="m-bar"/><rect x="8.8" y="8.5" width="2.4" height="6.5" rx="1" class="m-bar" opacity="0.8"/><rect x="12.6" y="5" width="2.4" height="10" rx="1" class="m-bar"/></svg>
-            <span class="env-text"><span class="product">OpenChain Intelligence</span><span class="env-line"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span>{{ shell.env().label }}</span></span>
+            [attr.aria-label]="'ChainSentinel, ' + shell.env().label + '. Environment details'">
+            <svg class="mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" class="mark-bg"/><path class="m-line" d="M5.4 13.6 8.8 6.6l5.2 3.6"/><circle class="m-bar" cx="5.4" cy="13.6" r="1.5"/><circle class="m-bar" cx="8.8" cy="6.6" r="1.5"/><circle class="m-ring" cx="14" cy="10.2" r="2.3"/></svg>
+            <span class="env-text"><span class="product">ChainSentinel</span><span class="env-line"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span>{{ shell.env().label }}</span></span>
           </button>
           @if (menu() === 'env') {
             <div class="pop pop--env" id="env-pop" role="region" aria-label="Environment">
@@ -46,7 +48,7 @@ type Menu = 'env' | 'user' | null;
               @if (shell.networkCount()) { <p class="pop-text">{{ shell.networkCount() }} networks configured@if (shell.simulatedNetworks()) {, {{ shell.simulatedNetworks() }} simulated}.</p> }
               <div class="pop-sep"></div>
               <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">Connection settings</a>
-              <a class="pop-item" routerLink="/" (click)="menu.set(null)">Network health on Overview</a>
+              <a class="pop-item" routerLink="/overview" (click)="menu.set(null)">Network health on Overview</a>
             </div>
           }
         </div>
@@ -106,13 +108,16 @@ type Menu = 'env' | 'user' | null;
       </div>
     </aside>
     @if (!docked() && shell.drawerOpen()) { <div class="scrim" (click)="closeDrawer()" aria-hidden="true"></div> }
+    }
 
     <main id="main" tabindex="-1"><router-outlet /></main>
 
     <!-- The palette and the shortcut help (MatDialog) load on first use, prefetched when the browser is idle. -->
-    @defer (when shell.palette(); prefetch on idle) { <oci-command-palette [(open)]="shell.palette" /> }
-    @defer (when shell.help(); prefetch on idle) { <oci-shortcut-help [(open)]="shell.help" /> }
-    <oci-toast-outlet />
+    @if (!bare()) {
+      @defer (when shell.palette(); prefetch on idle) { <oci-command-palette [(open)]="shell.palette" /> }
+      @defer (when shell.help(); prefetch on idle) { <oci-shortcut-help [(open)]="shell.help" /> }
+    }
+    @if (!bare()) { <oci-toast-outlet /> }
   `,
 })
 export class App {
@@ -122,6 +127,11 @@ export class App {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly docked = toSignal(inject(BreakpointObserver).observe(RAIL_DOCKED).pipe(map((s) => s.matches)), { initialValue: true });
   protected readonly nav = NAV;
+  /** The public landing page ('/') renders without the console chrome (sidebar, shortcuts, palette). */
+  protected readonly bare = toSignal(
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd), map(() => isLandingUrl(this.router.url))),
+    { initialValue: isLandingUrl(typeof location === 'undefined' ? '/' : location.pathname) },
+  );
   protected readonly menu = signal<Menu>(null);
   private pendingG = 0;
   private drawerOpener: HTMLElement | null = null;
@@ -174,6 +184,7 @@ export class App {
   }
 
   protected globalKey(e: KeyboardEvent): void {
+    if (this.bare()) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       this.shell.palette.update((o) => !o);

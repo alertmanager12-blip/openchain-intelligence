@@ -19,7 +19,7 @@ export interface NavGroup {
 
 /** Grouped by the analyst's job. Shared by the rail and the command palette. */
 export const NAV: NavGroup[] = [
-  { title: '', items: [{ path: '/', label: 'Overview', exact: true, key: 'o', icon: 'M2.5 2.5h4.5v5h-4.5zM9 2.5h4.5v3H9zM9 7.5h4.5v6H9zM2.5 9.5h4.5v4h-4.5z', keywords: 'dashboard home health' }] },
+  { title: '', items: [{ path: '/overview', label: 'Overview', exact: true, key: 'o', icon: 'M2.5 2.5h4.5v5h-4.5zM9 2.5h4.5v3H9zM9 7.5h4.5v6H9zM2.5 9.5h4.5v4h-4.5z', keywords: 'dashboard home health' }] },
   { title: 'Investigate', items: [
     { path: '/explorer', label: 'Explorer', key: 'e', icon: 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.3 10.3 13.5 13.5', keywords: 'search transaction address lookup' },
     { path: '/risk', label: 'Wallet risk', key: 'r', icon: 'M2 12.5a6 6 0 0 1 12 0M8 12.5 10.8 7', keywords: 'score contributions' },
