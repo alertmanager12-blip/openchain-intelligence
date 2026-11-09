@@ -21,7 +21,9 @@ import { environment } from '../../../environments/environment';
 
 type Section = 'connection' | 'appearance' | 'keys' | 'users';
 
-const SCOPES = ['rules:read', 'rules:write', 'alerts:read', 'alerts:write', 'wallets:read', 'labels:write'];
+// The backend's permissions (Scopes.java): an unknown one is rejected when the key is created.
+const SCOPES = ['wallet:read', 'transaction:read', 'risk:read', 'investigation:read', 'alerts:read', 'alerts:write', 'rules:read',
+  'rules:write', 'webhooks:read', 'webhooks:write', 'labels:report', 'watchlist:write', 'keys:admin'];
 
 @Component({
   selector: 'oci-settings',

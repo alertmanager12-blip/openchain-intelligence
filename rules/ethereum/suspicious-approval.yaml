@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: suspicious-approval
-version: 1.0.0
+version: 1.1.0
 name: Unlimited approval to a young or unverified contract
 description: An unlimited ERC-20 allowance granted to a contract spender that is less than 7 days old or unverified, excluding well-known routers.
 author: openchain-community
@@ -36,17 +36,49 @@ conditions:
             - "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"
             - "0x1111111254eeb25477b68fb85ed929f73a960582"
             - "0x000000000022d473030f116ddee9f6b43ac78ba3"
+    # watchlist scope: the whole chain while the operator watchlist is empty, else only watched wallets
+    - logic: OR
+      rules:
+        - { field: wallet.watchlisted, operator: EQUALS, value: true }
+      groups:
+        - logic: NOT
+          rules:
+            - { field: watchlist.active, operator: EQUALS, value: true }
 severity: HIGH
 evidenceLevel: RISK_SIGNAL
 cooldown: 6h
 dedupKey: "{{rule.id}}:{{event.approval.owner}}:{{event.approval.spender}}"
 expectedConfidence: 0.5
 documentation: |
+  1.1.0 (watchlist): while the operator watchlist is empty every owner is considered; once it lists the
+  organisation's own wallets, only allowances granted by a watched wallet (wallet.watchlisted = the owner).
   Unlimited allowances to freshly deployed or unverified contracts are the main vector of approval-phishing
   "wallet drainer" kits. Known routers (Uniswap Universal Router, 1inch v5, Permit2) are excluded with a NOT group.
   New legitimate protocols also start young and sometimes unverified: this is a RISK_SIGNAL prompting the owner to
   review (and possibly revoke) the allowance, not evidence against the spender's operators.
 examples:
+  - name: with a watchlist, an approval granted by an unwatched owner is ignored
+    expect: NO_MATCH
+    event:
+      fields:
+        approval.owner: "0xaaaa000000000000000000000000000000000001"
+        approval.spender: "0xbad0000000000000000000000000000000000bad"
+        approval.unlimited: true
+        approval.spender_is_contract: true
+        approval.spender_age_days: 1
+        watchlist.active: true
+        wallet.watchlisted: false
+  - name: with a watchlist, an approval granted by one of our watched wallets matches
+    expect: MATCH
+    event:
+      fields:
+        approval.owner: "0xaaaa000000000000000000000000000000000001"
+        approval.spender: "0xbad0000000000000000000000000000000000bad"
+        approval.unlimited: true
+        approval.spender_is_contract: true
+        approval.spender_age_days: 1
+        watchlist.active: true
+        wallet.watchlisted: true
   - name: unlimited approval to a 1-day-old contract matches
     expect: MATCH
     event:

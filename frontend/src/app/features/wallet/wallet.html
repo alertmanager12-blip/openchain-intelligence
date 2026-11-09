@@ -1,5 +1,8 @@
 <div class="page">
   <oci-page-header [crumbs]="crumbs()">
+    <button matButton="outlined" type="button" data-testid="watch" [disabled]="watchBusy() || !watchlist.value()" (click)="toggleWatch()"
+      [matTooltip]="watched() ? 'One of your wallets: behavioural rules focus on it' : 'Add to your own wallets: behavioural rules will focus on it'">
+      {{ watched() ? 'Unwatch' : 'Watch' }}</button>
     <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">Risk breakdown</a>
     <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
   </oci-page-header>

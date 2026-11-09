@@ -115,4 +115,23 @@ class KnownTransfersFallbackTest {
         assertThat(ctx.getBean(InvestigationController.class).analysis(ME.value(), "polygon").limitations())
                 .anySatisfy(l -> assertThat(l).contains("withheld until 30 days of observation"));
     }
+
+    @Test void transfersCarryWatchlistFieldsOnceAWalletIsWatched() {
+        var watch = ctx.getBean(io.openchain.app.watchlist.WatchlistService.class);
+        // own addresses: the other tests count the transfers of ME
+        Address treasury = new Address(Network.POLYGON, "0x" + "7".repeat(40)), payer = new Address(Network.POLYGON, "0x" + "8".repeat(40));
+        var entry = watch.add(treasury, "Treasury", "test").orElseThrow();
+        try {
+            transfer(ctx.getBean(TokenRegistry.class), ctx.getBean(TokenRegistry.class).resolve(Network.POLYGON, USDT_POLYGON), "0xtx9", 0, 109,
+                    Instant.parse("2026-11-09T10:09:00Z"), payer, treasury, 2_000_000);
+            var e = ctx.getBean(EventHistory.class).range(null, null, Network.POLYGON, 1000).stream()
+                    .filter(x -> "0xtx9".equals(x.field("transaction.hash"))).findFirst().orElseThrow();
+            assertThat(e.field("watchlist.active")).isEqualTo(true);
+            assertThat(e.field("wallet.watchlisted")).isEqualTo(false);      // sender: payer
+            assertThat(e.field("counterparty.watchlisted")).isEqualTo(true); // recipient: the watched treasury
+        } finally {
+            watch.remove(entry.id());
+        }
+        assertThat(watch.active()).isFalse();
+    }
 }

@@ -123,6 +123,26 @@ is_contract,age_days,sanctioned*}`, `contract.{address,event,method,new_owner,ve
 `signal.{type,severity,confidence,evidence_level}`, `internal.{hop,origin_chain}`, `alert.{id,rule_id,severity,
 group_key}` (`*` = source-backed). The authoritative list is `FieldCatalog.defaults()`; deployments may extend it.
 
+## Watchlist scope
+
+`fund-splitting`, `suspicious-wallet` and `suspicious-approval` describe behaviours that are common on a busy chain
+(exchanges, routers, payout wallets). They carry this group:
+
+```yaml
+    - logic: OR
+      rules:
+        - { field: wallet.watchlisted, operator: EQUALS, value: true }
+      groups:
+        - logic: NOT
+          rules:
+            - { field: watchlist.active, operator: EQUALS, value: true }
+```
+
+While the operator watchlist (`/api/v1/watchlist`, console page *Watchlist*) is empty, `watchlist.active` is false and the
+rule covers the whole chain; once the organisation's own wallets are listed, only those wallets (and, for
+`suspicious-wallet`, transfers to them) are considered. `NOT(active == true)` rather than `active == false` keeps
+events without the field (older tests, other sources) in scope.
+
 ## Your notification routing survives rule pack updates
 
 Rules of this pack ship with `actions: [{type: WEBHOOK, connectorId: default-webhook}]`. When an operator changes the

@@ -67,6 +67,7 @@ public class PersistenceConfiguration {
         @Bean ConnectorRepository connectorRepository() { return new InMemoryConnectorRepository(); }
         @Bean RuleRepository ruleRepository() { return new InMemoryRuleRepository(); }
         @Bean LabelReportRepository labelReportRepository() { return new InMemoryLabelReportRepository(); }
+        @Bean io.openchain.app.watchlist.WatchlistRepository watchlistRepository() { return new io.openchain.app.watchlist.InMemoryWatchlistRepository(); }
         @Bean FreezeBackfillStore freezeBackfillStore() { return new InMemoryFreezeBackfillStore(); }
         @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore() { return new io.openchain.app.history.InMemoryAddressHistoryStore(); }
 
@@ -110,6 +111,9 @@ public class PersistenceConfiguration {
         @Bean ConnectorRepository connectorRepository(NamedParameterJdbcTemplate jdbc, SecretCipher cipher) { return new JdbcConnectorRepository(jdbc, cipher); }
         @Bean RuleRepository ruleRepository(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) { return new JdbcRuleRepository(jdbc, tx); }
         @Bean LabelReportRepository labelReportRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcLabelReportRepository(jdbc); }
+        @Bean io.openchain.app.watchlist.WatchlistRepository watchlistRepository(NamedParameterJdbcTemplate jdbc) {
+            return new io.openchain.app.watchlist.JdbcWatchlistRepository(jdbc);
+        }
         @Bean FreezeBackfillStore freezeBackfillStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, TokenRegistry tokens) {
             return new JdbcFreezeBackfillStore(jdbc, tx, tokens);
         }

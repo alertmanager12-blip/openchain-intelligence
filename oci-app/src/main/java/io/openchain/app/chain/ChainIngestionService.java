@@ -550,6 +550,26 @@ public class ChainIngestionService {
 
     private final Map<Network, Long> reorgCount = new ConcurrentHashMap<>();
 
+    /** The operator's watched wallets (rule fields wallet/counterparty.watchlisted, watchlist.active); none by default. */
+    public interface Watchlist {
+        boolean isWatched(Address a);
+        boolean active();
+    }
+
+    private volatile Watchlist watchlist = new Watchlist() {
+        @Override public boolean isWatched(Address a) { return false; }
+        @Override public boolean active() { return false; }
+    };
+
+    public void setWatchlist(Watchlist w) { if (w != null) this.watchlist = w; }
+
+    private void putWatchlist(Map<String, Object> fields, Address wallet, Address counterparty) {
+        Watchlist w = watchlist;
+        fields.put("watchlist.active", w.active());
+        if (wallet != null) fields.put("wallet.watchlisted", w.isWatched(wallet));
+        if (counterparty != null) fields.put("counterparty.watchlisted", w.isWatched(counterparty));
+    }
+
     /** Time spent per network (nanoseconds): indexer passes, event processing, and waiting for the processing lock. */
     private final Map<Network, java.util.concurrent.atomic.LongAdder> pollNanos = new ConcurrentHashMap<>(),
             processNanos = new ConcurrentHashMap<>(), lockWaitNanos = new ConcurrentHashMap<>();
@@ -655,6 +675,7 @@ public class ChainIngestionService {
         if (firstSeen != null && observedLongEnough(e.network(), e.eventTime())) {
             fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
         }
+        putWatchlist(fields, owner, null); // wallet.watchlisted = the owner who granted the allowance
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);
     }
@@ -684,6 +705,7 @@ public class ChainIngestionService {
         putLabels(fields, "counterparty", f.to());
         WalletProfile cp = intelligence.profiles().profileOrEmpty(f.to());
         if (aged) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
+        putWatchlist(fields, f.from(), f.to());
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);
     }

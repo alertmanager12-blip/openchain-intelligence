@@ -342,6 +342,16 @@ export interface Alert {
   history: AlertHistoryEntry[];
 }
 
+/** One of the organisation's own wallets (GET /watchlist). */
+export interface WatchlistEntry {
+  id: string;
+  network: NetworkId;
+  address: string;
+  name: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 /** Noise report of one rule (GET /rules/noise): alert volume and false-positive rate among closed alerts. */
 export interface RuleNoise {
   ruleId: string;

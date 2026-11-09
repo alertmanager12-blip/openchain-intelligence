@@ -73,7 +73,7 @@ du pack « actif par défaut » plutôt que de cacher le bruit.
 
 ## Phase 1 — Intelligence core fiable
 
-> **Priorité ajoutée après la phase 0 : liste de surveillance.** Les portefeuilles du client (adresses de dépôt, trésorerie)
+> **Fait (2026-11-09) :** liste de surveillance (API, page, bouton portefeuille, champs de règle, règles du pack). **Priorité ajoutée après la phase 0 : liste de surveillance.** Les portefeuilles du client (adresses de dépôt, trésorerie)
 > et leurs contreparties directes ; `wallet.watchlisted` / `counterparty.watchlisted` renseignés ; les règles
 > comportementales du pack ciblent par défaut ce périmètre. C'est ce qui rend les alertes exploitables pour un PSP.
 

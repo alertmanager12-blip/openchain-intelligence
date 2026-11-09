@@ -37,6 +37,8 @@ public final class PopulatedFields {
             "wallet.address", "wallet.balance", "wallet.risk_score", "wallet.risk_level", "wallet.age_days", "wallet.tx_count",
             "wallet.labels", "wallet.sanctioned", "counterparty.address", "counterparty.risk_score", "counterparty.labels",
             "counterparty.age_days", "counterparty.sanctioned",
+            // operator watchlist (WatchlistService): every enriched transfer and approval
+            "wallet.watchlisted", "counterparty.watchlisted", "watchlist.active",
             // DETECTION_SIGNAL events
             "signal.type", "signal.severity", "signal.confidence", "signal.evidence_level",
             // INTERNAL_EVENT connector

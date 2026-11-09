@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(6);
-        assertThat(first.targetSchemaVersion).isEqualTo("6");
+        assertThat(first.migrationsExecuted).isEqualTo(7);
+        assertThat(first.targetSchemaVersion).isEqualTo("7");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -340,6 +340,19 @@ class JdbcRepositoriesPersistenceTest {
                 .addHistory(new Alert.HistoryEntry(AlertStatus.PENDING, AlertStatus.RESOLVED, "analyst", T0.plusSeconds(9), null)).build());
         assertThat(repo.findOpenByDedupKey("rule-a", "k1")).isEmpty();
         assertThat(repo.findById("a1").orElseThrow().history()).hasSize(3);
+    }
+
+    @Test
+    void watchlistEntriesAreUniquePerNetworkAndAddress() {
+        var repo = new io.openchain.app.watchlist.JdbcWatchlistRepository(jdbc);
+        var e = new io.openchain.app.watchlist.WatchlistRepository.Entry("wl-1", "tron", "TAddr1", "Hot wallet", "alice", T0);
+        org.assertj.core.api.Assertions.assertThat(repo.insert(e)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(repo.insert(new io.openchain.app.watchlist.WatchlistRepository.Entry("wl-2", "tron",
+                "TAddr1", null, "bob", T0))).isFalse(); // same (network, address)
+        org.assertj.core.api.Assertions.assertThat(new io.openchain.app.watchlist.JdbcWatchlistRepository(jdbc).findAll())
+                .singleElement().isEqualTo(e);
+        org.assertj.core.api.Assertions.assertThat(repo.delete("wl-1")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(repo.findAll()).isEmpty();
     }
 
     @Test

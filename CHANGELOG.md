@@ -8,6 +8,12 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 1 — watchlist)
+
+- **Watchlist of the organisation's own wallets** (`GET/POST/DELETE /api/v1/watchlist`, permission `watchlist:write` for ANALYST and above, `V7__watchlist`), a *Watchlist* page and a *Watch / Unwatch* button on the wallet page. Every transfer carries `wallet.watchlisted`, `counterparty.watchlisted` and `watchlist.active`; approvals carry `wallet.watchlisted` for the owner.
+- **Behavioural pack rules scope to it**: `fund-splitting` 1.3.0, `suspicious-wallet` 1.1.0 and `suspicious-approval` 1.1.0 cover the whole chain while the watchlist is empty and only the watched wallets (and transfers to them for `suspicious-wallet`) once it is not. Sanctions, issuer freezes, large transfers and draining keep covering the whole chain.
+- Console: the API key form offered permissions that do not exist on the server (`wallets:read`, `labels:write`, rejected at creation); it now lists the server's permissions.
+
 ### Fixed (after phase 0)
 
 - **TRON fell behind during business hours** (TronGrid ~2.3 s and ~675 kB per block, measured 2026-11-09; indexing 6 blocks/min for 20 produced). Measured with new per-network timers (`oci_indexer_poll_seconds`, `oci_process_seconds`, `oci_process_lock_wait_seconds`): processing was not the bottleneck, the pass rhythm was. A real chain is now polled again at once while it is behind (it waited the poll interval after every short pass), indexes 10 blocks per pass (was 2, a limit from the shared-thread era), TRON fetches the next 4 confirmed blocks ahead in parallel, and the head is cached for one TRON block (3 s).

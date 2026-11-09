@@ -56,7 +56,9 @@ public final class FieldCatalog {
             new FieldDef("wallet.age_days", FieldType.INTEGER, "Days since first on-chain activity"),
             new FieldDef("wallet.tx_count", FieldType.INTEGER, "Known transaction count"),
             new FieldDef("wallet.labels", FieldType.STRING, "Comma-separated labels (exchange, bridge, ...)"),
-            new FieldDef("wallet.watchlisted", FieldType.BOOLEAN, "Address is on an operator watchlist"),
+            new FieldDef("wallet.watchlisted", FieldType.BOOLEAN, "Sender (approvals: owner) is on the operator watchlist"),
+            new FieldDef("counterparty.watchlisted", FieldType.BOOLEAN, "Recipient is on the operator watchlist"),
+            new FieldDef("watchlist.active", FieldType.BOOLEAN, "The operator watchlist is not empty (behavioural pack rules then scope to it)"),
             new FieldDef("wallet.sanctioned", FieldType.BOOLEAN, "Listed by an official sanctions source", true),
             // counterparty
             new FieldDef("counterparty.address", FieldType.STRING, "Other side of the transfer"),

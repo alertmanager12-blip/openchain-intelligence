@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, Webhook } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -72,6 +72,17 @@ export class ApiService {
   rules(): Observable<Page<Rule>> {
     return this.http.get<Page<Rule>>(`${this.base}/rules`);
   }
+  // --- watchlist (the organisation's own wallets)
+  watchlist(): Observable<WatchlistEntry[]> {
+    return this.http.get<WatchlistEntry[]>(`${this.base}/watchlist`);
+  }
+  addToWatchlist(network: NetworkId, address: string, name: string | null): Observable<WatchlistEntry> {
+    return this.http.post<WatchlistEntry>(`${this.base}/watchlist`, { network, address, name });
+  }
+  removeFromWatchlist(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/watchlist/${this.enc(id)}`);
+  }
+
   ruleNoise(hours = 24): Observable<RuleNoise[]> {
     return this.http.get<RuleNoise[]>(`${this.base}/rules/noise`, { params: { hours } });
   }

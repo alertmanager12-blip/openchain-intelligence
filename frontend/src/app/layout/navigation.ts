@@ -31,6 +31,7 @@ export const NAV: NavGroup[] = [
     { path: '/rules/builder', label: 'Rule builder', key: 'b', icon: 'M2.5 4h7M2.5 8h11M2.5 12h5M11 2.5v3M5.5 6.5v3M9.5 10.5v3', keywords: 'create rule conditions' },
     { path: '/rules/code', label: 'Rules as code', key: 'c', count: 'rulesEnabled', icon: 'M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4', keywords: 'yaml import export stored rules enable' },
     { path: '/rules/simulator', label: 'Rule simulator', key: 'd', icon: 'M4 2.5v11l9-5.5z', keywords: 'dry run test replay' },
+    { path: '/watchlist', label: 'Watchlist', key: 'w', icon: 'M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z', keywords: 'own wallets deposit treasury monitored scope' },
   ] },
   { title: 'Configure', items: [
     { path: '/integrations', label: 'Integrations', key: 'i', icon: 'M6 2.5v3M10 2.5v3M4.5 5.5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11.5v2', keywords: 'webhook slack discord telegram connectors' },

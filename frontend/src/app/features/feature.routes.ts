@@ -16,6 +16,7 @@ export const FEATURE_ROUTES: Routes = [
   { path: 'rules/builder', title: t('Rule builder'), loadComponent: () => import('./rule-builder/rule-builder').then((m) => m.RuleBuilderPage) },
   { path: 'rules/code', title: t('Rules as code'), loadComponent: () => import('./rule-code/rule-code').then((m) => m.RuleCodePage) },
   { path: 'rules/simulator', title: t('Rule simulator'), loadComponent: () => import('./simulator/simulator').then((m) => m.SimulatorPage) },
+  { path: 'watchlist', title: t('Watchlist'), loadComponent: () => import('./watchlist/watchlist').then((m) => m.WatchlistPage) },
   { path: 'integrations', title: t('Integrations'), loadComponent: () => import('./integrations/integrations').then((m) => m.IntegrationsPage) },
   { path: 'community', title: t('Community labels'), loadComponent: () => import('./community/community').then((m) => m.CommunityPage) },
   { path: 'settings', title: t('Settings'), loadComponent: () => import('./settings/settings').then((m) => m.SettingsPage) },

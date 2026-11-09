@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: fund-splitting
-version: 1.2.0
+version: 1.3.0
 name: Fund splitting (more than 30 distinct recipients in 3 minutes)
 description: One sender transfers meaningful amounts of known tokens to more than 30 distinct recipients within 3 minutes.
 author: openchain-community
@@ -51,6 +51,14 @@ conditions:
           rules:
             - { field: transaction.token.symbol, operator: IN, value: [BNB, WBNB, POL, MATIC] }
             - { field: transaction.amount, operator: GREATER_THAN_OR_EQUAL, value: "0.02" }
+    # watchlist scope: the whole chain while the operator watchlist is empty, else only watched wallets
+    - logic: OR
+      rules:
+        - { field: wallet.watchlisted, operator: EQUALS, value: true }
+      groups:
+        - logic: NOT
+          rules:
+            - { field: watchlist.active, operator: EQUALS, value: true }
 aggregation:
   window: { preset: 3m }
   groupBy: [transaction.from]
@@ -66,6 +74,8 @@ actions:
   - type: WEBHOOK
     connectorId: default-webhook
 documentation: |
+  1.3.0 (watchlist): while the operator watchlist (GET/POST /api/v1/watchlist) is empty the rule covers the whole
+  chain; once it lists the organisation's own wallets, only watched senders are considered.
   1.2.0 (2026-11-09, measured on real Ethereum mainnet + TRON traffic): more than 30 distinct recipients within 3 minutes
   (was 10), each transfer above a minimum value (10 USDT/USDC/DAI, 0.005 ETH/WETH, 50 TRX, 0.02 BNB/POL), tokens unknown to
   the token registry (airdrop and address-poisoning spam) and mints (zero-address sender) excluded: 83% fewer alerts than
@@ -139,3 +149,19 @@ tests:
         network: tron
         fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: "TRecipient{{i}}", transaction.amount: "1000", transaction.token.symbol: USDT }
     expectTriggers: 0
+  - name: with a watchlist, an unwatched sender does not trigger
+    events:
+      - repeat: 31
+        every: 5s
+        type: TOKEN_TRANSFER
+        network: tron
+        fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: "TRecipient{{i}}", transaction.amount: "1000", transaction.token.symbol: USDT, watchlist.active: true, wallet.watchlisted: false }
+    expectTriggers: 0
+  - name: with a watchlist, a watched sender still triggers
+    events:
+      - repeat: 31
+        every: 5s
+        type: TOKEN_TRANSFER
+        network: tron
+        fields: { transaction.from: TSplitter111111111111111111111111, transaction.to: "TRecipient{{i}}", transaction.amount: "1000", transaction.token.symbol: USDT, watchlist.active: true, wallet.watchlisted: true }
+    expectTriggers: 1

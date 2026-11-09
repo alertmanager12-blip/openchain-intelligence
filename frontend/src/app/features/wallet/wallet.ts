@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, linkedSignal, signal } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import { toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
+import { Toasts } from '../../core/toasts';
 import { Counterparty, NetworkId, Page, ChainTransaction } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
@@ -26,6 +29,34 @@ const RISK_ORDER = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 })
 export class WalletPage {
   private readonly api = inject(ApiService);
+  private readonly toasts = inject(Toasts);
+
+  /** Whether this wallet is one of the organisation's own wallets (watchlist). */
+  readonly watchlist = apiResource({ params: () => ({}), stream: () => this.api.watchlist() });
+  readonly watched = computed(() => (this.watchlist.value() ?? []).find((e) => e.network === this.network()
+    && e.address.toLowerCase() === this.address().toLowerCase()) ?? null);
+  readonly watchBusy = signal(false);
+
+  async toggleWatch(): Promise<void> {
+    this.watchBusy.set(true);
+    try {
+      const w = this.watched();
+      if (w) {
+        await firstValueFrom(this.api.removeFromWatchlist(w.id));
+        this.watchlist.update((l) => (l ?? []).filter((x) => x.id !== w.id));
+        this.toasts.success('Wallet no longer watched');
+      } else {
+        const e = await firstValueFrom(this.api.addToWatchlist(this.network(), this.address(), null));
+        this.watchlist.update((l) => [...(l ?? []), e]);
+        this.toasts.success('Wallet watched', 'Behavioural rules now focus on your watched wallets.');
+      }
+    } catch (err) {
+      const a = toApiError(err);
+      this.toasts.error('Watchlist not updated', a.detail ?? a.title);
+    } finally {
+      this.watchBusy.set(false);
+    }
+  }
   private readonly router = inject(Router);
   readonly network = input.required<NetworkId>();
   readonly address = input.required<string>();

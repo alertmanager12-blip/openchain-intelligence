@@ -164,6 +164,23 @@ on('POST', '/webhooks', (req) => {
   const secret = 'whsec_demo_' + Array.from(crypto.getRandomValues(new Uint8Array(18)), (x) => x.toString(16).padStart(2, '0')).join('');
   return { ...w, secret: b.type === 'WEBHOOK' ? secret : undefined };
 });
+on('GET', '/watchlist', () => mockDb().watchlist);
+on('POST', '/watchlist', (req) => {
+  const b = body<{ network: NetworkId; address: string; name: string | null }>(req);
+  if (!b.network || !b.address?.trim()) throw new ProblemError(400, 'Bad request', "'network' and 'address' are required");
+  const address = b.network === 'tron' ? b.address.trim() : b.address.trim().toLowerCase();
+  if (mockDb().watchlist.some((w) => w.network === b.network && w.address === address)) throw new ProblemError(409, 'Conflict', 'this wallet is already on the watchlist');
+  const e = { id: mockDb().nextId('wl'), network: b.network, address, name: b.name?.trim() || null, createdBy: 'demo', createdAt: now() };
+  mockDb().watchlist.push(e);
+  return e;
+});
+on('DELETE', '/watchlist/([^/]+)', (_req, m) => {
+  const list = mockDb().watchlist;
+  const i = list.findIndex((w) => w.id === m[1]);
+  if (i < 0) throw new ProblemError(404, 'Not found', `no watchlist entry '${m[1]}'`);
+  list.splice(i, 1);
+  return null;
+});
 on('DELETE', '/webhooks/([^/]+)', (_req, m) => {
   const list = mockDb().webhooks;
   const i = list.findIndex((w) => w.id === m[1]);

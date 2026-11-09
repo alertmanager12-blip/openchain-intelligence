@@ -29,9 +29,10 @@ Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served 
 | `alerts:read` / `alerts:write` | alert read / acknowledge, status, assign, comment |
 | `webhooks:read` / `webhooks:write` | connector listing / connector create, delete, test |
 | `labels:report` | submit and list label reports |
+| `watchlist:write` | add and remove the organisation's own wallets (reading the watchlist needs `wallet:read`) |
 | `keys:admin` | API keys, users, operational (actuator) endpoints |
 
-Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
+Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `watchlist:write`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
 
 ## Errors — RFC 9457 `application/problem+json`
 
@@ -229,6 +230,9 @@ triggering event is re-indexed, otherwise these fields stay null.
 | GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
 | GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | investigation:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
 | GET | `/labels?network=&address=&category=` | wallet:read | Labels with source, evidence level, status |
+| GET | `/watchlist` | wallet:read | The organisation's own wallets `[{ id, network, address, name, createdBy, createdAt }]`, oldest first |
+| POST | `/watchlist` | watchlist:write | `{ network, address, name? }` → 201 (address validated and canonicalised); 409 when already watched. As soon as the list is not empty, the behavioural pack rules (`fund-splitting`, `suspicious-wallet`, `suspicious-approval`) only consider watched wallets and their direct counterparties (fields `wallet.watchlisted`, `counterparty.watchlisted`, `watchlist.active`) |
+| DELETE | `/watchlist/{id}` | watchlist:write | 204; 404 when unknown |
 | POST | `/labels/reports` | labels:report | Submit a community report `{ network, address, category, description, evidenceUrls[] }`; enters moderation, never auto-published |
 
 ### Administration and SPA helpers

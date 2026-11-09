@@ -1,9 +1,5 @@
 /* In-memory fake data for mock mode. Every address and hash here is fictitious ("fa4ede30" ≈ fake demo). */
-import {
-  ALERT_STATUSES, Alert, AlertStatus, ApiKey, Balance, Dashboard, ChainTransaction, Counterparty, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, HistoryCoverage, Label,
-  LabelReport, NETWORKS, NetworkId, NetworkStatus, RiskContribution, RiskLevel, RiskScore, Rule, RuleTestResult, SEVERITIES, Severity,
-  Signal, Token, TransactionAnalysis, TokenTransfer, User, WalletAnalysis, Webhook,
-} from '../models';
+import { ALERT_STATUSES, Alert, AlertStatus, ApiKey, Balance, ChainTransaction, Counterparty, Dashboard, EvidenceLevel, Exposure, Graph, GraphEdge, GraphNode, HistoryCoverage, Label, LabelReport, NETWORKS, NetworkId, NetworkStatus, RiskContribution, RiskLevel, RiskScore, Rule, RuleTestResult, SEVERITIES, Severity, Signal, Token, TokenTransfer, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from '../models';
 import { RuleDraft, emptyRule, newCondition, newGroup } from '../rules/rule-model';
 import { labelTitle, signalTypeTitle } from '../../shared/explain';
 import { ruleToYaml, yamlToRule } from '../rules/rule-yaml';
@@ -162,6 +158,7 @@ export class MockDb {
   readonly webhooks: Webhook[] = [];
   readonly labels: Label[] = [];
   readonly reports: LabelReport[] = [];
+  readonly watchlist: WatchlistEntry[] = [];
   readonly users: User[] = [];
   readonly apiKeys: ApiKey[] = [];
   readonly signals: Signal[] = [];

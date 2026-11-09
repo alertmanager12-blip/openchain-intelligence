@@ -23,11 +23,13 @@ public final class Scopes {
     public static final String WEBHOOKS_READ = "webhooks:read";
     public static final String WEBHOOKS_WRITE = "webhooks:write";
     public static final String LABELS_REPORT = "labels:report";
+    /** Add and remove watched wallets (reading the watchlist needs wallet:read). */
+    public static final String WATCHLIST_WRITE = "watchlist:write";
     /** API keys, users, operational endpoints. */
     public static final String KEYS_ADMIN = "keys:admin";
 
     public static final List<String> ALL = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, ALERTS_READ,
-            ALERTS_WRITE, RULES_READ, RULES_WRITE, WEBHOOKS_READ, WEBHOOKS_WRITE, LABELS_REPORT, KEYS_ADMIN);
+            ALERTS_WRITE, RULES_READ, RULES_WRITE, WEBHOOKS_READ, WEBHOOKS_WRITE, LABELS_REPORT, WATCHLIST_WRITE, KEYS_ADMIN);
 
     public static final List<String> READ = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, ALERTS_READ,
             RULES_READ, WEBHOOKS_READ);
@@ -54,7 +56,7 @@ public final class Scopes {
         switch (role.trim().toUpperCase(Locale.ROOT)) {
             case "ADMIN" -> s.addAll(ALL);
             case "RULE_AUTHOR" -> { s.addAll(forRole("ANALYST")); s.add(RULES_WRITE); }
-            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); }
+            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); s.add(WATCHLIST_WRITE); }
             case "VIEWER" -> s.addAll(READ);
             default -> { }
         }

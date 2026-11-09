@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: suspicious-wallet
-version: 1.0.0
+version: 1.1.0
 name: High USDT volume from a newly active wallet
 description: A wallet younger than 30 days sends more than 100,000 USDT on TRON within one hour.
 author: openchain-community
@@ -24,6 +24,15 @@ conditions:
         - field: wallet.tx_count
           operator: LESS_THAN
           value: 10
+    # watchlist scope: the whole chain while the operator watchlist is empty, else only watched wallets
+    - logic: OR
+      rules:
+        - { field: wallet.watchlisted, operator: EQUALS, value: true }
+        - { field: counterparty.watchlisted, operator: EQUALS, value: true }
+      groups:
+        - logic: NOT
+          rules:
+            - { field: watchlist.active, operator: EQUALS, value: true }
 aggregation:
   window: { duration: 1, unit: HOURS }
   groupBy: [transaction.from]
@@ -41,6 +50,8 @@ actions:
   - type: INTERNAL_EVENT
     connectorId: internal-bus
 documentation: |
+  1.1.0 (watchlist): while the operator watchlist is empty the rule covers the whole chain; once it lists the
+  organisation's own wallets, only transfers from or to a watched wallet are considered.
   Sliding 1h window (event time) per sender over USDT transfers from wallets that are less than 30 days old or
   have fewer than 10 known transactions. Fires when the summed amount exceeds 100,000 USDT.
   Rationale: freshly created wallets moving large volumes quickly is a pattern seen in fund layering, but also in
@@ -95,3 +106,29 @@ tests:
           transaction.from: "TSender{{i}}"
           wallet.age_days: 3
     expectTriggers: 0
+  - name: with a watchlist, transfers between unwatched wallets do not trigger
+    events:
+      - repeat: 3
+        every: 15m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "40000"
+          transaction.from: TNewWallet1111111111111111111111111
+          wallet.age_days: 3
+          watchlist.active: true
+          wallet.watchlisted: false
+          counterparty.watchlisted: false
+    expectTriggers: 0
+  - name: with a watchlist, a new wallet paying one of our watched wallets triggers
+    events:
+      - repeat: 3
+        every: 15m
+        fields:
+          transaction.token.contract: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t
+          transaction.amount: "40000"
+          transaction.from: TNewWallet1111111111111111111111111
+          wallet.age_days: 3
+          watchlist.active: true
+          wallet.watchlisted: false
+          counterparty.watchlisted: true
+    expectTriggers: 1
