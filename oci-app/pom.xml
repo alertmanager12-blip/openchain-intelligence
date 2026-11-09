@@ -21,6 +21,8 @@
     <!-- Only activated when oci.security.oidc.issuer-uri is set (see SecurityConfig); no IdP needed otherwise. -->
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <!-- /actuator/prometheus, scraped by the compose observability profile (Apache-2.0, version managed by Spring Boot) -->
+    <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
     <dependency><groupId>org.springdoc</groupId><artifactId>springdoc-openapi-starter-webmvc-ui</artifactId><version>${springdoc.version}</version></dependency>
 
     <!-- Operator-state persistence (ADR-0004). Active only when spring.datasource.url is set; otherwise the

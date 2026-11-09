@@ -63,7 +63,13 @@ public final class RuleEngine {
     public RuleEngine() { this(EngineConfig.defaults()); }
 
     /** Registers (or replaces, resetting its state) a rule. */
-    public synchronized void register(CompiledRule rule) { rules.put(rule.id(), new Runtime(rule)); }
+    public synchronized void register(CompiledRule rule) { rules.put(rule.id(), new Runtime(rule, false)); }
+
+    /**
+     * Registers a rule that is evaluated even when its {@code enabled} flag is false: for isolated engines that test or
+     * dry-run a rule (embedded tests, simulator), which must work before the rule is enabled. Never used for live ingestion.
+     */
+    public synchronized void registerForEvaluation(CompiledRule rule) { rules.put(rule.id(), new Runtime(rule, true)); }
 
     public synchronized boolean unregister(String ruleId) { return rules.remove(ruleId) != null; }
 
@@ -120,7 +126,7 @@ public final class RuleEngine {
         List<RuleMatch> matches = new ArrayList<>();
         for (Runtime rt : rules.values()) {
             Rule r = rt.rule.rule();
-            if (!r.enabled() || !rt.rule.inScope(e)) continue;
+            if ((!r.enabled() && !rt.evaluateWhenDisabled) || !rt.rule.inScope(e)) continue;
             if (origin.contains(r.id())) { metrics.loopSuppressed.incrementAndGet(); continue; }
             RuleMatch m = switch (rt.rule.kind()) {
                 case STATELESS -> stateless(rt, e, hop, origin);
@@ -332,8 +338,12 @@ public final class RuleEngine {
         final CompiledRule rule;
         final Map<String, SlidingWindow> windows = lru();
         final Map<String, SequenceState> sequences = lru();
+        final boolean evaluateWhenDisabled;
 
-        Runtime(CompiledRule rule) { this.rule = rule; }
+        Runtime(CompiledRule rule, boolean evaluateWhenDisabled) {
+            this.rule = rule;
+            this.evaluateWhenDisabled = evaluateWhenDisabled;
+        }
 
         private <V> Map<String, V> lru() {
             int max = config.maxGroupKeysPerRule();

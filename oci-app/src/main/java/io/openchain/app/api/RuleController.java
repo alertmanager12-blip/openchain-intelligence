@@ -75,8 +75,33 @@ public class RuleController {
     private final JsonMapper json;
     private final Clock clock;
 
+    private final io.openchain.alerting.alert.AlertService alertService;
+
+    /**
+     * Noise report: alerts per rule (total, open, false positives, resolved, created in the last {@code hours}) and the
+     * false-positive rate among closed alerts. The measurement behind rule tuning (roadmap phase 0, task 0.10).
+     */
+    @GetMapping("/noise")
+    public List<Map<String, Object>> noise(@RequestParam(defaultValue = "24") int hours) {
+        if (hours < 1 || hours > 24 * 90) throw ApiException.badRequest("hours must be between 1 and 2160");
+        java.time.Instant since = clock.instant().minus(java.time.Duration.ofHours(hours));
+        return alertService.repository().statsByRule(since).stream().map(s -> {
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
+            m.put("ruleId", s.ruleId());
+            m.put("total", s.total());
+            m.put("open", s.open());
+            m.put("falsePositive", s.falsePositive());
+            m.put("resolved", s.resolved());
+            m.put("recent", s.recent());
+            m.put("windowHours", hours);
+            m.put("falsePositiveRate", s.falsePositiveRate());
+            return m;
+        }).toList();
+    }
+
     public RuleController(RuleRegistry registry, RuleTester tester, FieldCatalog catalog, EventHistory history, OciProperties props,
-                          JsonMapper json, Clock clock) {
+                          JsonMapper json, Clock clock, io.openchain.alerting.alert.AlertService alertService) {
+        this.alertService = alertService;
         this.registry = registry;
         this.tester = tester;
         this.catalog = catalog;
@@ -337,7 +362,8 @@ public class RuleController {
         return new Dto.RuleDto(r.id(), rule.name(), rule.description(), r.enabled(), rule.severity().name(),
                 rule.evidenceLevel() == null ? null : rule.evidenceLevel().name(), v.source(), v.format().name(), v.number(),
                 rule.version(), v.compiledHash(), rule.tags(),
-                rule.scope().networks().stream().map(Network::id).sorted().toList(), r.origin(), r.createdAt(), r.updatedAt());
+                rule.scope().networks().stream().map(Network::id).sorted().toList(), r.origin(), r.createdAt(), r.updatedAt(),
+                RuleRegistry.unreachable(rule));
     }
 
     private static String sha256(String s) {

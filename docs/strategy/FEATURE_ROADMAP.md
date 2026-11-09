@@ -44,6 +44,26 @@ et qu'il réutilise l'API. *Décision à valider.*
 | 0.14 | Implémenter ou retirer les 6 `SignalType` jamais émis | — | intelligence | aucune énumération morte | S |
 
 **Livrables** : défauts D1-D16 fermés ou explicitement documentés ; rapport de bruit avant/après ; CHANGELOG.
+
+### Avancement (2026-11-09)
+
+| Tâche | Statut | Écart par rapport au plan, et pourquoi |
+|---|---|---|
+| 0.1 | fait | `SKIPPED` (migration V6) au lieu d'une file de dead letters ; pas de rejeu automatique des 5 675 anciennes (spam d'alertes périmées) |
+| 0.2 | fait | analyse d'atteignabilité générique (`RuleReachability`) ; le testeur et le simulateur évaluent aussi une règle désactivée |
+| 0.3 | fait | transferts connus de la plateforme, chacun dans son unité (`kind: TRANSFER`) |
+| 0.4 | fait | limites exposées par réseau (`limitations`) ; pas d'approximation du solde TRON |
+| 0.5 | fait | `isContract` nullable : inconnu plutôt que faux ; non résolu sur le graphe (coût RPC) |
+| 0.6 | fait | — |
+| 0.7 | fait | la démo **reste** le défaut (démarrage en 5 minutes) mais démo + chaîne réelle est refusé au démarrage ; mot de passe Grafana inchangé (port local uniquement) |
+| 0.8 | fait | bascule **dans le transport HTTP** ; `FailoverProvider` supprimé (il aurait perdu soldes, approbations, gels, historique) |
+| 0.9 | fait | métriques disponibles seulement ; panneaux Grafana sans données retirés |
+| 0.10 | partiel | rapport de bruit + `fund-splitting` 1.2.0 (−83 % mesuré) + période d'observation des champs d'ancienneté. **Constat** : sur une chaîne entière, les règles comportementales restent bruyantes ; la réponse est une liste de surveillance (portefeuilles du client), à faire en tête de phase 1 |
+| 0.11 | fait | documentation marquée « non implémenté » plutôt que fonctionnalités ajoutées dans l'urgence |
+| 0.12 | fait | — |
+| 0.13 | partiel | PUSH supprimé ; EMAIL reporté (transport SMTP à part entière) |
+| 0.14 | fait | les 6 types retirés ; ils reviendront avec leur détecteur |
+
 **Risques** : 0.10 peut révéler que certaines règles du pack sont structurellement bruyantes sur mainnet → les retirer
 du pack « actif par défaut » plutôt que de cacher le bruit.
 **Tests** : unitaires pour chaque correctif ; intégration (Testcontainers) pour 0.1, 0.3 ; test de fumée étendu
@@ -52,6 +72,10 @@ du pack « actif par défaut » plutôt que de cacher le bruit.
 ---
 
 ## Phase 1 — Intelligence core fiable
+
+> **Priorité ajoutée après la phase 0 : liste de surveillance.** Les portefeuilles du client (adresses de dépôt, trésorerie)
+> et leurs contreparties directes ; `wallet.watchlisted` / `counterparty.watchlisted` renseignés ; les règles
+> comportementales du pack ciblent par défaut ce périmètre. C'est ce qui rend les alertes exploitables pour un PSP.
 
 | Fonctionnalité | Modules | Critère d'acceptation | Complexité |
 |---|---|---|---|

@@ -41,7 +41,7 @@ import org.springframework.stereotype.Service;
  * {@link OutboundHttp} bean (SafeHttpClient + SsrfGuard in production). {@link ConnectorRegistry} has no removal, so
  * each connector is registered through a switchable wrapper; a deleted connector fails every delivery permanently.
  * Targets often embed credentials (Slack/Discord URL paths), so only {@link #masked} forms ever leave this class.
- * TODO: secret rotation (two active secrets, ADR-0009), master key rotation. EMAIL/PUSH need a transport (SMTP, FCM) first.
+ * TODO: secret rotation (two active secrets, ADR-0009), master key rotation. EMAIL needs an SMTP transport first (roadmap phase 0, task 0.13, deferred).
  */
 @Service
 public class WebhookRegistry {

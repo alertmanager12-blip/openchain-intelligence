@@ -9,7 +9,6 @@ import io.openchain.alerting.alert.Priority;
 import io.openchain.alerting.notify.connector.DiscordConnector;
 import io.openchain.alerting.notify.connector.EmailConnector;
 import io.openchain.alerting.notify.connector.InternalEventConnector;
-import io.openchain.alerting.notify.connector.PushConnector;
 import io.openchain.alerting.notify.connector.SlackConnector;
 import io.openchain.alerting.notify.connector.TelegramConnector;
 import io.openchain.alerting.notify.connector.WebhookConnector;
@@ -135,7 +134,7 @@ class ConnectorsTest {
         assertThatThrownBy(() -> new TelegramConnector("tg", token, "1; drop", http)).isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test void emailAndPushStubs() {
+    @Test void emailConnectorBuildsASafeMessage() {
         List<EmailConnector.EmailMessage> mails = new java.util.concurrent.CopyOnWriteArrayList<>();
         EmailConnector.EmailSender mail = mails::add;
         EmailConnector email = new EmailConnector("mail", mail, "alerts@openchain.example", List.of("soc@corp.example"));
@@ -149,11 +148,6 @@ class ConnectorsTest {
         assertThatThrownBy(() -> new EmailConnector("m", mail, "bad", List.of("x@y.example"))).isInstanceOf(IllegalArgumentException.class);
         EmailConnector failing = new EmailConnector("m", m -> { throw new IllegalStateException("smtp down"); }, "a@b.example", List.of("c@d.example"));
         assertThat(failing.send(n).retryable()).isTrue();
-
-        List<PushConnector.PushMessage> pushes = new java.util.concurrent.CopyOnWriteArrayList<>();
-        PushConnector.PushSender push = pushes::add;
-        assertThat(new PushConnector("push", push, "soc-oncall").send(notification(ActionType.PUSH, "push")).success()).isTrue();
-        assertThat(pushes.getFirst().data()).containsEntry("alertId", "alert-1");
     }
 
     @Test void internalEventCarriesLoopProtection() {

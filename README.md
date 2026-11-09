@@ -62,7 +62,7 @@ To **run** OCI you only need Docker. To **develop** it you also need Java, Maven
 | Docker Desktop (or Docker Engine) with Compose v2 | recent | running everything | `docker compose version` |
 | JDK | 21 or newer | building the backend | `java -version` |
 | Maven | 3.9 or newer | building the backend | `mvn -v` |
-| Node.js | exactly the version in `frontend/.nvmrc` (22.23.2) | building the console | `node -v` |
+| Node.js | the version in `frontend/.nvmrc` (22.23.2) for local work; CI and the Docker image build with Node 24 | building the console | `node -v` |
 
 Tips:
 - With [nvm](https://github.com/nvm-sh/nvm), `cd frontend && nvm install && nvm use` picks the right Node version.
@@ -336,7 +336,8 @@ flowchart LR
   IDX --> RE[Rule engine]
   DET --> RE
   RE --> AL[Alerts] --> DLV[Delivery] --> EXT[Webhooks / Slack / Discord / Telegram]
-  AL & SC --> PG[(PostgreSQL)]
+  AL --> PG[(PostgreSQL)]
+  SC --> MEM[(In memory: profiles, signals, scores)]
   UI[Angular console] --> API[REST API v1] --> PG
 ```
 

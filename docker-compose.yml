@@ -52,6 +52,7 @@ services:
       OCI_SECURITY_OIDC_ISSUER_URI: ${OCI_SECURITY_OIDC_ISSUER_URI:-}
       OCI_TELEGRAM_BOT_TOKEN: ${OCI_TELEGRAM_BOT_TOKEN:-}
       OCI_PUBLIC_URL: ${OCI_PUBLIC_URL:-http://localhost:4200}
+      OCI_DEFAULT_CONNECTOR: ${OCI_DEFAULT_CONNECTOR:-}
       # Production: an administrator API key provisioned from the environment (format oci_live_<8 chars>_<32+ chars>;
       # only its hash is stored). Demo mode generates one instead and prints it in the logs.
       OCI_SECURITY_KEYS_0_NAME: ${OCI_ADMIN_KEY_NAME:-admin}
@@ -69,10 +70,11 @@ services:
       OCI_CHAINS_TRON_API_KEY: ${OCI_CHAINS_TRON_API_KEY:-}
       OCI_CHAINS_TRON_START_BLOCK: ${OCI_CHAINS_TRON_START_BLOCK:--100}
       SERVER_PORT: "8080"
-      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
     ports:
-      - "8080:8080"
+      # API only reachable from this host: the console (port 4200) proxies /api to it. Put a TLS reverse proxy in front.
+      - "127.0.0.1:8080:8080"
     read_only: true
     tmpfs:
       - /tmp
@@ -113,8 +115,8 @@ services:
     volumes:
       - ./deploy/otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
 
   prometheus:
     <<: *restart

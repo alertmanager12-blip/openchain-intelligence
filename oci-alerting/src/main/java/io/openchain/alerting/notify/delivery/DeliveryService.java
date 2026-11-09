@@ -29,6 +29,23 @@ public final class DeliveryService {
     private final Supplier<String> ids;
     private volatile Consumer<DeliveryRecord> onDelivered = r -> { };
     private volatile Consumer<DeliveryRecord> onDeadLetter = r -> { };
+    private final java.util.concurrent.atomic.AtomicLong delivered = new java.util.concurrent.atomic.AtomicLong(),
+            deadLettered = new java.util.concurrent.atomic.AtomicLong(), skipped = new java.util.concurrent.atomic.AtomicLong();
+
+    /** Deliveries that reached their connector / ended in dead letter / were skipped (no connector), since start. */
+    public long deliveredCount() { return delivered.get(); }
+    public long deadLetteredCount() { return deadLettered.get(); }
+    public long skippedCount() { return skipped.get(); }
+
+    /** Connector that receives the actions addressed to the rule pack's placeholder ids (see {@link #PLACEHOLDERS}). */
+    private volatile String defaultConnectorId;
+
+    /**
+     * Connector ids used by the shipped rule pack to mean "the operator's default channel". When no connector with such an
+     * id exists, the action goes to {@link #setDefaultConnector the configured default connector}, with that connector's
+     * type; when none is configured, the delivery is SKIPPED (never dead-lettered after a doomed attempt).
+     */
+    public static final java.util.Set<String> PLACEHOLDERS = java.util.Set.of("default-webhook", "default");
 
     public DeliveryService(DeliveryStore store, ConnectorRegistry connectors, BackoffPolicy backoff, Clock clock, Supplier<String> ids) {
         this.store = store;
@@ -46,11 +63,34 @@ public final class DeliveryService {
 
     public void onDeadLetter(Consumer<DeliveryRecord> listener) { this.onDeadLetter = listener; }
 
+    /** @param connectorId default channel for the rule pack's placeholder ids; null or blank = none */
+    public void setDefaultConnector(String connectorId) {
+        this.defaultConnectorId = connectorId == null || connectorId.isBlank() ? null : connectorId.strip();
+    }
+
+    public String defaultConnector() { return defaultConnectorId; }
+
     public DeliveryRecord enqueue(Alert alert, ActionSpec action) {
         Instant now = clock.instant();
         String id = ids.get();
-        Notification n = Notification.of(id, action.type(), action.connectorId(), action.params(), alert, now);
-        return store.save(new DeliveryRecord(id, alert.id(), action.connectorId(), n, DeliveryStatus.PENDING, 0, now,
+        String target = action.connectorId();
+        var type = action.type();
+        if (PLACEHOLDERS.contains(target) && connectors.find(target).isEmpty() && defaultConnectorId != null) {
+            var def = connectors.find(defaultConnectorId);
+            if (def.isPresent()) {
+                target = def.get().id();
+                type = def.get().type(); // the pack says WEBHOOK; the operator's default channel may be Telegram, Slack...
+            }
+        }
+        Notification n = Notification.of(id, type, target, action.params(), alert, now);
+        if (connectors.find(target).isEmpty()) {
+            String why = PLACEHOLDERS.contains(target)
+                    ? "no notification channel configured: set OCI_DEFAULT_CONNECTOR or route the rule to a connector"
+                    : "unknown connector '" + target + "'";
+            skipped.incrementAndGet();
+            return store.save(new DeliveryRecord(id, alert.id(), target, n, DeliveryStatus.SKIPPED, 0, null, why, 0, now, now, null));
+        }
+        return store.save(new DeliveryRecord(id, alert.id(), target, n, DeliveryStatus.PENDING, 0, now,
                 null, 0, now, now, null));
     }
 
@@ -84,6 +124,7 @@ public final class DeliveryService {
         }
         if (res.success()) {
             DeliveryRecord done = store.save(r.attempted(DeliveryStatus.DELIVERED, null, null, res.statusCode(), now));
+            delivered.incrementAndGet();
             onDelivered.accept(done);
             return done;
         }
@@ -94,6 +135,7 @@ public final class DeliveryService {
     }
 
     private DeliveryRecord dead(DeliveryRecord r) {
+        deadLettered.incrementAndGet();
         DeliveryRecord saved = store.save(r);
         onDeadLetter.accept(saved);
         return saved;

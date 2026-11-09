@@ -9,12 +9,17 @@
       <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
       <div class="chips"><oci-net [value]="network()" />
         @if (w.value(); as a) {
-          <span class="chip">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span>
+          @if (a.isContract !== null) { <span class="chip">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span> }
           @for (l of a.labels; track l.id) {
             <span class="label" [attr.title]="'Source ' + l.source + ', reliability ' + pct(l.reliability) + '%'"><span class="chip">{{ l.category }}</span>{{ l.name }}<oci-evidence [value]="l.evidenceLevel" /></span>
           } @empty { <span class="small muted">No label. The absence of a label says nothing about the owner.</span> }
         }
       </div>
+      @if (w.value()?.limitations?.length) {
+        <div class="note note--warn limits" data-testid="limitations"><strong>Not visible on this network:</strong>
+          @for (l of w.value()!.limitations!; track l) { <div>{{ l }}</div> }
+        </div>
+      }
     </div>
     @if (w.value(); as a) {
       <div class="id-gauge">
@@ -53,6 +58,9 @@
             <ng-template mat-tab-label>Transactions<span class="count">{{ tabs()[1].count }}</span></ng-template>
             <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="txs().length > 0" [empty]="!txPage.loading() && txs().length === 0"
               emptyText="No transaction indexed for this wallet yet." skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
+              @if (knownTransfersOnly()) {
+                <p class="small muted" data-testid="known-transfers">This node cannot list an address's transactions: these are the token and native transfers known to the platform (live indexing and address history).</p>
+              }
               <div class="table-wrap"><table mat-table [dataSource]="txs()" [trackBy]="byHash">
                 <ng-container matColumnDef="hash">
                   <th mat-header-cell *matHeaderCellDef scope="col">Hash</th>

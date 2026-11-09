@@ -9,7 +9,7 @@ import java.util.function.Supplier;
 /**
  * Consecutive-failure circuit breaker. Only retryable (transient) failures count: a 4xx means the request
  * is wrong, not that the endpoint is unhealthy. When open, calls fail fast with a retryable
- * {@link ProviderException} so a {@link io.openchain.blockchain.provider.FailoverProvider} moves on.
+ * {@link ProviderException} so that {@link HttpJsonTransport} fails over to its next endpoint.
  */
 public final class CircuitBreaker {
     public enum State { CLOSED, OPEN, HALF_OPEN }

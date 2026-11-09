@@ -71,7 +71,13 @@ public final class ApiMapper {
         Token n = NativeTokens.of(t.network());
         return new Dto.TxDto(t.network().id(), t.hash(), t.blockNumber(), t.timestamp(), t.from() == null ? null : t.from().value(),
                 t.to() == null ? null : t.to().value(), raw(t.value()), raw(t.fee()), t.success(), t.methodSelector(),
-                t.contractInteraction(), n.symbol(), n.decimals());
+                t.contractInteraction(), n.symbol(), n.decimals(), "TRANSACTION", t.hash());
+    }
+
+    /** A value flow known to the platform, as a wallet activity row (block number not tracked by flows: 0). */
+    public static Dto.TxDto transfer(io.openchain.intelligence.flow.ValueFlow f) {
+        return new Dto.TxDto(f.network().id(), f.txHash(), 0, f.timestamp(), f.from().value(), f.to().value(), raw(f.rawAmount()),
+                null, true, null, false, f.token().symbol(), f.token().decimals(), "TRANSFER", f.eventId());
     }
 
     public static Dto.TransferDto transfer(TokenTransfer t) {

@@ -41,7 +41,7 @@ public final class RuleTester {
 
     public DryRunReport dryRun(CompiledRule rule, List<ChainEvent> events, DryRunOptions opts) {
         RuleEngine engine = new RuleEngine(opts.engine(), loader.catalog());
-        engine.register(rule);
+        engine.registerForEvaluation(rule); // a disabled rule is tested / dry-run before being enabled
         AlertService alerts = isolatedAlerts();
         int inScope = 0, filterMatches = 0, triggers = 0;
         List<String> sample = new ArrayList<>();
@@ -91,7 +91,7 @@ public final class RuleTester {
         }
         for (Rule.RuleTestCase t : rule.rule().tests()) {
             RuleEngine engine = new RuleEngine(EngineConfig.defaults(), loader.catalog());
-            engine.register(rule);
+            engine.registerForEvaluation(rule); // a disabled rule is tested / dry-run before being enabled
             AlertService alerts = isolatedAlerts();
             int triggers = 0;
             for (Rule.TestEvent te : t.events()) {

@@ -43,6 +43,48 @@ import org.springframework.stereotype.Service;
 /** Read models for investigation: wallet analysis, risk, exposure, transaction analysis and the flow graph. */
 @Service
 public class InvestigationService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(InvestigationService.class);
+
+    /**
+     * Whether code is deployed at the address, from the network's provider (EVM eth_getCode, TRON /wallet/getcontract;
+     * cached by the provider). null = unknown: no real provider (simulated chain) or lookup failure.
+     */
+    Boolean contractStatus(Address a) {
+        try {
+            return chains.runtime(a.network()).flatMap(rt -> rt.provider().isContract(a, -1)).orElse(null);
+        } catch (RuntimeException e) {
+            log.debug("contract lookup for {} failed: {}", a, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Known blind spots of the live data sources, so that an analyst never mistakes "no alert" for "nothing happened".
+     * Simulated (demo) chains have none of them.
+     */
+    public List<String> limitations(Network n) {
+        var rt = chains.runtime(n);
+        if (rt.isEmpty() || rt.get().simulator().isPresent()) return List.of();
+        List<String> out = new ArrayList<>();
+        long seen = chains.observedDays(n), need = chains.ageWarmup().toDays();
+        if (seen < need) {
+            out.add("Address age and activity fields (wallet.age_days, wallet.tx_count, counterparty.age_days, "
+                    + "approval.spender_age_days) are measured from the platform's first observation: they are withheld until "
+                    + need + " days of observation (" + seen + " so far), so rules using them do not fire yet.");
+        }
+        if (n == Network.TRON) {
+            out.add("No historical balance from TronGrid: wallet.balance is absent, so balance-based rules (wallet-draining) and "
+                    + "the rapid-drain detector do not run on this network.");
+            out.add("TRC-10 assets and internal transactions are not indexed.");
+        } else {
+            out.add("Internal transactions (value moved by contracts during execution) are not indexed: such flows are invisible "
+                    + "to exposure and drain detection.");
+        }
+        return out;
+    }
+
+    /** Value flows known to the platform for an address (live indexing + address history), chronological. */
+    public List<ValueFlow> knownFlows(Address a) { return intelligence.flows().involving(a); }
 
     public static final String DISCLAIMER = "Signals indicate risk indicators or anomalies, not wrongdoing.";
     private static final Pattern ADDRESS = Pattern.compile("^[A-Za-z0-9]{3,128}$");
@@ -163,12 +205,13 @@ public class InvestigationService {
         });
         List<Dto.SignalDto> signals = intelligence.signals().findByAddress(a).stream()
                 .sorted(Comparator.comparing(Signal::detectedAt).reversed()).map(ApiMapper::signal).toList();
-        Dto.ProfileDto profile = new Dto.ProfileDto(p.firstActivity(), p.lastActivity(), p.transactionCount(), false,
+        Boolean contract = contractStatus(a);
+        Dto.ProfileDto profile = new Dto.ProfileDto(p.firstActivity(), p.lastActivity(), p.transactionCount(), contract,
                 p.inboundTransfers(), p.outboundTransfers(), ApiMapper.round(p.txPerDay()));
         return new Dto.WalletAnalysisDto(a.value(), a.network().id(), p.firstActivity(), p.lastActivity(), p.transactionCount(),
-                false, labels.findByAddress(a).stream().map(ApiMapper::label).toList(), balances, flowDtos,
+                contract, labels.findByAddress(a).stream().map(ApiMapper::label).toList(), balances, flowDtos,
                 counterparties(a, flows), activity(a, flows), signals, risk, profile, risk, freshness, DISCLAIMER,
-                history.coverage(a));
+                history.coverage(a), limitations(a.network()));
     }
 
     private List<Dto.CounterpartyDto> counterparties(Address self, List<ValueFlow> flows) {
@@ -342,7 +385,7 @@ public class InvestigationService {
             List<AddressLabel> ls = labels.findByAddress(a);
             nodes.add(new Dto.GraphNodeDto(a.value(), a.value(), a.network().id(), labelText(a),
                     ls.stream().map(l -> ChainIngestionService.categoryId(l.category())).distinct().toList(),
-                    s.map(x -> x.level().name()).orElse("UNKNOWN"), s.map(RiskScore::score).orElse(0), false, d));
+                    s.map(x -> x.level().name()).orElse("UNKNOWN"), s.map(RiskScore::score).orElse(0), null, d));
         });
         List<Dto.GraphEdgeDto> edgeDtos = new ArrayList<>();
         int i = 0;

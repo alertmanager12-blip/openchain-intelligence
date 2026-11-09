@@ -105,6 +105,14 @@ public class OciProperties {
         private Duration dispatchInterval = Duration.ofSeconds(2);
         /** Recorded (enriched) events kept in memory for alert context and dry runs. */
         private int eventHistorySize = 100_000;
+        /**
+         * Observation time a real chain needs before "first seen by the platform" fields (wallet.age_days, wallet.tx_count,
+         * counterparty.age_days, approval.spender_age_days) are emitted (OCI_INGESTION_AGE_WARMUP, default 30 days).
+         */
+        private Duration ageWarmup = Duration.ofDays(30);
+
+        public Duration getAgeWarmup() { return ageWarmup; }
+        public void setAgeWarmup(Duration ageWarmup) { this.ageWarmup = ageWarmup; }
 
         public Duration getPollInterval() { return pollInterval; }
         public void setPollInterval(Duration pollInterval) { this.pollInterval = pollInterval; }
@@ -119,6 +127,15 @@ public class OciProperties {
         /** trongrid (TRON) or json-rpc (EVM). */
         private String provider;
         private String url;
+        /**
+         * Fallback endpoints (OCI_CHAINS_<NETWORK>_FALLBACK_URLS, comma-separated), tried in order when the primary fails
+         * with a retryable error. The API key header is sent to the primary {@code url} only, never to a fallback.
+         */
+        private List<String> fallbackUrls = new ArrayList<>();
+
+        public List<String> getFallbackUrls() { return fallbackUrls; }
+        public void setFallbackUrls(List<String> fallbackUrls) { this.fallbackUrls = fallbackUrls; }
+
         /** Optional header sent to the provider (e.g. TRON-PRO-API-KEY); never logged. */
         private String apiKeyHeader;
         private String apiKey;
@@ -336,7 +353,14 @@ public class OciProperties {
          * notifications (Telegram "Console" line). Unset = no console link.
          */
         private String publicUrl;
+        /**
+         * OCI_DEFAULT_CONNECTOR: id of the connector that receives the alerts of rules routed to the pack's placeholder
+         * {@code default-webhook}. Unset = those alerts are recorded as not notified (SKIPPED), never dead-lettered.
+         */
+        private String defaultConnector;
 
+        public String getDefaultConnector() { return defaultConnector; }
+        public void setDefaultConnector(String defaultConnector) { this.defaultConnector = defaultConnector; }
         public Telegram getTelegram() { return telegram; }
         public String getPublicUrl() { return publicUrl; }
         public void setPublicUrl(String publicUrl) { this.publicUrl = publicUrl; }

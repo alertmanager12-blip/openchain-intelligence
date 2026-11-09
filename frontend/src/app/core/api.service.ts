@@ -2,11 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import {
-  Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus,
-  Page, RiskScore, Rule, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis,
-  User, WalletAnalysis, Webhook,
-} from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, Webhook } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -75,6 +71,9 @@ export class ApiService {
   // --- rules
   rules(): Observable<Page<Rule>> {
     return this.http.get<Page<Rule>>(`${this.base}/rules`);
+  }
+  ruleNoise(hours = 24): Observable<RuleNoise[]> {
+    return this.http.get<RuleNoise[]>(`${this.base}/rules/noise`, { params: { hours } });
   }
   rule(id: string): Observable<Rule> {
     return this.http.get<Rule>(`${this.base}/rules/${this.enc(id)}`);

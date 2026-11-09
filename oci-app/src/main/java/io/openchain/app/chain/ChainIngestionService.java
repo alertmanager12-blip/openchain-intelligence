@@ -127,6 +127,32 @@ public class ChainIngestionService {
     private final TransferEventMapper backfillMapper;
     private final Set<Address> trackedWallets = ConcurrentHashMap.newKeySet();
     private final Map<Network, Long> firstIndexedBlock = new ConcurrentHashMap<>();
+    /** Event time of the oldest event seen per network (live or address history): start of the platform's observation. */
+    private final Map<Network, Instant> observationStart = new ConcurrentHashMap<>();
+    private volatile Duration ageWarmup = Duration.ofDays(30);
+
+    /**
+     * Fields measured "since the platform first saw the address" (wallet.age_days, wallet.tx_count, counterparty.age_days,
+     * approval.spender_age_days) are only emitted on a real chain once it has been observed for this long: before that,
+     * every address looks new (production: 145 well-known DeFi routers raised "young spender" alerts after 3 days).
+     */
+    public void setAgeWarmup(Duration warmup) { this.ageWarmup = warmup == null ? Duration.ZERO : warmup; }
+
+    /** Days the network has been observed so far (event time span), 0 when nothing was seen. */
+    public long observedDays(Network n) {
+        Instant start = observationStart.get(n);
+        return start == null ? 0 : Math.max(0, Duration.between(start, clock.instant()).toDays());
+    }
+
+    public Duration ageWarmup() { return ageWarmup; }
+
+    /** True when platform-observed age/activity fields are meaningful for this network at {@code at}. */
+    private boolean observedLongEnough(Network n, Instant at) {
+        NetworkRuntime rt = runtimes.get(n);
+        if (rt == null || rt.simulator != null || rt.ledger != null) return true; // simulated chains: history from genesis
+        Instant start = observationStart.get(n);
+        return start != null && at != null && !Duration.between(start, at).minus(ageWarmup).isNegative();
+    }
     private final AtomicLong historyEventsApplied = new AtomicLong();
     /** Real balance lookups (provider calls), cache hits and failures (field then absent). */
     private final AtomicLong balanceLookups = new AtomicLong(), balanceCacheHits = new AtomicLong(), balanceLookupFailures = new AtomicLong();
@@ -202,6 +228,7 @@ public class ChainIngestionService {
             for (int i = 0; i < MAX_POLLS_PER_TICK; i++) {
                 BlockIndexer.PollResult r = rt.indexer.poll();
                 rt.lastIndexedBlock = r.lastBlock();
+                if (r.reorgs() > 0) reorgCount.merge(rt.network(), (long) r.reorgs(), Long::sum);
                 if (r.blocksIndexed() == 0) break;
                 if (real && System.nanoTime() > deadline) break;
             }
@@ -246,6 +273,7 @@ public class ChainIngestionService {
     private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
+        if (!e.removed() && e.eventTime() != null) observationStart.merge(e.network(), e.eventTime(), (a, b) -> a.isBefore(b) ? a : b);
         if (e.removed()) {
             if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
             history.record(e);
@@ -482,6 +510,11 @@ public class ChainIngestionService {
     public long spenderLookupFailures() { return spenderLookupFailures.get(); }
 
     public long eventsIndexed() { return eventsIndexed.get(); }
+
+    private final Map<Network, Long> reorgCount = new ConcurrentHashMap<>();
+
+    /** Chain reorganisations handled on this network since start (metrics). */
+    public long reorgs(Network n) { return reorgCount.getOrDefault(n, 0L); }
     public long transfersIndexed() { return transfersIndexed.get(); }
     public long eventsRetracted() { return eventsRetracted.get(); }
     /** Addresses seen in at least one indexed value flow. */
@@ -562,7 +595,9 @@ public class ChainIngestionService {
             }
         }
         Instant firstSeen = intelligence.profiles().profileOrEmpty(spender).firstActivity();
-        if (firstSeen != null) fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
+        if (firstSeen != null && observedLongEnough(e.network(), e.eventTime())) {
+            fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
+        }
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);
     }
@@ -580,15 +615,18 @@ public class ChainIngestionService {
             TokenFlowStats stats = senderBefore.tokens().get(f.tokenKey());
             fields.put("wallet.balance", stats == null ? BigDecimal.ZERO : stats.balanceEstimate()); // demo ledger: exact
         }
-        fields.put("wallet.tx_count", senderBefore.transactionCount());
-        fields.put("wallet.age_days", ageDays(senderBefore.firstActivity(), e.eventTime()));
+        boolean aged = observedLongEnough(e.network(), e.eventTime());
+        if (aged) {
+            fields.put("wallet.tx_count", senderBefore.transactionCount());
+            fields.put("wallet.age_days", ageDays(senderBefore.firstActivity(), e.eventTime()));
+        }
         putRisk(fields, "wallet", f.from());
         putLabels(fields, "wallet", f.from());
         fields.put("counterparty.address", f.to().value());
         putRisk(fields, "counterparty", f.to());
         putLabels(fields, "counterparty", f.to());
         WalletProfile cp = intelligence.profiles().profileOrEmpty(f.to());
-        fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
+        if (aged) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);
     }

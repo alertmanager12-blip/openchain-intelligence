@@ -36,7 +36,7 @@ Chosen option: **1**.
 
 ## Consequences
 
-- CI runs a dependency licence check for Maven (e.g. `license-maven-plugin` `add-third-party` + fail on forbidden) and npm (`license-checker --onlyAllow`). A placeholder job exists in `.github/workflows/ci.yml`.
+- CI runs a **blocking** dependency licence check (since 2026-11-09): Maven via `license-maven-plugin` `aggregate-add-third-party` + `.github/scripts/check-maven-licences.py` (a dual-licensed artifact passes when one of its licences is allowed, e.g. Logback EPL-2.0/LGPL-2.1, Jakarta Annotations EPL-2.0/GPL-2.0-with-CPE), and npm via `license-checker --onlyAllow` (`.github/workflows/ci.yml`, job `license-check`).
 - `NOTICE` lists bundled third-party notices required by Apache-2.0 dependencies.
 - Redis is not a default dependency; if a cache is needed we document **Valkey** (BSD-3-Clause).
 - Docker images contain only the JRE base (GPLv2 + Classpath Exception, permitted as the runtime) and our artefact.

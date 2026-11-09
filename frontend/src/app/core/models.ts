@@ -5,7 +5,11 @@
  */
 
 export type NetworkId = 'tron' | 'ethereum' | 'bsc' | 'polygon' | 'bitcoin' | 'solana';
-export const NETWORKS: readonly NetworkId[] = ['ethereum', 'tron', 'bsc', 'polygon', 'bitcoin', 'solana'];
+/**
+ * Networks that have a provider adapter (TRON: TronGrid, EVM: JSON-RPC). Bitcoin and Solana stay in NetworkId because the
+ * rule schema accepts them, but no data source exists for them, so they are not offered anywhere in the console.
+ */
+export const NETWORKS: readonly NetworkId[] = ['ethereum', 'tron', 'bsc', 'polygon'];
 
 export type Severity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export const SEVERITIES: readonly Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
@@ -42,6 +46,8 @@ export interface NetworkStatus {
   indexerLag?: number;
   /** True when the provider is the simulated demo ledger, not a real chain. */
   simulated?: boolean;
+  /** What this instance cannot see or detect on this network (data-source limits). */
+  limitations?: string[];
 }
 
 export interface ChainTransaction {
@@ -51,14 +57,18 @@ export interface ChainTransaction {
   timestamp: string;
   from: string;
   to: string | null;
-  /** Native value in base units. */
+  /** Value in base units of `nativeSymbol` (the native coin for a TRANSACTION, the token for a TRANSFER). */
   value: string;
-  fee: string;
+  fee: string | null;
   success: boolean;
   methodSelector: string | null;
   contractInteraction: boolean;
   nativeSymbol?: string;
   nativeDecimals?: number;
+  /** TRANSACTION: listed by the provider. TRANSFER: a value flow known to the platform (the node cannot list transactions). */
+  kind?: 'TRANSACTION' | 'TRANSFER';
+  /** Unique per row: one transaction can carry several transfers. */
+  id?: string;
 }
 
 export interface TokenTransfer {
@@ -155,7 +165,8 @@ export interface WalletAnalysis {
   firstSeen: string | null;
   lastSeen: string | null;
   txCount: number;
-  isContract: boolean;
+  /** null = unknown (no real provider, lookup failed, or graph node not resolved) */
+  isContract: boolean | null;
   labels: Label[];
   balances: Balance[];
   flows: { token: Token; rawIn: string; rawOut: string }[];
@@ -165,6 +176,8 @@ export interface WalletAnalysis {
   risk: RiskScore | null;
   /** Coverage of the on-demand address history (ADR-0020); null when the server does not report it. */
   history: HistoryCoverage | null;
+  /** What this instance cannot see or detect on this network (data-source limits). */
+  limitations?: string[];
 }
 
 export type HistoryStatus = 'NOT_CONFIGURED' | 'PENDING' | 'RUNNING' | 'COMPLETE' | 'TRUNCATED' | 'FAILED';
@@ -221,7 +234,8 @@ export interface GraphNode {
   network: NetworkId;
   label: string | null;
   riskLevel: RiskLevel;
-  isContract: boolean;
+  /** null = unknown (no real provider, lookup failed, or graph node not resolved) */
+  isContract: boolean | null;
   depth: number;
 }
 
@@ -328,6 +342,20 @@ export interface Alert {
   history: AlertHistoryEntry[];
 }
 
+/** Noise report of one rule (GET /rules/noise): alert volume and false-positive rate among closed alerts. */
+export interface RuleNoise {
+  ruleId: string;
+  total: number;
+  open: number;
+  falsePositive: number;
+  resolved: number;
+  /** Alerts created during the last `windowHours`. */
+  recent: number;
+  windowHours: number;
+  /** null until an alert of the rule has been closed. */
+  falsePositiveRate: number | null;
+}
+
 export interface Rule {
   id: string;
   name: string;
@@ -336,6 +364,8 @@ export interface Rule {
   yaml: string;
   version: number;
   updatedAt: string;
+  /** Why the rule can never fire on this instance (fields or event types never produced); absent/empty = it may fire. */
+  unreachableReasons?: string[];
 }
 
 export interface RuleValidationError {

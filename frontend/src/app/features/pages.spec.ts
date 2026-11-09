@@ -3,7 +3,7 @@ import { Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { authInterceptor, errorInterceptor } from '../core/interceptors';
-import { fakeAddress } from '../core/mock/mock-db';
+import { MockDb, fakeAddress } from '../core/mock/mock-db';
 import { mockBackendInterceptor } from '../core/mock/mock-backend.interceptor';
 import { SettingsService } from '../core/settings.service';
 import { AlertsPage } from './alerts/alerts';
@@ -106,7 +106,7 @@ describe('pages (mock mode smoke test)', () => {
   });
 
   it('shows a retryable error state when the provider is down', async () => {
-    const el = await render(RiskPage, { network: 'solana', address: fakeAddress('solana', 1) });
+    const el = await render(RiskPage, { network: 'polygon', address: MockDb.OUTAGE_ADDRESS });
     expect(el.querySelector('.state--error')?.textContent).toContain('Provider unavailable');
     expect(el.querySelector('.state--error button')?.textContent).toContain('Retry');
   });

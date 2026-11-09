@@ -8,6 +8,24 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Phase 0 — consolidation (docs/strategy/FEATURE_ROADMAP.md)
+
+- **No more silently lost notifications** (production: 5,675 dead letters "unknown connector 'default-webhook'"): the rule pack's placeholder `default-webhook` resolves to `OCI_DEFAULT_CONNECTOR` (with that connector's own type: Telegram, Slack…); without it the delivery is recorded `SKIPPED` with its reason (`V6__delivery_skipped`), never attempted and dead-lettered. The start-up log lists the enabled rules that cannot notify anyone.
+- **Rules that can never fire are not enabled:** `RuleReachability` (oci-alerting) detects rules whose required fields or event types this deployment never produces. `contract-exploit` 1.0.1 ships disabled (it needs CONTRACT_CALL); `POST /rules/{id}/enable` answers 422 with the reasons; such rules are disabled at start-up with a warning; the console shows the reasons and disables the toggle; `GET /rules` exposes `unreachableReasons`. The rule tester and simulator now evaluate a disabled rule (a rule must be testable before it is enabled).
+- **Wallet "Transactions" tab on real EVM networks** (was always 503: standard JSON-RPC cannot list an address's transactions): serves the transfers known to the platform (live indexing + address history), each in its own unit (`kind` TRANSFER, `id` per row), with paging.
+- **`isContract` is real** on the wallet page (provider code lookup, cached), `null` when unknown; graph nodes say unknown instead of a hard-coded `false`.
+- **Data-source limits are shown**: `limitations` on the wallet analysis and `GET /networks` (TRON: no historical balance, so `wallet-draining` and rapid drain do not run; EVM: internal transactions not indexed; observation warm-up).
+- **Observation warm-up**: on real chains, "first seen by the platform" fields (`wallet.age_days`, `wallet.tx_count`, `counterparty.age_days`, `approval.spender_age_days`) are withheld until the chain has been observed for `OCI_INGESTION_AGE_WARMUP` (30 days): in production, 145 well-known DeFi contracts (1inch, Morpho, Across, LI.FI…) raised "young spender" alerts after 3 days, and every wallet looked new to `suspicious-wallet`.
+- **`fund-splitting` 1.2.0**: more than 30 recipients in 3 minutes, minimum value per transfer, unknown tokens and mints excluded: 83% fewer alerts than 1.1.0 on the same real traffic (dry-run). Chain-wide fan-out stays common on mainnet: scoping to watched wallets is the next step.
+- **`large-usdt-transfer` 1.1.0**: 10M USDT instead of 1M (measured on real TRON traffic during business hours: 1M ≈ 42 alerts/hour, 10M ≈ 2.5).
+- **Noise report**: `GET /rules/noise` (alerts per rule: total, open, false positives, resolved, recent, false-positive rate) and an "Alerts 24 h" column in the console's rule list.
+- **RPC failover**: `OCI_CHAINS_<NETWORK>_FALLBACK_URLS`, in the HTTP transport (per-endpoint circuit breaker and rate limiter, API key sent to the primary only); the unused `FailoverProvider` (which would have dropped balances, approvals, freezes and history) is removed.
+- **Safer deployment defaults**: the application refuses to start with demo mode and a real chain together; port 8080 and the OTLP ports are published on 127.0.0.1; OpenAPI/Swagger UI off outside demo mode unless `OCI_API_DOCS_ENABLED=true`.
+- **Metrics**: `/actuator/prometheus` (Micrometer) with indexing lag, reorgs, events, balance lookups, deliveries by status, rule triggers and late events; scrapable without a key from private addresses only; Grafana dashboard aligned (panels without data removed).
+- **Licences**: the CI licence job is blocking (Maven via `.github/scripts/check-maven-licences.py`, npm via `license-checker`).
+- **Removed**: Bitcoin and Solana from the console (no provider), six signal types that no detector emits, the PUSH connector (no transport). EMAIL stays pending an SMTP transport.
+- **Docs aligned with the code**: API contract features not implemented yet are marked as such (rate limiting, Idempotency-Key, If-Match, keyset cursors, OIDC login in the console), risk example, ids, Node versions, testing strategy, data model V5/V6.
+
 ### Added
 
 - **Telegram messages in French, readable on a phone:** severity emoji and level, French rule name, what happened in plain words (same logic as the console's explanation), network, amount, address, counterparty and transaction, a link to the block explorer (Etherscan, BscScan, Polygonscan, Tronscan) and to the alert in the console (`OCI_PUBLIC_URL`), then the rule and the disclaimer. Plain text (no `parse_mode`). Notifications now carry the alert subject (also in queued deliveries; older queued ones still decode).

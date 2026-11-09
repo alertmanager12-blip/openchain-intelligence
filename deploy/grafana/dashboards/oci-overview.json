@@ -72,7 +72,7 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Provider request rate by outcome",
+      "title": "Real balance lookups / s by outcome",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -92,35 +92,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (provider, outcome) (rate(oci_provider_requests_total[5m]))",
-          "legendFormat": "__auto"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Provider p95 latency",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le, provider) (rate(oci_provider_latency_seconds_bucket[5m])))",
+          "expr": "sum by (outcome) (rate(oci_balance_lookups_total[5m]))",
           "legendFormat": "__auto"
         }
       ]
@@ -128,7 +100,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Alerts opened / 5m",
+      "title": "Rule triggers / 5m",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -148,7 +120,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (severity) (increase(oci_alerts_opened_total[5m]))",
+          "expr": "sum(increase(oci_rule_triggers_total[5m]))",
           "legendFormat": "__auto"
         }
       ]
@@ -184,7 +156,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Outbox backlog",
+      "title": "Events indexed / s",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -204,7 +176,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(oci_outbox_backlog)",
+          "expr": "sum(rate(oci_events_indexed_total[5m]))",
           "legendFormat": "__auto"
         }
       ]
@@ -288,7 +260,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (rule) (rate(oci_rule_late_events_total[5m]))",
+          "expr": "sum(rate(oci_rule_late_events_total[5m]))",
           "legendFormat": "__auto"
         }
       ]

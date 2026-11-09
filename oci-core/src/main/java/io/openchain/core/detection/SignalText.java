@@ -23,12 +23,9 @@ public final class SignalText {
         if (t == null) return "Signal";
         return switch (t) {
             case UNUSUAL_AMOUNT -> "Unusual amount";
-            case REPETITIVE_TRANSFERS -> "Repetitive transfers";
             case STRUCTURING -> "Possible structuring";
             case FAST_FORWARDING -> "Fast forwarding";
-            case BASELINE_DEVIATION -> "Deviation from usual activity";
             case DORMANT_REACTIVATION -> "Dormant wallet reactivated";
-            case ADDRESS_PROLIFERATION -> "Address proliferation";
             case CIRCULAR_FLOW -> "Circular flow";
             case FLOW_CONCENTRATION -> "Fan-out to many recipients";
             case RAPID_DRAIN -> "Rapid drain";
@@ -39,10 +36,7 @@ public final class SignalText {
             case SCAM_EXPOSURE -> "Direct exposure to a scam-reported address";
             case DUSTING -> "Dusting from a listed address";
             case OWNERSHIP_CHANGE -> "Contract ownership change";
-            case DANGEROUS_ADMIN_PERMISSION -> "Dangerous admin permission";
-            case MINT_CAPABILITY -> "Mint capability";
             case UNUSUAL_APPROVAL -> "Unlimited token approval";
-            case MALICIOUS_CONTRACT_INTERACTION -> "Interaction with a listed contract";
         };
     }
 

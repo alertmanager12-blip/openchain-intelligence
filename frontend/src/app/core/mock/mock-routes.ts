@@ -79,6 +79,23 @@ on('GET', '/graph/([^/]+)', (req, m) => mockDb().graph(decodeURIComponent(m[1]),
 on('GET', '/rules/fields', () => DEFAULT_FIELDS);
 on('GET', '/rules/event-types', () => EVENT_TYPES.map((type) => ({ type, available: AVAILABLE_EVENT_TYPES.includes(type) })));
 on('GET', '/rules/export', () => mockDb().rules.map((r) => r.yaml).join('---\n'));
+on('GET', '/rules/noise', (req) => {
+  const hours = Number(req.params.get('hours') ?? 24);
+  const since = Date.now() - hours * 3_600_000;
+  const byRule = new Map<string, { total: number; open: number; falsePositive: number; resolved: number; recent: number }>();
+  for (const a of mockDb().alerts) {
+    const s = byRule.get(a.ruleId) ?? { total: 0, open: 0, falsePositive: 0, resolved: 0, recent: 0 };
+    s.total++;
+    if (a.status === 'FALSE_POSITIVE') s.falsePositive++;
+    else if (a.status === 'RESOLVED') s.resolved++;
+    else s.open++;
+    if (Date.parse(a.createdAt) >= since) s.recent++;
+    byRule.set(a.ruleId, s);
+  }
+  return [...byRule.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([ruleId, s]) => ({
+    ruleId, ...s, windowHours: hours, falsePositiveRate: s.falsePositive + s.resolved === 0 ? null : s.falsePositive / (s.falsePositive + s.resolved),
+  }));
+});
 on('POST', '/rules/validate', (req) => {
   const r = yamlToRule(body<{ yaml: string }>(req).yaml ?? '');
   return { valid: r.errors.length === 0, errors: r.errors };

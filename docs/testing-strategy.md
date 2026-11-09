@@ -11,7 +11,7 @@ Principle: a feature is done when its tests run green in CI. Pyramid: many fast 
 | Contract (providers) | Adapters vs. recorded real responses (TronGrid, JSON-RPC), error classification (429, 5xx, malformed) | WireMock (Apache-2.0), JSON fixtures | `oci-blockchain` | every build |
 | Contract (API) | OpenAPI document vs. implementation; problem+json shapes; pagination | Spring MockMvc / RestAssured, OpenAPI diff in CI | `oci-app` | every build |
 | Integration | Repositories, Flyway migrations, partitions, RLS isolation, outbox leasing (`SKIP LOCKED`) | Testcontainers PostgreSQL 17 | `oci-app` (`JdbcRepositoriesPersistenceTest`, `PersistenceRestartTest`; implemented except partitions/RLS) | `mvn verify` |
-| End-to-end | Demo chain → alert → webhook received and signature verified | Testcontainers + compose, a sink container | `oci-app` e2e profile | nightly + release |
+| End-to-end | Demo chain → alert → notification, restart survival | compose smoke test (`deploy/smoke-test.sh`) + in-process `EndToEndPipelineTest` | CI job `docker` | every build (browser e2e not in place yet) |
 | Frontend | Components/services, headless | Angular CLI `ng test` (Vitest + jsdom) | `frontend` | every build |
 | Load | API throughput, evaluation latency per event, delivery throughput | k6 (AGPL-3.0, used as an external tool, not shipped) or Gatling (Apache-2.0) | `perf/` (planned) | before release |
 | Security | SAST (CodeQL), dependency CVEs, licence policy, SSRF bypass corpus, authz matrix | CodeQL, Dependabot, OWASP dependency-check, licence check | CI | every PR |
@@ -60,4 +60,4 @@ cd frontend && npm ci && npm test            # ng test --watch=false (Vitest, js
 
 ## Coverage
 
-Coverage is a signal, not a target: JaCoCo report per module; rule engine and scoring are expected above 85 % line coverage, with mutation testing (PIT, Apache-2.0) on the evaluator planned.
+Coverage is a signal, not a target. No coverage report is produced in CI yet (JaCoCo per module is planned); rule engine and scoring are expected above 85 % line coverage, with mutation testing (PIT, Apache-2.0) on the evaluator planned.

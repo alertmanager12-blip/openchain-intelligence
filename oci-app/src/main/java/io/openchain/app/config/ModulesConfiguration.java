@@ -97,8 +97,10 @@ public class ModulesConfiguration {
     /** Outbound HTTP for webhooks: SSRF-guarded (https only, public addresses only, no redirects). */
     @Bean OutboundHttp outboundHttp() { return new SafeHttpClient(new SsrfGuard()); }
 
-    @Bean DeliveryService deliveryService(DeliveryStore store, ConnectorRegistry connectors, Clock clock) {
-        return new DeliveryService(store, connectors, BackoffPolicy.defaults(), clock);
+    @Bean DeliveryService deliveryService(DeliveryStore store, ConnectorRegistry connectors, Clock clock, OciProperties props) {
+        DeliveryService d = new DeliveryService(store, connectors, BackoffPolicy.defaults(), clock);
+        d.setDefaultConnector(props.getNotifications().getDefaultConnector());
+        return d;
     }
 
     @Bean AlertingPipeline alertingPipeline(RuleEngine engine, AlertService alerts, DeliveryService delivery) {

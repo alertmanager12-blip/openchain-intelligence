@@ -321,7 +321,7 @@ export class MockDb {
   // ---------------------------------------------------------------- read models
 
   /** Networks this mock instance does not index: GET /networks omits them and wallet calls answer 422, like the backend. */
-  static readonly DISABLED: readonly NetworkId[] = ['bitcoin'];
+  static readonly DISABLED: readonly NetworkId[] = ['bsc'];
 
   /** GET /networks: enabled networks only, or every network with `all` (disabled ones flagged, like the backend). */
   networks(all = false): NetworkStatus[] {
@@ -331,24 +331,29 @@ export class MockDb {
   private allNetworks(): NetworkStatus[] {
     const base: Record<NetworkId, number> = { ethereum: 21_934_120, tron: 71_204_118, bsc: 46_118_430, polygon: 69_502_331, bitcoin: 921_404, solana: 334_120_998 };
     return NETWORKS.map((n, i) => ({
-      network: n, headBlock: base[n], finalizedBlock: base[n] - [64, 19, 15, 128, 6, 32][i], healthy: n !== 'solana',
-      providerId: n === 'solana' ? 'solana-secondary' : `${n}-primary`, latencyMillis: [180, 95, 140, 210, 420, 2900][i], checkedAt: iso(15_000),
-      detail: n === 'solana' ? 'Primary provider timing out; failed over to secondary. Data may lag.' : null,
+      network: n, headBlock: base[n], finalizedBlock: base[n] - [64, 19, 15, 128, 6, 32][i], healthy: true,
+      providerId: `${n}-primary`, latencyMillis: [180, 95, 140, 210, 420, 2900][i], checkedAt: iso(15_000),
+      detail: null,
       enabled: !MockDb.DISABLED.includes(n), lastIndexedBlock: base[n] - [64, 19, 15, 128, 6, 32][i] - [2, 0, 1, 4, 0, 940][i], indexerLag: [64, 19, 15, 128, 6, 32][i] + [2, 0, 1, 4, 0, 940][i],
       simulated: n === 'polygon',
     }));
   }
 
-  private assertReachable(network: NetworkId): void {
-    // Same answer as the backend (InvestigationService.network): 422 problem+json with a /network field error.
-    if (MockDb.DISABLED.includes(network))
+  /** Mock-only sentinel: wallet calls for this address answer 503 (retryable), to exercise the provider-outage path. */
+  static readonly OUTAGE_ADDRESS = '0x0000000000000000000000000000000000000503';
+
+  private assertReachable(network: NetworkId, address?: string): void {
+    // Same answer as the backend (InvestigationService.network): 422 problem+json with a /network field error, for a
+    // disabled network or one without any provider adapter (bitcoin, solana).
+    if (MockDb.DISABLED.includes(network) || !NETWORKS.includes(network))
       throw Object.assign(new ProblemError(422, 'Request validation failed', `network '${network}' is not enabled on this instance`),
         { errors: [{ pointer: '/network', path: '/network', code: 'unsupported_network', message: 'network not enabled' }] });
-    if (network === 'solana') throw new ProblemError(503, 'Provider unavailable', 'All Solana providers are currently failing. Results are temporarily unavailable; retry in a minute.');
+    if (address?.toLowerCase() === MockDb.OUTAGE_ADDRESS)
+      throw new ProblemError(503, 'Provider unavailable', 'The provider is currently failing. Results are temporarily unavailable; retry in a minute.');
   }
 
   risk(address: string, network: NetworkId): RiskScore {
-    this.assertReachable(network);
+    this.assertReachable(network, address);
     const rng = new Rng(`risk:${network}:${address}`);
     const sym = tokensOf(network)[1]?.symbol ?? tokensOf(network)[0].symbol;
     const label = this.labels.find((l) => l.address === address && l.network === network);
@@ -435,7 +440,7 @@ export class MockDb {
   }
 
   wallet(address: string, network: NetworkId): WalletAnalysis {
-    this.assertReachable(network);
+    this.assertReachable(network, address);
     const rng = new Rng(`wallet:${network}:${address}`);
     const tokens = tokensOf(network);
     const balances: Balance[] = tokens.map((t) => ({ token: t, rawAmount: rng.raw(t.decimals, 5), atBlock: this.allNetworks().find((s) => s.network === network)!.headBlock, observedAt: iso(30_000) }));
@@ -458,7 +463,7 @@ export class MockDb {
   }
 
   transactions(address: string, network: NetworkId, cursor: string | null, limit: number): { items: ChainTransaction[]; nextCursor: string | null } {
-    this.assertReachable(network);
+    this.assertReachable(network, address);
     const offset = cursor ? Number(cursor) : 0;
     const total = 60;
     const native = tokensOf(network)[0];
@@ -477,7 +482,7 @@ export class MockDb {
   }
 
   exposure(address: string, network: NetworkId): Exposure {
-    this.assertReachable(network);
+    this.assertReachable(network, address);
     const rng = new Rng(`exp:${network}:${address}`);
     const entry = (hops: number) => {
       const cat = rng.pick(LABEL_CATEGORIES);
@@ -501,7 +506,7 @@ export class MockDb {
   }
 
   graph(address: string, network: NetworkId, depth: number, tokenSymbol: string | null): Graph {
-    this.assertReachable(network);
+    this.assertReachable(network, address);
     const rng = new Rng(`graph:${network}:${address}`);
     const tokens = tokensOf(network).filter((t) => !tokenSymbol || t.symbol === tokenSymbol);
     if (tokens.length === 0) return { root: address, nodes: [], edges: [], truncated: false };

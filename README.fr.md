@@ -64,7 +64,7 @@ Pour **utiliser** OCI, Docker suffit. Pour le **développer**, il faut aussi Jav
 | Docker Desktop (ou Docker Engine) avec Compose v2 | récente | tout faire tourner | `docker compose version` |
 | JDK | 21 ou plus récent | compiler le backend | `java -version` |
 | Maven | 3.9 ou plus récent | compiler le backend | `mvn -v` |
-| Node.js | exactement la version de `frontend/.nvmrc` (22.23.2) | compiler la console | `node -v` |
+| Node.js | la version de `frontend/.nvmrc` (22.23.2) en local ; la CI et l'image Docker compilent avec Node 24 | compiler la console | `node -v` |
 
 Conseils :
 - Avec [nvm](https://github.com/nvm-sh/nvm), `cd frontend && nvm install && nvm use` sélectionne la bonne version de Node.
@@ -343,7 +343,8 @@ flowchart LR
   IDX --> RE[Moteur de règles]
   DET --> RE
   RE --> AL[Alertes] --> DLV[Livraison] --> EXT[Webhooks / Slack / Discord / Telegram]
-  AL & SC --> PG[(PostgreSQL)]
+  AL --> PG[(PostgreSQL)]
+  SC --> MEM[(En mémoire : profils, signaux, scores)]
   UI[Console Angular] --> API[API REST v1] --> PG
 ```
 

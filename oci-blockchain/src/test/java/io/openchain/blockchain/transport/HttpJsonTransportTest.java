@@ -63,6 +63,32 @@ class HttpJsonTransportTest {
                 .isNotInstanceOf(JsonRpcException.class);
     }
 
+    @Test void failsOverToTheNextEndpointOnRetryableErrorsAndKeepsPreferringIt() throws Exception {
+        try (StubHttpServer backup = new StubHttpServer()) {
+            server.route("/x", r -> Response.status(503));
+            backup.route("/x", r -> Response.ok("{\"from\":\"backup\"}"));
+            HttpJsonTransport t = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), fastResilience(2, 10)),
+                    endpoint("backup", backup.url(), fastResilience(2, 10))), Clock.systemUTC(), sleeper);
+            assertThat(t.get("/x").path("from").asString()).isEqualTo("backup");
+            assertThat(server.hits).hasValue(2); // retries exhausted on the primary first
+            assertThat(t.endpoint().name()).isEqualTo("backup");
+            t.get("/x");
+            assertThat(server.hits).hasValue(2); // the healthy endpoint is now preferred
+            assertThat(backup.hits).hasValue(2);
+        }
+    }
+
+    @Test void permanentErrorsDoNotFailOver() throws Exception {
+        try (StubHttpServer backup = new StubHttpServer()) {
+            server.route("/x", r -> Response.status(404));
+            backup.route("/x", r -> Response.ok("{}"));
+            HttpJsonTransport t = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), fastResilience(2, 10)),
+                    endpoint("backup", backup.url(), fastResilience(2, 10))), Clock.systemUTC(), sleeper);
+            assertThatThrownBy(() -> t.get("/x")).isInstanceOf(ProviderException.class).hasMessageContaining("HTTP 404");
+            assertThat(backup.hits).hasValue(0);
+        }
+    }
+
     @Test void historyLimitsOfNonArchiveNodesAreRecognised() {
         // PublicNode (observed 2026-11-07), pruned nodes, geth state; a range or rate-limit error is not a history limit
         assertThat(rpcError(-32602, "Archive requests require a personal token. Get one at: https://www.allnodes.com/publicnode").historyUnavailable()).isTrue();

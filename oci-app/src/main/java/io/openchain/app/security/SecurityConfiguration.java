@@ -72,6 +72,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
+                        // Prometheus scrapes from the host or the compose network: no key, but never from a public address
+                        .requestMatchers(r -> "/actuator/prometheus".equals(r.getRequestURI()) && privateSource(r.getRemoteAddr())).permitAll()
                         .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**").permitAll()
                         .requestMatchers("/actuator/**").hasAuthority(authority(Scopes.KEYS_ADMIN))
                         // wallets & transactions
@@ -161,5 +163,18 @@ public class SecurityConfiguration {
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
         src.registerCorsConfiguration("/**", c);
         return src;
+    }
+
+    /** Loopback or private (RFC 1918 / unique-local / link-local) source address: the host itself or the compose network. */
+    public static boolean privateSource(String remoteAddr) {
+        // literal IPv4/IPv6 only (Servlet remote addresses are literals): getByName then never performs a DNS lookup
+        if (remoteAddr == null || !remoteAddr.matches("[0-9A-Fa-f:.%]+")) return false;
+        try {
+            java.net.InetAddress a = java.net.InetAddress.getByName(remoteAddr);
+            return a.isLoopbackAddress() || a.isSiteLocalAddress() || a.isLinkLocalAddress()
+                    || (a instanceof java.net.Inet6Address && (a.getAddress()[0] & 0xfe) == 0xfc);
+        } catch (java.net.UnknownHostException | RuntimeException e) {
+            return false;
+        }
     }
 }

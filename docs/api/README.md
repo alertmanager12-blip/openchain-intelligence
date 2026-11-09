@@ -1,6 +1,6 @@
 # API v1 contract
 
-Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served by the application at `/v3/api-docs` (and Swagger UI at `/swagger-ui.html` when enabled); this page is the human summary and the stability contract.
+Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served by the application at `/v3/api-docs` (and Swagger UI at `/swagger-ui.html`) when `OCI_API_DOCS_ENABLED` is on (default: on in demo mode, off otherwise); this page is the human summary and the stability contract.
 
 ## Conventions
 
@@ -11,12 +11,12 @@ Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served 
 | Addresses | Accepted in the network's usual form; returned canonical (EVM lowercase hex, TRON base58). |
 | Amounts | Always **strings**: `rawAmount` (integer base units) and `amount` (exact decimal). Never JSON numbers for money. |
 | Time | RFC 3339 UTC (`2026-11-06T10:00:00Z`). |
-| Ids | UUID strings. |
-| Concurrency | `ETag` on mutable resources; `PUT` requires `If-Match` (412 on mismatch). |
+| Ids | Opaque strings: UUIDs for alerts and deliveries, prefixed slugs for some resources (`wh-…` connectors, `sig_…` signals, rule ids). |
+| Concurrency | `ETag` on rules. **Not enforced yet**: `If-Match` is accepted on `PUT /rules/{id}` but not checked (412 is planned, roadmap phase 1). |
 
 ## Authentication
 
-- **Users (SPA)**: OIDC Authorization Code + PKCE with your IdP; the SPA sends `Authorization: Bearer <access_token>` (JWT validated against the IdP JWKS; tenant from claim `oci_tenant`, roles from `oci_roles` or the IdP role mapping).
+- **Users (SPA)**: today the console sends a token or API key pasted in Settings (kept in the browser's `localStorage`). An OIDC Authorization Code + PKCE login is planned (roadmap phase 1). The API already validates OIDC JWTs when an issuer is configured (`Authorization: Bearer <access_token>`, JWKS, roles from `oci_roles`). Single tenant: there is no tenant claim yet.
 - **Machines**: API key `Authorization: Bearer oci_<env>_<prefix>_<secret>` (or `X-API-Key`). Keys have scopes and optional expiry; only a hash is stored.
 
 | Permission | Grants |
@@ -69,15 +69,15 @@ List endpoints accept `limit` (1–200, default 50) and `cursor` (opaque). Respo
 { "items": [ ... ], "nextCursor": "eyJ0cyI6IjIwMjYtMTEtMDZUMTA6MDA6MDBaIiwiaWQiOiIuLi4ifQ", "truncated": false }
 ```
 
-`nextCursor` is `null` on the last page (mirrors `io.openchain.core.model.Page`). Cursors are stable under inserts (keyset on `(ts, id)`), expire after 24 h.
+`nextCursor` is `null` on the last page (mirrors `io.openchain.core.model.Page`). Cursors are opaque; today they are offsets (not stable under inserts). Keyset cursors are planned.
 
 ## Idempotency
 
-`POST` endpoints that create resources or trigger side effects accept `Idempotency-Key: <uuid>` (required for `POST /rules/import`, `/labels/reports`, `/webhooks`; recommended elsewhere). The first response is stored 24 h per `(tenant, key)`; a replay with the same body returns the stored response with `Idempotent-Replayed: true`; a replay with a different body returns `409`.
+**Not implemented yet** (roadmap phase 1): the header is accepted and ignored. Planned behaviour: `POST` endpoints that create resources or trigger side effects accept `Idempotency-Key: <uuid>` (required for `POST /rules/import`, `/labels/reports`, `/webhooks`; recommended elsewhere). The first response is stored 24 h per `(tenant, key)`; a replay with the same body returns the stored response with `Idempotent-Replayed: true`; a replay with a different body returns `409`.
 
 ## Rate limiting
 
-Per API key / user and per tenant (token bucket). Headers on every response (IETF `RateLimit` header fields draft):
+**Not implemented yet** (roadmap phase 1); the headers below describe the planned contract. Per API key / user (token bucket). Headers on every response (IETF `RateLimit` header fields draft):
 
 ```
 RateLimit-Limit: 600
@@ -107,7 +107,7 @@ Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:
   "address": { "network": "tron", "value": "TXYZ..." },
   "profile": { "firstSeen": "2025-01-03T08:12:00Z", "lastSeen": "2026-11-06T09:58:00Z", "txCount": 1834, "isContract": false },
   "riskScore": {
-    "score": 72, "level": "HIGH", "method": "saturating-sum", "modelVersion": "risk@1", "computedAt": "2026-11-06T10:00:00Z",
+    "score": 72, "level": "HIGH", "method": "noisy-or saturating aggregation: score=100*(1-prod_f(1-p_f)), ...", "modelVersion": "oci-risk-1", "computedAt": "2026-11-06T10:00:00Z",
     "contributions": [
       { "factor": "SANCTIONED_EXPOSURE", "signalId": "6f1c...", "source": "ofac-sdn", "weight": 60, "confidence": 0.9,
         "ageSeconds": 86400, "points": 48.6, "explanation": "Received 12,500.00 USDT directly from an address on the OFAC SDN list" }
@@ -189,7 +189,8 @@ history never raises alerts.
 | GET | `/rules/{id}` | rules:read | Current version, metadata, `compiledHash`, `ETag` |
 | PUT | `/rules/{id}` | rules:write | New immutable version (`If-Match` required) |
 | POST | `/rules/{id}/test` | rules:write | DRY_RUN over historical data: `{ "from", "to", "network", "source"? }` → matches + stats; no side effects |
-| POST | `/rules/{id}/enable` | rules:write | Enable current version |
+| POST | `/rules/{id}/enable` | rules:write | Enable current version; **422** when the rule can never fire with the data this instance produces (`unreachableReasons` of the rule, e.g. a field never populated) |
+| GET | `/rules/noise?hours=24` | rules:read | Noise report per rule: `total`, `open`, `falsePositive`, `resolved`, `recent` (created in the last `hours`, 1..2160), `falsePositiveRate` among closed alerts (null if none) |
 | POST | `/rules/{id}/disable` | rules:write | Disable |
 | POST | `/rules/validate` | rules:read | Compile only; 200 `{ valid: true, compiledHash }` or 422 with `errors[]` |
 | POST | `/rules/import` | rules:write | Import one or many YAML documents (`---` separated), `Content-Type: application/yaml` |

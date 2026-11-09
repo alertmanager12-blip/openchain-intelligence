@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.openchain.blockchain.StubHttpServer;
 import io.openchain.blockchain.StubHttpServer.Response;
-import io.openchain.blockchain.provider.FailoverProvider;
 import io.openchain.blockchain.token.DefaultTokenRegistry;
 import io.openchain.blockchain.token.TokenRegistry;
 import io.openchain.blockchain.transport.HttpJsonTransport;
@@ -158,13 +157,17 @@ class EvmJsonRpcProviderTest {
     }
 
     @Test void failoverToSecondRpcSourceOnServerErrors() throws Exception {
+        // failover lives in the transport (OCI_CHAINS_<NETWORK>_FALLBACK_URLS): the provider keeps all its capabilities
         try (StubHttpServer broken = new StubHttpServer().route("/", r -> Response.status(502))) {
-            FailoverProvider fp = new FailoverProvider("eth", List.of(provider(broken.url(), "eth-a"), provider(server.url(), "eth-b")));
-            assertThat(fp.getTokenTransfers(16, 16)).hasSize(2);
-            assertThat(fp.activeDelegateId()).isEqualTo("eth-b");
-            assertThat(broken.hits).hasValue(1);
-            fp.getBlock(16); // sticky: broken source not retried
-            assertThat(broken.hits).hasValue(1);
+            HttpJsonTransport t = new HttpJsonTransport(List.of(endpoint("eth-a", broken.url(), fastResilience(1, 50)),
+                    endpoint("eth-b", server.url(), fastResilience(1, 50))), Clock.systemUTC(), d -> {});
+            EvmJsonRpcProvider p = new EvmJsonRpcProvider("eth", Network.ETHEREUM, new JsonRpcClient(t), new DefaultTokenRegistry(),
+                    EvmConfig.defaults(Network.ETHEREUM));
+            assertThat(p.getTokenTransfers(16, 16)).hasSize(2);
+            assertThat(t.endpoint().name()).isEqualTo("eth-b");
+            int brokenHits = broken.hits.get();
+            p.getBlock(16); // sticky: broken source not retried
+            assertThat(broken.hits).hasValue(brokenHits);
         }
     }
 

@@ -70,11 +70,13 @@ describe('CommandPalette', () => {
     const addr = '0xFA4EDE3000000000000000000000000000000003';
     await type(addr);
     const labels = [...doc.querySelectorAll('[role="option"] .l')].map((o) => o.textContent?.trim());
-    expect(labels.slice(0, 3)).toEqual(['Open address on Ethereum', 'Open address on BSC', 'Open address on Polygon']);
+    // the mock instance does not index BSC (like the production instance): only enabled networks are offered
+    expect(labels.slice(0, 2)).toEqual(['Open address on Ethereum', 'Open address on Polygon']);
+    expect(labels).not.toContain('Open address on BSC');
     await key('ArrowDown');
-    expect(doc.querySelector('[aria-selected="true"]')?.textContent).toContain('BSC');
+    expect(doc.querySelector('[aria-selected="true"]')?.textContent).toContain('Polygon');
     await key('Enter');
-    expect(router.navigate).toHaveBeenCalledWith(['/wallets', 'bsc', addr.toLowerCase()]);
+    expect(router.navigate).toHaveBeenCalledWith(['/wallets', 'polygon', addr.toLowerCase()]);
     expect(doc.querySelector('[role="dialog"]')).toBeNull();
   });
 

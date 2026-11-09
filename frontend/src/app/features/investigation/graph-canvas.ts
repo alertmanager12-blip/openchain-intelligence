@@ -79,7 +79,7 @@ export class GraphCanvas {
     return [
       ...nodes.map((n) => ({
         data: {
-          id: n.id, rv: RISK_VAR[n.riskLevel], color: this.css(RISK_VAR[n.riskLevel]), labelled: !!n.label, contract: n.isContract, root: n.id === root,
+          id: n.id, rv: RISK_VAR[n.riskLevel], color: this.css(RISK_VAR[n.riskLevel]), labelled: !!n.label, contract: n.isContract === true, root: n.id === root,
           depth: n.depth,
           // short label at fit zoom (no overlap); full label on hover or selection
           short: n.id === root ? 'Root' : n.label ? n.label : `…${n.address.slice(-4)}`,

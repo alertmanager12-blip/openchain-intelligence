@@ -121,6 +121,16 @@ public final class JdbcAlertRepository implements AlertRepository {
 
     @Override public List<Alert> findAll() { return query("order by created_at, id", Map.of()); }
 
+    @Override public List<io.openchain.alerting.alert.RuleAlertStats> statsByRule(java.time.Instant since) {
+        return jdbc.query("select rule_id, count(*) total, "
+                + "count(*) filter (where status not in ('RESOLVED', 'FALSE_POSITIVE')) open, "
+                + "count(*) filter (where status = 'FALSE_POSITIVE') fp, count(*) filter (where status = 'RESOLVED') resolved, "
+                + "count(*) filter (where created_at >= :since) recent from alerts group by rule_id order by rule_id",
+                Map.of("since", Sql.ts(since == null ? java.time.Instant.EPOCH : since)),
+                (rs, i) -> new io.openchain.alerting.alert.RuleAlertStats(rs.getString("rule_id"), rs.getLong("total"),
+                        rs.getLong("open"), rs.getLong("fp"), rs.getLong("resolved"), rs.getLong("recent")));
+    }
+
     // ---- reading ------------------------------------------------------------------------------------------------
 
     private List<Alert> query(String tail, Map<String, ?> params) {

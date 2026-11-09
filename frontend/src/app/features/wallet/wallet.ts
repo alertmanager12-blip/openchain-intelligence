@@ -64,7 +64,9 @@ export class WalletPage {
   readonly cpCols = ['address', 'direction', 'txCount', 'in', 'out', 'risk'];
   readonly expCols = ['category', 'hops', 'share', 'via', 'evidence'];
   readonly sigCols = ['signal', 'severity', 'evidence', 'detected'];
-  readonly byHash = (_: number, t: ChainTransaction) => t.hash;
+  readonly byHash = (_: number, t: ChainTransaction) => t.id ?? t.hash;
+  /** The node cannot list the address's transactions: rows are the transfers the platform knows. */
+  readonly knownTransfersOnly = computed(() => this.txs().some((t) => t.kind === 'TRANSFER'));
   readonly byCp = (_: number, c: Counterparty) => c.address + c.token.symbol;
   /** Tab labels with the record count of each (shown after the label). */
   readonly tabs = computed<{ label: string; count?: string | number }[]>(() => {

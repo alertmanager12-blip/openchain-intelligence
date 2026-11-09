@@ -116,6 +116,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         long t0 = System.nanoTime();
         loadLabelFiles();
         boolean demo = props.getDemo().isEnabled();
+        refuseRealChainsInDemoMode(demo);
+        chains.setAgeWarmup(props.getIngestion().getAgeWarmup());
         // internal bus: INTERNAL_EVENT actions feed derived events back to the rule engine (hop-limited by the engine)
         connectors.register(new InternalEventConnector("internal-bus", chains::publishInternal, clock));
         if (demo) {
@@ -128,6 +130,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             if (retired > 0) log.warn("demo mode is off: {} key(s) created by a previous demo bootstrap revoked", retired);
         }
         if (props.getRules().isLoadOnStartup()) loadRules();
+        rules.disableUnreachable();
+        warnAboutNotificationRouting(demo);
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
         props.getChains().forEach(this::startRealChain);
         // stored address histories are re-applied in the background: with a few dozen of them this takes minutes
@@ -166,6 +170,24 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             } catch (IOException | RuntimeException e) {
                 log.error("label file {} rejected: {}", f, e.getMessage());
             }
+        }
+    }
+
+    /** Says at start-up when enabled rules cannot notify anyone (instead of thousands of silent dead letters). */
+    private void warnAboutNotificationRouting(boolean demo) {
+        String def = props.getNotifications().getDefaultConnector();
+        if (def != null && !def.isBlank() && connectors.find(def.strip()).isEmpty()) {
+            log.warn("OCI_DEFAULT_CONNECTOR '{}' does not exist: alerts routed to the rule pack placeholder will not be notified", def.strip());
+        }
+        if (demo || (def != null && !def.isBlank())) return;
+        List<String> silent = rules.list().stream().filter(RuleRegistry.StoredRule::enabled)
+                .filter(r -> r.current().rule().actions().stream()
+                        .anyMatch(a -> io.openchain.alerting.notify.delivery.DeliveryService.PLACEHOLDERS.contains(a.connectorId())
+                                && connectors.find(a.connectorId()).isEmpty()))
+                .map(RuleRegistry.StoredRule::id).sorted().toList();
+        if (!silent.isEmpty()) {
+            log.warn("{} enabled rule(s) route to the placeholder 'default-webhook' and no OCI_DEFAULT_CONNECTOR is set: their "
+                    + "alerts are recorded but not notified ({})", silent.size(), String.join(", ", silent));
         }
     }
 
@@ -280,6 +302,20 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
 
     // ---- real providers -----------------------------------------------------------------------------------------
 
+    /**
+     * Demo mode runs with publicly known development secrets (API key pepper, master key) and generated keys: real chain
+     * data must never be processed under it. Refuses to start instead of silently mixing them.
+     */
+    void refuseRealChainsInDemoMode(boolean demo) {
+        if (!demo) return;
+        List<String> real = props.getChains().entrySet().stream().filter(e -> e.getValue().isEnabled()).map(Map.Entry::getKey).sorted().toList();
+        if (!real.isEmpty()) {
+            throw new IllegalStateException("real chain(s) " + real + " enabled while OCI_DEMO_MODE=true: demo mode uses public "
+                    + "development secrets. Set OCI_DEMO_MODE=false (with OCI_SECURITY_API_KEY_PEPPER and OCI_CRYPTO_MASTER_KEY) "
+                    + "or disable the real chains.");
+        }
+    }
+
     private void startRealChain(String id, OciProperties.Chain c) {
         if (!c.isEnabled()) return;
         try {
@@ -290,7 +326,15 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
             }
             Map<String, String> headers = c.getApiKeyHeader() != null && c.getApiKey() != null && !c.getApiKey().isBlank()
                     ? Map.of(c.getApiKeyHeader(), c.getApiKey()) : Map.of();
-            HttpJsonTransport http = new HttpJsonTransport(new RpcEndpoint(n.id() + "-primary", URI.create(c.getUrl()), headers, null, null, null));
+            List<RpcEndpoint> endpoints = new java.util.ArrayList<>();
+            endpoints.add(new RpcEndpoint(n.id() + "-primary", URI.create(c.getUrl()), headers, null, null, null));
+            int k = 0;
+            for (String u : c.getFallbackUrls()) {
+                if (u == null || u.isBlank()) continue;
+                endpoints.add(new RpcEndpoint(n.id() + "-fallback-" + (++k), URI.create(u.strip()), Map.of(), null, null, null));
+            }
+            HttpJsonTransport http = new HttpJsonTransport(endpoints, java.time.Clock.systemUTC(), io.openchain.blockchain.transport.Sleeper.SYSTEM);
+            if (k > 0) log.info("chain {}: {} fallback endpoint(s) configured", id, k);
             BlockchainProvider p = switch (n) {
                 case TRON -> new TronGridProvider("tron-trongrid", http, tokens, TronConfig.defaults());
                 case ETHEREUM, BSC, POLYGON -> new EvmJsonRpcProvider(n.id() + "-rpc", n, new JsonRpcClient(http), tokens,

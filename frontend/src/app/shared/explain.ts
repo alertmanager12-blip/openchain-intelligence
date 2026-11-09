@@ -7,12 +7,9 @@ import { sentence } from './format';
  */
 const SIGNAL_TITLES: Record<string, string> = {
   UNUSUAL_AMOUNT: 'Unusual amount',
-  REPETITIVE_TRANSFERS: 'Repetitive transfers',
   STRUCTURING: 'Possible structuring',
   FAST_FORWARDING: 'Fast forwarding',
-  BASELINE_DEVIATION: 'Deviation from usual activity',
   DORMANT_REACTIVATION: 'Dormant wallet reactivated',
-  ADDRESS_PROLIFERATION: 'Address proliferation',
   CIRCULAR_FLOW: 'Circular flow',
   FLOW_CONCENTRATION: 'Fan-out to many recipients',
   RAPID_DRAIN: 'Rapid drain',
@@ -23,10 +20,7 @@ const SIGNAL_TITLES: Record<string, string> = {
   SCAM_EXPOSURE: 'Direct exposure to a scam-reported address',
   DUSTING: 'Dusting from a listed address',
   OWNERSHIP_CHANGE: 'Contract ownership change',
-  DANGEROUS_ADMIN_PERMISSION: 'Dangerous admin permission',
-  MINT_CAPABILITY: 'Mint capability',
   UNUSUAL_APPROVAL: 'Unlimited token approval',
-  MALICIOUS_CONTRACT_INTERACTION: 'Interaction with a listed contract',
 };
 
 const LABEL_CATEGORIES: Record<string, string> = {

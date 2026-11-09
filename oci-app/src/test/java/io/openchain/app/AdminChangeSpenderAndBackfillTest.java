@@ -94,7 +94,8 @@ class AdminChangeSpenderAndBackfillTest extends ApiTestSupport {
             return new BlockActivity(tt, List.of(), ap, List.of(), ad);
         }
         @Override public Optional<Boolean> isContract(Address a, long atBlock) {
-            codeLookups.incrementAndGet();
+            // block-pinned lookups come from the indexer's enrichment; atBlock < 0 ("now") from the wallet page
+            if (atBlock >= 0) codeLookups.incrementAndGet();
             return Optional.of(contracts.contains(a));
         }
         @Override public List<Balance> getAddressBalance(Address a) { return List.of(); }
@@ -128,6 +129,8 @@ class AdminChangeSpenderAndBackfillTest extends ApiTestSupport {
     @BeforeEach
     synchronized void registerOnce() {
         if (chains.runtime(ETH).isPresent()) return;
+        // the scripted chain covers a few minutes: this test is about the fields' semantics, not the observation warm-up
+        chains.setAgeWarmup(Duration.ZERO);
         eth = new ScriptedEthereum();
         eth.blocks.put(1L, BlockActivity.ofTransfers(List.of(
                 eth.transfer(1, 0, FUNDER, OWNER, 50_000), eth.transfer(1, 1, FUNDER, OWNER2, 50_000), eth.transfer(1, 2, FUNDER, OWNER3, 50_000),

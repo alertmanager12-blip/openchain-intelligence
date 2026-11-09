@@ -14,9 +14,7 @@ const EXAMPLES: { family: string; example: string }[] = [
   { family: 'EVM address (Ethereum, BSC, Polygon)', example: '0x + 40 hex characters' },
   { family: 'EVM transaction hash', example: '0x + 64 hex characters' },
   { family: 'TRON address', example: 'T + 33 base58 characters' },
-  { family: 'Bitcoin address', example: 'bc1… or a legacy 1… / 3… address' },
-  { family: 'TRON or Bitcoin transaction id', example: '64 hex characters without 0x' },
-  { family: 'Solana address or signature', example: 'base58, 32 to 44 or 86 to 88 characters' },
+  { family: 'TRON transaction id', example: '64 hex characters without 0x' },
 ];
 
 @Component({

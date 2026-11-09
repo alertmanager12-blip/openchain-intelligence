@@ -22,7 +22,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
+  metrics:
+    distribution:
+      # buckets for the API p95 latency panel of the Grafana dashboard
+      percentiles-histogram:
+        http.server.requests: true
   endpoint:
     health:
       show-details: never
@@ -38,10 +43,13 @@ info:
     version: 0.1.0-SNAPSHOT
 
 springdoc:
+  # OpenAPI document and Swagger UI: on in demo mode, off otherwise unless OCI_API_DOCS_ENABLED=true
   api-docs:
     path: /v3/api-docs
+    enabled: ${OCI_API_DOCS_ENABLED:${oci.demo.enabled:false}}
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${OCI_API_DOCS_ENABLED:${oci.demo.enabled:false}}
 
 oci:
   demo:
@@ -96,6 +104,8 @@ oci:
   notifications:
     # Public URL of the console, for links in notifications (Telegram). Unset = no console link.
     public-url: ${OCI_PUBLIC_URL:}
+    # Connector receiving the alerts of rules routed to the pack placeholder "default-webhook". Unset = not notified (SKIPPED).
+    default-connector: ${OCI_DEFAULT_CONNECTOR:}
     telegram:
       # Bot token used by TELEGRAM connectors (destination chat id is given per connector). Unset = channel disabled.
       bot-token: ${OCI_TELEGRAM_BOT_TOKEN:}

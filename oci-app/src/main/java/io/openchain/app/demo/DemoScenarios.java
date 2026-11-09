@@ -81,14 +81,14 @@ public final class DemoScenarios {
         Address faucet = ledger.faucet();
         Instant at = Instant.parse("2026-01-01T00:00:00Z");
 
-        // A - large transfer: a pool wallet receives 3 x 900k USDT then moves 2M USDT in one transfer
+        // A - large transfer: a pool wallet receives 3 x 4.5M USDT then moves 12M USDT in one transfer (rule: 10M or more)
         Address a1 = pool.get(5), a2 = pool.get(6);
         List<String> ta = new ArrayList<>();
         // routine activity first: a baseline of small payments the amount detector compares against
         for (int i = 0; i < 12; i++) ta.add(inject(ledger, b - 30 + i, "A-routine-" + i, a1, pool.get(10 + i % 5), units(100 + 7L * i), null));
-        for (int i = 0; i < 3; i++) ta.add(inject(ledger, b + i, "A-fund-" + i, faucet, a1, units(900_000), null));
-        ta.add(inject(ledger, b + 5, "A-large", a1, a2, units(2_000_000), null));
-        add("A", "Large USDT transfer", "A wallet with routine small payments receives 2.7M USDT from a (fictional) exchange faucet and sends 2M USDT in a single transfer.",
+        for (int i = 0; i < 3; i++) ta.add(inject(ledger, b + i, "A-fund-" + i, faucet, a1, units(4_500_000), null));
+        ta.add(inject(ledger, b + 5, "A-large", a1, a2, units(12_000_000), null));
+        add("A", "Large USDT transfer", "A wallet with routine small payments receives 13.5M USDT from a (fictional) exchange faucet and sends 12M USDT in a single transfer.",
                 roles("sender", a1, "recipient", a2), List.of(a1), ta, "large-usdt-transfer", "UNUSUAL_AMOUNT");
 
         // B - indirect exposure: sanctioned -> X -> Y (2 hops)
@@ -110,17 +110,17 @@ public final class DemoScenarios {
         add("C", "Wallet draining", "A wallet holding 100k USDT (historical deposit) sends 95% of it to two fresh addresses within one minute.",
                 roles("wallet", w, "destination1", z1, "destination2", z2), List.of(w), tc, "wallet-draining", "RAPID_DRAIN");
 
-        // D - fund splitting: 300k historical deposit, then 21 x 10k to 21 fresh recipients in one block
+        // D - fund splitting: 400k historical deposit, then 32 x 10k to 32 fresh recipients in one block (rule: more than 30)
         Address d = fresh("D-wallet");
         List<String> td = new ArrayList<>();
-        td.add(inject(ledger, b + 50, "D-deposit", faucet, d, units(300_000), Duration.ofHours(2)));
+        td.add(inject(ledger, b + 50, "D-deposit", faucet, d, units(400_000), Duration.ofHours(2)));
         Map<String, String> rd = roles("wallet", d);
-        for (int i = 1; i <= 21; i++) {
+        for (int i = 1; i <= 32; i++) {
             Address r = fresh("D-recipient-" + i);
             td.add(inject(ledger, b + 60, "D-split-" + i, d, r, units(10_000), null));
             if (i <= 3) rd.put("recipient" + i, r.value());
         }
-        add("D", "Fund splitting (fan-out)", "A wallet splits 210k USDT into 21 transfers of 10k to 21 fresh addresses in one block.",
+        add("D", "Fund splitting (fan-out)", "A wallet splits 320k USDT into 32 transfers of 10k to 32 fresh addresses in one block.",
                 rd, List.of(d), td, "fund-splitting", "FLOW_CONCENTRATION");
 
         // E - dormant reactivation: deposit 400 days ago (historical), then a transfer now

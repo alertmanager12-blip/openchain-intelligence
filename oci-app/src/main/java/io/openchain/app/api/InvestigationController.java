@@ -71,15 +71,41 @@ public class InvestigationController {
                 throw ApiException.badRequest("invalid cursor");
             }
         }
+        if (providerCursor != null && providerCursor.startsWith(KNOWN_PREFIX)) return knownTransfers(a, providerCursor, l);
         Page<ChainTransaction> p;
         try {
             p = chains.provider(n).orElseThrow().getAddressTransactions(a, providerCursor, l);
         } catch (NumberFormatException e) {
             throw ApiException.badRequest("invalid cursor");
+        } catch (io.openchain.core.provider.ProviderException e) {
+            // standard EVM JSON-RPC cannot list an address's transactions: serve the transfers the platform knows
+            // (live indexing + on-demand address history) instead of failing the page; transient errors still fail
+            if (e.retryable()) throw e;
+            return knownTransfers(a, providerCursor, l);
         }
         String next = p.nextCursor() == null ? null
                 : Base64.getUrlEncoder().withoutPadding().encodeToString(p.nextCursor().getBytes(StandardCharsets.UTF_8));
         return new CursorPage<>(p.items().stream().map(ApiMapper::tx).toList(), next, false);
+    }
+
+    private static final String KNOWN_PREFIX = "known:";
+
+    /** Newest first, offset-paged (cursor "known:<offset>", wrapped like the provider's cursors). */
+    private CursorPage<Dto.TxDto> knownTransfers(Address a, String cursor, int limit) {
+        int offset = 0;
+        if (cursor != null && cursor.startsWith(KNOWN_PREFIX)) {
+            try {
+                offset = Math.max(0, Integer.parseInt(cursor.substring(KNOWN_PREFIX.length())));
+            } catch (NumberFormatException e) {
+                throw ApiException.badRequest("invalid cursor");
+            }
+        }
+        java.util.List<io.openchain.intelligence.flow.ValueFlow> all = new java.util.ArrayList<>(investigation.knownFlows(a));
+        java.util.Collections.reverse(all);
+        int end = Math.min(all.size(), offset + limit);
+        String next = end < all.size()
+                ? Base64.getUrlEncoder().withoutPadding().encodeToString((KNOWN_PREFIX + end).getBytes(StandardCharsets.UTF_8)) : null;
+        return new CursorPage<>(all.subList(Math.min(offset, all.size()), end).stream().map(ApiMapper::transfer).toList(), next, false);
     }
 
     @GetMapping("/wallets/{address}/risk")
@@ -122,7 +148,8 @@ public class InvestigationController {
         for (Network n : Network.values()) {
             var rt = chains.runtime(n);
             if (rt.isEmpty()) {
-                if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0, false));
+                if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0, false,
+                        List.of()));
                 continue;
             }
             NetworkStatus s = chains.status(rt.get());
@@ -130,7 +157,7 @@ public class InvestigationController {
             String detail = rt.get().lastError() != null ? rt.get().lastError() : s.detail();
             out.add(new Dto.NetworkDto(n.id(), true, s.headBlock(), s.finalizedBlock(), s.healthy() && rt.get().lastError() == null,
                     s.providerId(), s.latencyMillis(), s.checkedAt(), detail, indexed, indexed < 0 ? s.headBlock() : Math.max(0, s.headBlock() - indexed),
-                    rt.get().simulator().isPresent()));
+                    rt.get().simulator().isPresent(), investigation.limitations(n)));
         }
         return out;
     }

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output, signal } from '@angular/core';
 import { MatIconButton } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSlideToggle } from '@angular/material/slide-toggle';
@@ -6,7 +6,7 @@ import { MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
-import { Rule } from '../../core/models';
+import { Rule, RuleNoise } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { timeAgo } from '../../shared/format';
@@ -26,7 +26,10 @@ import { SeverityBadge, StateComponent } from '../../shared/ui';
         <div class="table-wrap"><table mat-table [dataSource]="list.value()?.items ?? []" [trackBy]="byId">
           <ng-container matColumnDef="rule">
             <th mat-header-cell *matHeaderCellDef scope="col">Rule</th>
-            <td mat-cell *matCellDef="let r"><span class="strong">{{ r.name }}</span><div class="sub"><span class="mono">{{ r.id }}</span></div></td>
+            <td mat-cell *matCellDef="let r"><span class="strong">{{ r.name }}</span><div class="sub"><span class="mono">{{ r.id }}</span></div>
+              @if (r.unreachableReasons?.length) {
+                <div class="sub warn" data-testid="unreachable">Can never fire on this instance: {{ r.unreachableReasons.join('; ') }}</div>
+              }</td>
           </ng-container>
           <ng-container matColumnDef="severity">
             <th mat-header-cell *matHeaderCellDef scope="col">Severity</th>
@@ -34,7 +37,15 @@ import { SeverityBadge, StateComponent } from '../../shared/ui';
           </ng-container>
           <ng-container matColumnDef="enabled">
             <th mat-header-cell *matHeaderCellDef scope="col">Enabled</th>
-            <td mat-cell *matCellDef="let r"><mat-slide-toggle [checked]="r.enabled" [disabled]="busy() === r.id" (change)="toggle(r)" [aria-label]="'Enabled: ' + r.name" hideIcon /></td>
+            <td mat-cell *matCellDef="let r"><mat-slide-toggle [checked]="r.enabled" [disabled]="busy() === r.id || (!r.enabled && !!r.unreachableReasons?.length)" (change)="toggle(r)" [aria-label]="'Enabled: ' + r.name" hideIcon /></td>
+          </ng-container>
+          <ng-container matColumnDef="noise">
+            <th mat-header-cell *matHeaderCellDef scope="col" class="right">Alerts 24 h</th>
+            <td mat-cell *matCellDef="let r" class="right nowrap" data-testid="noise">
+              @if (noiseOf(r.id); as n) {
+                {{ n.recent }}@if (n.falsePositiveRate !== null) { <div class="sub">{{ pct(n.falsePositiveRate) }}% false positives</div> }
+              } @else { <span class="muted">0</span> }
+            </td>
           </ng-container>
           <ng-container matColumnDef="version">
             <th mat-header-cell *matHeaderCellDef scope="col" class="right">Version</th>
@@ -72,7 +83,12 @@ export class StoredRules {
   readonly list = apiResource({ params: () => ({}), stream: () => this.api.rules() });
   readonly busy = signal<string | null>(null);
   readonly ago = timeAgo;
-  readonly cols = ['rule', 'severity', 'enabled', 'version', 'updated', 'actions'];
+  readonly cols = ['rule', 'severity', 'enabled', 'noise', 'version', 'updated', 'actions'];
+  /** Alert volume per rule over the last 24 hours (GET /rules/noise): the measurement behind rule tuning. */
+  readonly noise = apiResource({ params: () => ({}), stream: () => this.api.ruleNoise(24) });
+  private readonly noiseById = computed(() => new Map((this.noise.value() ?? []).map((n) => [n.ruleId, n])));
+  noiseOf(id: string): RuleNoise | undefined { return this.noiseById().get(id); }
+  pct(rate: number): number { return Math.round(rate * 100); }
   readonly byId = (_: number, r: Rule) => r.id;
 
   enabledCount(): number {

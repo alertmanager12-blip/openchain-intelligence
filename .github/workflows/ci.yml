@@ -70,20 +70,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      # Placeholder — enforce ADR-0012. Replace with failing checks once the allowlist is finalised.
-      - name: Maven third-party licences (report)
-        run: mvn -B -ntp -q org.codehaus.mojo:license-maven-plugin:2.4.0:aggregate-add-third-party -Dlicense.excludedScopes=test,provided || echo "::warning::licence report failed (placeholder job)"
-      - name: npm licences (report)
+      # Enforces ADR-0012: the job fails on any runtime dependency without an allowed licence.
+      - name: Maven third-party licences
+        run: |
+          mvn -B -ntp -q org.codehaus.mojo:license-maven-plugin:2.4.0:aggregate-add-third-party -Dlicense.excludedScopes=test,provided
+          python3 .github/scripts/check-maven-licences.py target/generated-sources/license/THIRD-PARTY.txt
+      - name: npm licences
         working-directory: frontend
         run: |
           npm ci --no-audit --no-fund --ignore-scripts
           # ADR-0012 amendment 1: OFL-1.1 is allowed for these font packages only; everything else uses the base allowlist.
           FONT_PACKAGES="@fontsource-variable/inter@5.3.0;@fontsource/jetbrains-mono@5.3.0"
           npx --yes license-checker-rseidelsohn@4 --production --summary --excludePrivatePackages --excludePackages "$FONT_PACKAGES" \
-            --onlyAllow "Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Python-2.0;BlueOak-1.0.0;Unlicense" \
-            || echo "::warning::npm licence policy violations (placeholder job, not yet blocking)"
-          npx --yes license-checker-rseidelsohn@4 --production --summary --includePackages "$FONT_PACKAGES" --onlyAllow "OFL-1.1" \
-            || echo "::warning::font packages must be OFL-1.1 (ADR-0012 amendment 1)"
+            --onlyAllow "Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Python-2.0;BlueOak-1.0.0;Unlicense"
+          npx --yes license-checker-rseidelsohn@4 --production --summary --includePackages "$FONT_PACKAGES" --onlyAllow "OFL-1.1"
 
   docker:
     name: Docker images

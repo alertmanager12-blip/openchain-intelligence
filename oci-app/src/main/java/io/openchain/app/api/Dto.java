@@ -47,14 +47,17 @@ public final class Dto {
 
     public record ActivityDto(String day, int txIn, int txOut) {}
 
-    public record ProfileDto(Instant firstSeen, Instant lastSeen, long txCount, boolean isContract, long inboundTransfers,
+    public record ProfileDto(Instant firstSeen, Instant lastSeen, long txCount, Boolean isContract, long inboundTransfers,
                              long outboundTransfers, double txPerDay) {}
 
     public record WalletAnalysisDto(String address, String network, Instant firstSeen, Instant lastSeen, long txCount,
-                                    boolean isContract, List<LabelDto> labels, List<BalanceDto> balances, List<FlowDto> flows,
+                                    /** true / false from the provider (code at the address); null = unknown */
+                                    Boolean isContract, List<LabelDto> labels, List<BalanceDto> balances, List<FlowDto> flows,
                                     List<CounterpartyDto> counterparties, List<ActivityDto> activity, List<SignalDto> signals,
                                     RiskScoreDto risk, ProfileDto profile, RiskScoreDto riskScore, String dataFreshness,
-                                    String disclaimer, HistoryCoverageDto history) {}
+                                    String disclaimer, HistoryCoverageDto history,
+                                    /** What this instance cannot see or detect on this network (data-source limits). */
+                                    List<String> limitations) {}
 
     /**
      * Coverage of the on-demand address history (ADR-0020) for one wallet.
@@ -69,9 +72,15 @@ public final class Dto {
                                      boolean nativeCovered, boolean internalCovered, boolean truncated, long eventsFound,
                                      String message, Instant updatedAt) {}
 
+    /**
+     * One row of a wallet's activity. {@code kind} = TRANSACTION (listed by the provider; value in the native coin) or
+     * TRANSFER (a value flow known to the platform: live indexing + address history; value in {@code nativeSymbol}, which is
+     * then the token's symbol, with its decimals; fee and method unknown). {@code id} is unique per row (one transaction
+     * can carry several transfers).
+     */
     public record TxDto(String network, String hash, long blockNumber, Instant timestamp, String from, String to, String value,
                         String fee, boolean success, String methodSelector, boolean contractInteraction, String nativeSymbol,
-                        int nativeDecimals) {}
+                        int nativeDecimals, String kind, String id) {}
 
     public record TransferDto(String network, String txHash, int logIndex, long blockNumber, Instant timestamp, String from,
                               String to, TokenDto token, String rawAmount, String amount) {}
@@ -83,10 +92,13 @@ public final class Dto {
 
     public record NetworkDto(String network, boolean enabled, long headBlock, long finalizedBlock, boolean healthy,
                              String providerId, long latencyMillis, Instant checkedAt, String detail, long lastIndexedBlock,
-                             long indexerLag, boolean simulated) {}
+                             long indexerLag, boolean simulated,
+                             /** What this instance cannot see or detect on this network (data-source limits). */
+                             List<String> limitations) {}
 
     public record GraphNodeDto(String id, String address, String network, String label, List<String> labels, String riskLevel,
-                               int riskScore, boolean isContract, int depth) {}
+                               /** null = not resolved (graph nodes are not looked up, to bound provider calls) */
+                               int riskScore, Boolean isContract, int depth) {}
 
     public record GraphEdgeDto(String id, String source, String target, String txHash, TokenDto token, String rawAmount,
                                String amount, Instant timestamp, int count) {}
@@ -120,7 +132,9 @@ public final class Dto {
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,
-                          List<String> networks, String origin, Instant createdAt, Instant updatedAt) {}
+                          List<String> networks, String origin, Instant createdAt, Instant updatedAt,
+                          /** Why the rule can never fire on this instance (fields/event types never produced); empty = may fire. */
+                          List<String> unreachableReasons) {}
 
     public record WebhookDto(String id, String type, String name, String target, String url, List<String> events, boolean enabled,
                              Instant createdAt, Instant lastDeliveryAt, String lastDeliveryStatus,

@@ -204,7 +204,10 @@ public class RuleRegistry {
                     String mergedHash = "sha256:" + sha256(merged);
                     Instant now = clock.instant();
                     if (row == null) {
-                        StoredRule sr = new StoredRule(id, List.of(version(1, src, fmt, r.rule(), now)), r.rule().rule().enabled(),
+                        boolean on = r.rule().rule().enabled() && unreachable(r.rule().rule()).isEmpty();
+                        if (r.rule().rule().enabled() && !on) log.warn("rule '{}' from {} loaded disabled: it can never fire ({})", id,
+                                p.getFileName(), String.join("; ", unreachable(r.rule().rule())));
+                        StoredRule sr = new StoredRule(id, List.of(version(1, src, fmt, r.rule(), now)), on,
                                 "repository", now, now);
                         persist(sr, null);
                         rules.put(id, sr);
@@ -306,8 +309,38 @@ public class RuleRegistry {
         return rules.containsKey(c.id()) ? update(c.id(), source, format) : create(source, format);
     }
 
+    /**
+     * Why a rule can never fire with what this deployment produces (fields and event types of
+     * {@link io.openchain.app.api.PopulatedFields}); empty = it may fire.
+     */
+    public static List<String> unreachable(io.openchain.alerting.rule.Rule rule) {
+        return io.openchain.alerting.rule.RuleReachability.unreachable(rule, io.openchain.app.api.PopulatedFields.FIELDS,
+                io.openchain.app.api.PopulatedFields.EVENT_TYPES);
+    }
+
+    /** Disables the enabled rules that can never fire (shipped or created before this check); returns their ids. */
+    public synchronized List<String> disableUnreachable() {
+        List<String> off = new ArrayList<>();
+        for (StoredRule r : List.copyOf(rules.values())) {
+            if (!r.enabled()) continue;
+            List<String> why = unreachable(r.current().rule());
+            if (why.isEmpty()) continue;
+            setEnabled(r.id(), false);
+            log.warn("rule '{}' disabled: it can never fire ({})", r.id(), String.join("; ", why));
+            off.add(r.id());
+        }
+        return off;
+    }
+
     public synchronized StoredRule setEnabled(String id, boolean enabled) {
         StoredRule old = get(id);
+        if (enabled) {
+            List<String> why = unreachable(old.current().rule());
+            if (!why.isEmpty()) {
+                throw new InvalidRuleException("rule '" + id + "' can never fire with the data this instance produces",
+                        why.stream().map(w -> new ValidationError("$", ValidationError.Code.CONFLICT, w)).toList());
+            }
+        }
         StoredRule sr = new StoredRule(id, old.versions(), enabled, old.origin(), old.createdAt(), clock.instant());
         persist(sr, null);
         rules.put(id, sr);

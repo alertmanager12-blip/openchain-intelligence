@@ -160,7 +160,7 @@ const CATALOG: FieldDef[] = [
   { path: 'approval.spender_is_contract', type: 'boolean', description: 'Spender is a contract' },
   { path: 'approval.spender_age_days', type: 'number', description: 'Spender age in days' },
   { path: 'approval.spender_verified', type: 'boolean', description: 'Spender contract source verified' },
-  { path: 'signal.type', type: 'enum', description: 'SignalType name', options: ['UNUSUAL_AMOUNT', 'REPETITIVE_TRANSFERS', 'STRUCTURING', 'FAST_FORWARDING', 'BASELINE_DEVIATION', 'DORMANT_REACTIVATION', 'ADDRESS_PROLIFERATION', 'CIRCULAR_FLOW', 'FLOW_CONCENTRATION', 'RAPID_DRAIN', 'SANCTIONED_EXPOSURE', 'FLAGGED_EXPOSURE', 'INDIRECT_EXPOSURE', 'MIXER_EXPOSURE', 'SCAM_EXPOSURE', 'OWNERSHIP_CHANGE', 'DANGEROUS_ADMIN_PERMISSION', 'MINT_CAPABILITY', 'UNUSUAL_APPROVAL', 'MALICIOUS_CONTRACT_INTERACTION'] },
+  { path: 'signal.type', type: 'enum', description: 'SignalType name', options: ['UNUSUAL_AMOUNT', 'STRUCTURING', 'FAST_FORWARDING', 'DORMANT_REACTIVATION', 'CIRCULAR_FLOW', 'FLOW_CONCENTRATION', 'RAPID_DRAIN', 'SANCTIONED_EXPOSURE', 'FLAGGED_EXPOSURE', 'INDIRECT_EXPOSURE', 'MIXER_EXPOSURE', 'SCAM_EXPOSURE', 'OWNERSHIP_CHANGE', 'UNUSUAL_APPROVAL'] },
   { path: 'signal.severity', type: 'enum', description: 'INFO|LOW|MEDIUM|HIGH|CRITICAL', options: ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
   { path: 'signal.confidence', type: 'amount', description: 'Signal confidence 0..1' },
   { path: 'signal.evidence_level', type: 'enum', description: 'ANOMALY|RISK_SIGNAL|CONFIRMED_BY_SOURCE', options: ['ANOMALY', 'RISK_SIGNAL', 'CONFIRMED_BY_SOURCE'] },

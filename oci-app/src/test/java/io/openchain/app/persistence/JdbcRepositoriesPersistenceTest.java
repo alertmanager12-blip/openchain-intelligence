@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(5);
-        assertThat(first.targetSchemaVersion).isEqualTo("5");
+        assertThat(first.migrationsExecuted).isEqualTo(6);
+        assertThat(first.targetSchemaVersion).isEqualTo("6");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -340,6 +340,26 @@ class JdbcRepositoriesPersistenceTest {
                 .addHistory(new Alert.HistoryEntry(AlertStatus.PENDING, AlertStatus.RESOLVED, "analyst", T0.plusSeconds(9), null)).build());
         assertThat(repo.findOpenByDedupKey("rule-a", "k1")).isEmpty();
         assertThat(repo.findById("a1").orElseThrow().history()).hasSize(3);
+    }
+
+    @Test
+    void noiseStatsAreAggregatedPerRuleInSql() {
+        JdbcAlertRepository repo = new JdbcAlertRepository(jdbc, tx);
+        repo.save(alert("n1", "kn1", List.of("en1")));
+        repo.save(alert("n2", "kn2", List.of("en2")).toBuilder().status(AlertStatus.FALSE_POSITIVE).build());
+        repo.save(alert("n3", "kn3", List.of("en3")).toBuilder().status(AlertStatus.RESOLVED).build());
+        repo.save(alert("n4", "kn4", List.of("en4")).toBuilder().ruleId("rule-b").createdAt(T0.minusSeconds(7200)).build());
+        var stats = repo.statsByRule(T0.minusSeconds(60));
+        assertThat(stats).filteredOn(s -> s.ruleId().equals("rule-a")).singleElement().satisfies(s -> {
+            assertThat(s.total()).isEqualTo(3);
+            assertThat(s.open()).isEqualTo(1);
+            assertThat(s.falsePositive()).isEqualTo(1);
+            assertThat(s.resolved()).isEqualTo(1);
+            assertThat(s.recent()).isEqualTo(3);
+            assertThat(s.falsePositiveRate()).isEqualTo(0.5);
+        });
+        assertThat(stats).filteredOn(s -> s.ruleId().equals("rule-b")).singleElement()
+                .satisfies(s -> assertThat(s.recent()).isZero()); // created two hours before the window
     }
 
     @Test

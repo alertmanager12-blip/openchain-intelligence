@@ -71,7 +71,7 @@
       "items": {
         "type": "object", "additionalProperties": false, "required": ["type", "connectorId"],
         "properties": {
-          "type": { "enum": ["WEBHOOK", "SLACK", "DISCORD", "TELEGRAM", "EMAIL", "PUSH", "INTERNAL_EVENT"] },
+          "type": { "enum": ["WEBHOOK", "SLACK", "DISCORD", "TELEGRAM", "EMAIL", "INTERNAL_EVENT"] },
           "connectorId": { "$ref": "#/$defs/slug" },
           "params": {
             "type": "object", "maxProperties": 20,

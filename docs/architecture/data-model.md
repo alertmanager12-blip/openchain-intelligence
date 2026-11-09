@@ -9,9 +9,9 @@ Conventions:
 - Tenant-owned tables carry `tenant_id uuid not null` and have Row-Level Security (`USING (tenant_id = current_setting('app.tenant_id')::uuid)`).
 - Migrations: Flyway (`oci-app/src/main/resources/db/migration`). The DDL below is the reference design; migrations are authoritative.
 
-## Implemented schema (V1 operator state, V2 freeze backfill, V3 alert subject, V4 address history)
+## Implemented schema (V1 operator state, V2 freeze backfill, V3 alert subject, V4 address history, V5 rule actions override, V6 skipped deliveries)
 
-`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables; `V3__alert_subject.sql` stores what each alert is about; `V4__address_history.sql` adds the on-demand address history tables (ADR-0020). It differs from the reference design below:
+`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables; `V3__alert_subject.sql` stores what each alert is about; `V4__address_history.sql` adds the on-demand address history tables (ADR-0020); `V5__rule_actions_override.sql` adds `rules.actions_override` (operator's notification routing kept across rule pack updates); `V6__delivery_skipped.sql` allows the delivery status `SKIPPED` (no connector could receive the notification). It differs from the reference design below:
 
 | Area | Implemented (V1) | Reference design |
 |---|---|---|

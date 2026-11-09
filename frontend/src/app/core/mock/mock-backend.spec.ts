@@ -1,3 +1,4 @@
+import { MockDb } from './mock-db';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
@@ -63,7 +64,7 @@ describe('mock backend (through the real ApiService + interceptors)', () => {
   });
 
   it('returns problem+json errors as ApiError (provider outage is retryable)', async () => {
-    const err = await firstValueFrom(api.walletRisk(fakeAddress('solana', 1), 'solana')).catch((e) => e);
+    const err = await firstValueFrom(api.walletRisk(MockDb.OUTAGE_ADDRESS, 'polygon')).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(503);
     expect((err as ApiError).retryable).toBe(true);
