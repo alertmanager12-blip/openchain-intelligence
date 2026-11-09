@@ -13,10 +13,7 @@ Once 1.0 is released, the latest minor release and the previous one receive secu
 
 **Please do not open public issues, discussions or pull requests for security vulnerabilities.**
 
-Report privately through one of:
-
-1. **GitHub private vulnerability reporting**: *Security* tab → *Report a vulnerability* (preferred).
-2. Email **security@openchain-intelligence.org** (encrypt with the PGP key published in the repository's security advisories page, if available).
+Report privately through **GitHub private vulnerability reporting**: *Security* tab → *Report a vulnerability*.
 
 Please include: affected version/commit, component (API, rule engine, connectors, indexer, frontend, deployment), reproduction steps or proof of concept, impact, and any suggested fix. Do not include real third-party personal data.
 
