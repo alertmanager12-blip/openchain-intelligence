@@ -3,37 +3,37 @@
 # and the ecosystem labels Dependabot adds (java, javascript, docker, github_actions).
 
 # Type
-- { name: bug, color: d73a4a, description: "Something does not work as documented" }
-- { name: feature, color: 0e8a16, description: "A new capability" }
-- { name: enhancement, color: a2eeef, description: "An improvement of an existing capability" }
-- { name: documentation, color: 0075ca, description: "Documentation only" }
-- { name: security, color: b60205, description: "Security hardening (vulnerabilities are reported privately, see SECURITY.md)" }
-- { name: refactoring, color: c5def5, description: "Code change without behaviour change" }
-- { name: rule, color: 5319e7, description: "Detection rule or rule pack" }
+- { name: bug, color: "d73a4a", description: "Something does not work as documented" }
+- { name: feature, color: "0e8a16", description: "A new capability" }
+- { name: enhancement, color: "a2eeef", description: "An improvement of an existing capability" }
+- { name: documentation, color: "0075ca", description: "Documentation only" }
+- { name: security, color: "b60205", description: "Security hardening (vulnerabilities are reported privately, see SECURITY.md)" }
+- { name: refactoring, color: "c5def5", description: "Code change without behaviour change" }
+- { name: rule, color: "5319e7", description: "Detection rule or rule pack" }
 
 # Priority
-- { name: "priority:critical", color: b60205, description: "Breaks production or security; handled first" }
-- { name: "priority:high", color: d93f0b, description: "Important, next in line" }
-- { name: "priority:medium", color: fbca04, description: "Normal priority" }
-- { name: "priority:low", color: c2e0c6, description: "Nice to have" }
+- { name: "priority:critical", color: "b60205", description: "Breaks production or security; handled first" }
+- { name: "priority:high", color: "d93f0b", description: "Important, next in line" }
+- { name: "priority:medium", color: "fbca04", description: "Normal priority" }
+- { name: "priority:low", color: "c2e0c6", description: "Nice to have" }
 
 # Status
-- { name: "status:triage", color: ededed, description: "New, not reviewed by a maintainer yet" }
-- { name: "status:accepted", color: 0e8a16, description: "Confirmed and accepted, can be worked on" }
-- { name: "status:in-progress", color: 1d76db, description: "Someone is working on it" }
-- { name: "status:blocked", color: 000000, description: "Waiting on something else" }
-- { name: "status:needs-review", color: fbca04, description: "Waiting for a maintainer review" }
+- { name: "status:triage", color: "ededed", description: "New, not reviewed by a maintainer yet" }
+- { name: "status:accepted", color: "0e8a16", description: "Confirmed and accepted, can be worked on" }
+- { name: "status:in-progress", color: "1d76db", description: "Someone is working on it" }
+- { name: "status:blocked", color: "000000", description: "Waiting on something else" }
+- { name: "status:needs-review", color: "fbca04", description: "Waiting for a maintainer review" }
 
 # Contribution
-- { name: good first issue, color: 7057ff, description: "Small, well-described task for a first contribution" }
-- { name: help wanted, color: 008672, description: "Maintainers would welcome a contribution" }
-- { name: community contribution, color: f9d0c4, description: "Pull request from outside the maintainer team" }
+- { name: good first issue, color: "7057ff", description: "Small, well-described task for a first contribution" }
+- { name: help wanted, color: "008672", description: "Maintainers would welcome a contribution" }
+- { name: community contribution, color: "f9d0c4", description: "Pull request from outside the maintainer team" }
 
 # Module
-- { name: oci-core, color: bfdadc, description: "Module oci-core (domain model)" }
-- { name: oci-blockchain, color: bfdadc, description: "Module oci-blockchain (TRON and EVM adapters, indexer)" }
-- { name: oci-intelligence, color: bfdadc, description: "Module oci-intelligence (detectors, scoring, labels)" }
-- { name: oci-alerting, color: bfdadc, description: "Module oci-alerting (rules, alerts, connectors)" }
-- { name: oci-app, color: bfdadc, description: "Module oci-app (REST API, security, persistence)" }
-- { name: frontend, color: bfdadc, description: "Angular console and landing page" }
-- { name: infrastructure, color: bfdadc, description: "Docker, deployment, CI" }
+- { name: oci-core, color: "bfdadc", description: "Module oci-core (domain model)" }
+- { name: oci-blockchain, color: "bfdadc", description: "Module oci-blockchain (TRON and EVM adapters, indexer)" }
+- { name: oci-intelligence, color: "bfdadc", description: "Module oci-intelligence (detectors, scoring, labels)" }
+- { name: oci-alerting, color: "bfdadc", description: "Module oci-alerting (rules, alerts, connectors)" }
+- { name: oci-app, color: "bfdadc", description: "Module oci-app (REST API, security, persistence)" }
+- { name: frontend, color: "bfdadc", description: "Angular console and landing page" }
+- { name: infrastructure, color: "bfdadc", description: "Docker, deployment, CI" }
