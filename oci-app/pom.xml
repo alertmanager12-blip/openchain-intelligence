@@ -7,7 +7,7 @@
   <description>Spring Boot application: REST API v1, security, persistence</description>
 
   <properties>
-    <springdoc.version>3.1.0</springdoc.version>
+    <springdoc.version>3.2.0</springdoc.version>
   </properties>
 
   <dependencies>
