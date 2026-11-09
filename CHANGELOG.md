@@ -119,4 +119,4 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 - Risk scores can no longer be raised for free by third parties: unsolicited dust (below 10 USDT/USDC by default, `DetectionConfig.Exposure.dustThresholds`) and transfers of unverified token contracts (fake tokens whose `Transfer` events name a sanctioned sender) no longer create direct or indirect exposure. They produce a `DUSTING` anomaly signal with zero score weight instead. Previously 0.000001 USDT, or a fake-token transfer, from a sanctioned address scored the recipient 80/HIGH.
 
-[Unreleased]: https://github.com/openchain-intelligence/openchain-intelligence/commits/main
+[Unreleased]: https://github.com/alertmanager12-blip/openchain-intelligence/commits/main

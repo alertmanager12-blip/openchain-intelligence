@@ -48,7 +48,7 @@ Not there yet (honestly): internal transactions and full native history of old a
 3. Remember the original repository as `upstream`, so you can pull future updates (see [Step 6](#step-6--keep-your-fork-up-to-date)):
 
    ```bash
-   git remote add upstream https://github.com/ORIGINAL-OWNER/ORIGINAL-REPOSITORY.git
+   git remote add upstream https://github.com/alertmanager12-blip/openchain-intelligence.git
    ```
 
 ---

@@ -14,7 +14,7 @@
 ## Option A — Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/openchain-intelligence/openchain-intelligence.git
+git clone https://github.com/alertmanager12-blip/openchain-intelligence.git
 cd openchain-intelligence
 cp deploy/.env.example .env      # then edit secrets
 docker compose up -d --build

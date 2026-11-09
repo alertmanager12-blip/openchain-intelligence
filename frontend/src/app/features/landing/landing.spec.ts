@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { LANDING_COPY } from './landing-content';
 import { LandingPage } from './landing';
-import { publicLinks } from './public-links';
+import { PUBLIC_REPOSITORY_URL, publicLinks } from './public-links';
 
 describe('Landing page', () => {
   let f: ComponentFixture<LandingPage>;
@@ -35,12 +35,17 @@ describe('Landing page', () => {
     }
   });
 
-  it('hides every repository link while no public repository is configured', () => {
-    expect(publicLinks().repository).toBeNull();
+  it('points every external link at the public repository, in a new tab', () => {
+    const repo = PUBLIC_REPOSITORY_URL!;
+    expect(publicLinks().repository).toBe(repo);
     const external = [...el.querySelectorAll<HTMLAnchorElement>('a')].filter((a) => /^https?:/.test(a.getAttribute('href') ?? ''));
-    expect(external).toEqual([]);
-    expect(el.textContent).not.toMatch(/View on GitHub|Explore GitHub/);
-    expect(el.querySelector('#community')?.textContent).toContain('The public repository is being prepared');
+    expect(external.length).toBeGreaterThan(0);
+    for (const a of external) {
+      expect(a.getAttribute('href')!.startsWith(repo), a.outerHTML).toBe(true);
+      expect(a.getAttribute('rel')).toContain('noopener');
+    }
+    expect(el.textContent).toContain('View on GitHub');
+    expect(el.querySelector('#community')?.textContent).not.toContain('being prepared');
   });
 
   it('derives the repository links from one URL', () => {

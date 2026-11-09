@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/openchain-intelligence/openchain-intelligence/security/advisories/new
+    url: https://github.com/alertmanager12-blip/openchain-intelligence/security/advisories/new
     about: Report vulnerabilities privately (see SECURITY.md).
-  - name: Questions and discussions
-    url: https://github.com/openchain-intelligence/openchain-intelligence/discussions
-    about: Ask usage questions in Discussions.
+  - name: Documentation
+    url: https://github.com/alertmanager12-blip/openchain-intelligence/tree/main/docs
+    about: Installation guide, ADRs and API reference.

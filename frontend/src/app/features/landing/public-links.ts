@@ -1,11 +1,10 @@
 /**
  * Public project links shown on the landing page.
  *
- * The public repository does not exist yet (checked on 2026-11-09: the URL in the docs answers 404), so it is null and
- * every link derived from it (source, issues, contribution guide, documentation) is hidden instead of pointing nowhere.
- * Set it once the repository is published, e.g. 'https://github.com/<owner>/<repo>'.
+ * Every link derived from it (source, issues, contribution guide, documentation, licence) is hidden when it is null, instead
+ * of pointing nowhere (e.g. for a private fork).
  */
-export const PUBLIC_REPOSITORY_URL: string | null = null;
+export const PUBLIC_REPOSITORY_URL: string | null = 'https://github.com/alertmanager12-blip/openchain-intelligence';
 
 export interface PublicLinks {
   readonly repository: string | null;

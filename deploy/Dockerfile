@@ -26,7 +26,7 @@ FROM eclipse-temurin:25-jre
 LABEL org.opencontainers.image.title="openchain-intelligence" \
       org.opencontainers.image.description="Open source blockchain investigation, risk intelligence and programmable monitoring" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.source="https://github.com/openchain-intelligence/openchain-intelligence"
+      org.opencontainers.image.source="https://github.com/alertmanager12-blip/openchain-intelligence"
 RUN groupadd --system --gid 10001 oci \
  && useradd --system --uid 10001 --gid oci --home-dir /app --shell /usr/sbin/nologin oci
 WORKDIR /app

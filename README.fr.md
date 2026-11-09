@@ -50,7 +50,7 @@ le multi-tenant, la limitation de débit de l'API, les métriques.
 3. Enregistrez le dépôt d'origine sous le nom `upstream`, pour récupérer les futures mises à jour (voir l'[étape 6](#étape-6--garder-son-fork-à-jour)) :
 
    ```bash
-   git remote add upstream https://github.com/PROPRIETAIRE-ORIGINAL/DEPOT-ORIGINAL.git
+   git remote add upstream https://github.com/alertmanager12-blip/openchain-intelligence.git
    ```
 
 ---
