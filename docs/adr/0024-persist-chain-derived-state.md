@@ -1,6 +1,6 @@
 # ADR-0024: Persist chain-derived state in PostgreSQL
 
-- Status: proposed
+- Status: accepted (2026-11-09; step 1 implemented, step 2 pending)
 - Date: 2026-11-09
 
 ## Context and problem statement
@@ -22,3 +22,12 @@ implementations for tests and the demo profile. ClickHouse (ADR-0004) is reconsi
 
 - Positive: restarts without loss; dry-runs and investigations over real history; prerequisite for ADR-0022.
 - Negative: write amplification on hot paths (batching required); migration effort; storage cost.
+
+## Implementation
+
+- **Step 1 (done, 2026-11-09):** indexer checkpoints of real chains in `indexer_checkpoints` (V8, `JdbcCheckpointStore`):
+  resume without gap after a restart, guarded by `max-resume-gap` (7200 blocks by default; a larger gap restarts near the
+  head and logs the skipped range). The reorg window is stored as block references only (one small upsert per block):
+  reorgs are detected after a restart, but events of blocks indexed before it are not retracted.
+- **Step 2 (pending):** flows, wallet profiles, signals, risk scores and the event history behind dry-runs.
+

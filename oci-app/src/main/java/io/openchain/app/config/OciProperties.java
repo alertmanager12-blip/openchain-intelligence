@@ -163,6 +163,15 @@ public class OciProperties {
         private int realBalanceMaxLookupsPerBlock = 5;
         /** Blocks per indexer pass on a real chain (each network is polled on its own thread). */
         private int maxBlocksPerPoll = 10;
+        /**
+         * After a restart indexing resumes from the last processed block (no gap) unless that is more than this many blocks
+         * behind the head (a non-archive node may no longer serve them, and catching up would take hours): it then
+         * restarts near the head and logs the skipped range. 0 = always resume.
+         */
+        private long maxResumeGap = 7_200;
+
+        public long getMaxResumeGap() { return maxResumeGap; }
+        public void setMaxResumeGap(long v) { this.maxResumeGap = v; }
 
         public int getMaxBlocksPerPoll() { return maxBlocksPerPoll; }
         public void setMaxBlocksPerPoll(int v) { this.maxBlocksPerPoll = v; }

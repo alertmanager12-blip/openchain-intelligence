@@ -182,13 +182,21 @@ public class ChainIngestionService {
 
     // ---- registration -----------------------------------------------------------------------------------------
 
+    /** Checkpoints of real chains: in memory by default, PostgreSQL when persistence is enabled (ADR-0024). */
+    private volatile io.openchain.blockchain.indexer.CheckpointStore realCheckpoints = new InMemoryCheckpointStore();
+
+    public io.openchain.blockchain.indexer.CheckpointStore realCheckpoints() { return realCheckpoints; }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCheckpointStore(io.openchain.blockchain.indexer.CheckpointStore store) { if (store != null) this.realCheckpoints = store; }
+
     public synchronized NetworkRuntime register(BlockchainProvider provider, SimulatedChainProvider simulator,
                                                 DemoLedgerProvider ledger, IndexerConfig config, Duration blockTime) {
         Network n = provider.network();
         if (runtimes.containsKey(n)) throw new IllegalStateException("network already registered: " + n.id());
-        // TODO(persistence): PostgreSQL checkpoint store; in memory, indexing restarts from the configured start block
-        // (alert creation is idempotent on replayed events, see AlertService#onMatch)
-        BlockIndexer indexer = new BlockIndexer(provider, new InMemoryCheckpointStore(), new io.openchain.blockchain.indexer.ChainEventSink() {
+        // real chains resume from their durable checkpoint (PostgreSQL mode); simulated chains are regenerated at each start
+        io.openchain.blockchain.indexer.CheckpointStore store = simulator == null && ledger == null ? realCheckpoints : new InMemoryCheckpointStore();
+        BlockIndexer indexer = new BlockIndexer(provider, store, new io.openchain.blockchain.indexer.ChainEventSink() {
             @Override public void emit(ChainEvent e) { onEvent(e); }
             @Override public void prepare(List<ChainEvent> blockEvents) { prefetchBalances(blockEvents); }
         }, config, tokens, clock);
@@ -407,7 +415,12 @@ public class ChainIngestionService {
         ordered.sort(Comparator.comparing((ChainEvent x) -> x.eventTime() == null ? Instant.EPOCH : x.eventTime())
                 .thenComparingLong(ChainEvent::blockNumber).thenComparing(ChainEvent::eventId));
         for (int i = 0; i < ordered.size(); i += HISTORY_CHUNK) {
+            long t0 = System.nanoTime();
             applyHistoryChunk(ordered.subList(i, Math.min(ordered.size(), i + HISTORY_CHUNK)));
+            // live indexing takes the processing lock once per event, history once per chunk, and a Java monitor is not
+            // fair: step aside twice as long as the chunk took, so history uses at most a third of the processing time
+            // (production: both chains stalled while 32 histories were re-applied at start-up)
+            java.util.concurrent.locks.LockSupport.parkNanos(Math.max(1_000_000, 2 * (System.nanoTime() - t0)));
         }
     }
 

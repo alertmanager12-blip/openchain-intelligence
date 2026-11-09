@@ -333,6 +333,25 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         }
     }
 
+    /**
+     * Resumes from the durable checkpoint, unless it is more than max-resume-gap blocks behind the start position computed
+     * from the head: then indexing restarts there and the skipped range is logged (never silently).
+     */
+    private void guardResumeGap(Network n, OciProperties.Chain c, long start) {
+        String indexerId = n.id() + "-indexer";
+        var store = chains.realCheckpoints();
+        var saved = store.load(indexerId);
+        if (saved.isEmpty()) return;
+        long last = saved.get().lastBlock();
+        if (c.getMaxResumeGap() > 0 && start - last > c.getMaxResumeGap()) {
+            log.warn("chain {}: checkpoint at block {} is {} blocks behind; resuming at block {} (blocks {}..{} are NOT indexed, "
+                    + "max-resume-gap {})", n.id(), last, start - last, start, last + 1, start - 1, c.getMaxResumeGap());
+            store.save(indexerId, new io.openchain.blockchain.indexer.Checkpoint(n, start - 1, List.of()));
+        } else {
+            log.info("chain {}: resuming after block {} (checkpoint; the start position computed from the head is {})", n.id(), last, start);
+        }
+    }
+
     private void startRealChain(String id, OciProperties.Chain c) {
         if (!c.isEnabled()) return;
         try {
@@ -371,6 +390,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 }
                 start = Math.max(0, st.headBlock() + c.getStartBlock());
             }
+            guardResumeGap(n, c, start);
             IndexerConfig cfg = IndexerConfig.of(n.id() + "-indexer", n, start).withApprovalsOfUnknownTokens(c.isApprovalsOfUnknownTokens())
                     .withWatchedContracts(n, java.util.Set.copyOf(c.getWatchedContracts()))
                     .withAdminChangesOfAllContracts(c.isAdminChangesOfAllContracts())

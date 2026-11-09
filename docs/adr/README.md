@@ -20,5 +20,5 @@ Format: [MADR](https://adr.github.io/madr/). New ADRs: copy the structure of an 
 | [0021](0021-stablecoin-rail-focus.md) | First market: self-hosted monitoring of stablecoin rails (TRON + EVM) | proposed |
 | [0022](0022-investigations-as-reproducible-artifacts.md) | Investigations as persistent, resumable, replayable artifacts | proposed |
 | [0023](0023-epistemic-levels-for-assertions.md) | Epistemic levels for every assertion | proposed |
-| [0024](0024-persist-chain-derived-state.md) | Persist chain-derived state in PostgreSQL | proposed |
+| [0024](0024-persist-chain-derived-state.md) | Persist chain-derived state in PostgreSQL | accepted (step 1 done) |
 | [0025](0025-mcp-as-api-adapter.md) | MCP server as a thin adapter of the REST API | proposed |

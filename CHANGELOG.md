@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 1 — durable indexing, ADR-0024 step 1)
+
+- **Indexing resumes after a restart instead of skipping the downtime**: real chains persist their checkpoint (`V8__indexer_checkpoints`, last processed block + reorg-window block references). Before, a restart started again at head - 100: every block produced while the application was down was never indexed. A gap larger than `OCI_CHAINS_<NETWORK>_MAX_RESUME_GAP` (7200 blocks) restarts near the head and logs the skipped range.
+- **Start-up no longer stalls live indexing**: the address-history restore steps aside twice as long as each chunk took, so it uses at most a third of the processing time (live indexing takes the lock once per event, history once per chunk, and a Java monitor is not fair). The restore takes about three times longer; both chains keep indexing meanwhile.
+
 ### Added (phase 1 — watchlist)
 
 - **Watchlist of the organisation's own wallets** (`GET/POST/DELETE /api/v1/watchlist`, permission `watchlist:write` for ANALYST and above, `V7__watchlist`), a *Watchlist* page and a *Watch / Unwatch* button on the wallet page. Every transfer carries `wallet.watchlisted`, `counterparty.watchlisted` and `watchlist.active`; approvals carry `wallet.watchlisted` for the owner.

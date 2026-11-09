@@ -9,9 +9,9 @@ Conventions:
 - Tenant-owned tables carry `tenant_id uuid not null` and have Row-Level Security (`USING (tenant_id = current_setting('app.tenant_id')::uuid)`).
 - Migrations: Flyway (`oci-app/src/main/resources/db/migration`). The DDL below is the reference design; migrations are authoritative.
 
-## Implemented schema (V1 operator state, V2 freeze backfill, V3 alert subject, V4 address history, V5 rule actions override, V6 skipped deliveries, V7 watchlist)
+## Implemented schema (V1 operator state, V2 freeze backfill, V3 alert subject, V4 address history, V5 rule actions override, V6 skipped deliveries, V7 watchlist, V8 indexer checkpoints)
 
-`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables; `V3__alert_subject.sql` stores what each alert is about; `V4__address_history.sql` adds the on-demand address history tables (ADR-0020); `V5__rule_actions_override.sql` adds `rules.actions_override` (operator's notification routing kept across rule pack updates); `V6__delivery_skipped.sql` allows the delivery status `SKIPPED` (no connector could receive the notification); `V7__watchlist.sql` stores the organisation's own wallets (unique per network and address). It differs from the reference design below:
+`V1__operator_state.sql` implements the **operator state**; `V2__freeze_backfill.sql` adds the freeze backfill tables; `V3__alert_subject.sql` stores what each alert is about; `V4__address_history.sql` adds the on-demand address history tables (ADR-0020); `V5__rule_actions_override.sql` adds `rules.actions_override` (operator's notification routing kept across rule pack updates); `V6__delivery_skipped.sql` allows the delivery status `SKIPPED` (no connector could receive the notification); `V7__watchlist.sql` stores the organisation's own wallets (unique per network and address); `V8__indexer_checkpoints.sql` stores the last processed block of each real chain and the block references of its reorg window. It differs from the reference design below:
 
 | Area | Implemented (V1) | Reference design |
 |---|---|---|
@@ -29,7 +29,7 @@ Conventions:
 | `address_history_progress` / `address_history_events` (V4) | on-demand address history (ADR-0020): one progress row per (network, address) (`id` = `history:<network>:<address>`, `source`, `status` PENDING/RUNNING/COMPLETE/TRUNCATED/FAILED, target range `from_block`..`to_block`, `covered_from_block` / `covered_from_time`, resume `cursor`, `events_found`, `pages`, `truncated`, `last_error`) and the events found (PK `(history_id, event_id)`, `event_type`, `block_number` (-1 when the source has none), `block_hash`, `event_time`, `fields jsonb`); re-applied at startup without RPC, unfinished backfills resume from the cursor | not in the design |
 | Not implemented yet | `tenants`, `audit_log` (audit is the `oci.audit` log stream), all chain-data and intelligence tables (`networks`, `index_checkpoints`, `blocks`, `token_transfers`, `address_edges`, `wallet_profiles`, `address_labels`, `signals`, `risk_scores`) | |
 
-Chain-derived state stays in memory and is rebuilt by re-indexing from the configured start block at restart; alert
+Chain-derived state (except indexer checkpoints, V8) stays in memory and starts empty at restart; alert
 creation is idempotent on replayed events. TODO(persistence): chain-data tables, `audit_log`, tenancy.
 
 ### Chain events (in memory, `ChainEvent`)

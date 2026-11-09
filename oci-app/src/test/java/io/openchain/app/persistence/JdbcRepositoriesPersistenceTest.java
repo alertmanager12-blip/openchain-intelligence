@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(7);
-        assertThat(first.targetSchemaVersion).isEqualTo("7");
+        assertThat(first.migrationsExecuted).isEqualTo(8);
+        assertThat(first.targetSchemaVersion).isEqualTo("8");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -340,6 +340,35 @@ class JdbcRepositoriesPersistenceTest {
                 .addHistory(new Alert.HistoryEntry(AlertStatus.PENDING, AlertStatus.RESOLVED, "analyst", T0.plusSeconds(9), null)).build());
         assertThat(repo.findOpenByDedupKey("rule-a", "k1")).isEmpty();
         assertThat(repo.findById("a1").orElseThrow().history()).hasSize(3);
+    }
+
+    @Test
+    void indexingResumesFromThePersistedCheckpointAfterARestart() {
+        var chain = new io.openchain.blockchain.simulated.SimulatedChainProvider("sim", Network.ETHEREUM, 7, 5, 8,
+                new io.openchain.blockchain.token.DefaultTokenRegistry());
+        var store = new JdbcCheckpointStore(jdbc, java.time.Clock.systemUTC());
+        var config = new io.openchain.blockchain.indexer.IndexerConfig("eth-indexer", 1, 0, 5, 1000);
+        java.util.List<io.openchain.core.event.ChainEvent> first = new java.util.ArrayList<>(), second = new java.util.ArrayList<>();
+        chain.mine(10);
+        new io.openchain.blockchain.indexer.BlockIndexer(chain, store, first::add, config).poll();
+        var saved = new JdbcCheckpointStore(jdbc, java.time.Clock.systemUTC()).load("eth-indexer").orElseThrow();
+        assertThat(saved.lastBlock()).isEqualTo(10);
+        assertThat(saved.window()).hasSize(5).allSatisfy(b -> assertThat(b.events()).isEmpty()); // refs only
+        assertThat(saved.window().getLast().block().hash()).isNotBlank();
+
+        // "restart": a new indexer over the same database continues at block 11, without gap or duplicate
+        chain.mine(3);
+        new io.openchain.blockchain.indexer.BlockIndexer(chain, new JdbcCheckpointStore(jdbc, java.time.Clock.systemUTC()), second::add, config).poll();
+        assertThat(second).isNotEmpty().allSatisfy(e -> assertThat(e.blockNumber()).isBetween(11L, 13L));
+        assertThat(second).extracting(io.openchain.core.event.ChainEvent::eventId)
+                .doesNotContainAnyElementsOf(first.stream().map(io.openchain.core.event.ChainEvent::eventId).toList());
+
+        // a reorg of blocks indexed before the restart is still detected (hash chain), without retractions (no events kept)
+        chain.reorg(2, 3);
+        java.util.List<io.openchain.core.event.ChainEvent> third = new java.util.ArrayList<>();
+        var r = new io.openchain.blockchain.indexer.BlockIndexer(chain, new JdbcCheckpointStore(jdbc, java.time.Clock.systemUTC()), third::add, config).poll();
+        assertThat(r.reorgs()).isPositive();
+        assertThat(r.lastBlock()).isEqualTo(14);
     }
 
     @Test

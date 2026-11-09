@@ -117,6 +117,9 @@ public class PersistenceConfiguration {
         @Bean FreezeBackfillStore freezeBackfillStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, TokenRegistry tokens) {
             return new JdbcFreezeBackfillStore(jdbc, tx, tokens);
         }
+        @Bean io.openchain.blockchain.indexer.CheckpointStore checkpointStore(NamedParameterJdbcTemplate jdbc, Clock clock) {
+            return new JdbcCheckpointStore(jdbc, clock);
+        }
         @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
             return new io.openchain.app.history.JdbcAddressHistoryStore(jdbc, tx);
         }
