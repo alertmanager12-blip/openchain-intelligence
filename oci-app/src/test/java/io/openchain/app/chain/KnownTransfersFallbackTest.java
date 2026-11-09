@@ -134,4 +134,23 @@ class KnownTransfersFallbackTest {
         }
         assertThat(watch.active()).isFalse();
     }
+
+    @Test void intelligenceJournaledBeforeARestartIsRestoredIntoTheWorkingSet() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        var intel = ctx.getBean(io.openchain.intelligence.IntelligencePipeline.class);
+        Address w = new Address(Network.POLYGON, "0x" + "9".repeat(40)), x = new Address(Network.POLYGON, "0x" + "a".repeat(40));
+        Token usdt = ctx.getBean(TokenRegistry.class).resolve(Network.POLYGON, USDT_POLYGON);
+        Instant t = Instant.parse("2026-11-08T08:00:00Z");
+        var flow = new io.openchain.intelligence.flow.ValueFlow("polygon:0xrestored:0", Network.POLYGON, "0xrestored", t, x, w, usdt,
+                BigInteger.valueOf(5_000_000));
+        var signal = new io.openchain.core.detection.Signal("sig_restored", io.openchain.core.detection.SignalType.UNUSUAL_AMOUNT, w, "0xrestored",
+                io.openchain.core.detection.Severity.MEDIUM, 0.6, io.openchain.core.detection.Signal.EvidenceLevel.ANOMALY, List.of(),
+                "unusual-amount@1", t);
+        var score = new io.openchain.core.risk.RiskScore(w, 37, io.openchain.core.risk.RiskLevel.MEDIUM, List.of(), "noisy-or", "oci-risk-1", t);
+        chains.restoreIntelligence(List.of(flow, flow), List.of(signal), List.of(score)); // duplicates ignored
+        assertThat(intel.flows().contains("polygon:0xrestored:0")).isTrue();
+        assertThat(intel.profiles().profileOrEmpty(w).firstActivity()).isEqualTo(t);
+        assertThat(intel.signals().findByAddress(w)).containsExactly(signal);
+        assertThat(intel.scoring().latest(w)).contains(score);
+    }
 }

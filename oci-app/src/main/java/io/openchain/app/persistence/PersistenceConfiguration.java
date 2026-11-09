@@ -117,6 +117,11 @@ public class PersistenceConfiguration {
         @Bean FreezeBackfillStore freezeBackfillStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, TokenRegistry tokens) {
             return new JdbcFreezeBackfillStore(jdbc, tx, tokens);
         }
+        @Bean(destroyMethod = "close")
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "oci.persistence.intelligence-journal", havingValue = "true")
+        io.openchain.app.journal.JdbcIntelligenceJournal intelligenceJournal(NamedParameterJdbcTemplate jdbc, OciProperties props) {
+            return new io.openchain.app.journal.JdbcIntelligenceJournal(jdbc, props.getPersistence().getJournalCapacity());
+        }
         @Bean io.openchain.blockchain.indexer.CheckpointStore checkpointStore(NamedParameterJdbcTemplate jdbc, Clock clock) {
             return new JdbcCheckpointStore(jdbc, clock);
         }

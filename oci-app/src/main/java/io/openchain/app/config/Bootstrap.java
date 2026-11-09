@@ -137,6 +137,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         // stored address histories are re-applied in the background: with a few dozen of them this takes minutes
         // (each event goes through the intelligence pipeline, serialised with live ingestion) and must not hold readiness
         scheduler.execute(guard("history restore", () -> {
+            restoreIntelligence(); // journaled flows, signals and scores first (ADR-0024 step 2), then address histories
             int restored = history.restore();
             if (restored > 0) log.info("address history: {} stored backfill(s) re-applied", restored);
         }));
@@ -331,6 +332,30 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                     + "development secrets. Set OCI_DEMO_MODE=false (with OCI_SECURITY_API_KEY_PEPPER and OCI_CRYPTO_MASTER_KEY) "
                     + "or disable the real chains.");
         }
+    }
+
+    private io.openchain.app.journal.JdbcIntelligenceJournal journal;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setJournal(io.openchain.app.journal.JdbcIntelligenceJournal journal) { this.journal = journal; }
+
+    /** Reloads the journaled intelligence within the retention period and schedules the daily purge of older rows. */
+    private void restoreIntelligence() {
+        if (journal == null) return;
+        Duration retention = props.getPersistence().getIntelligenceRetention();
+        Instant since = clock.instant().minus(retention);
+        long t0 = System.nanoTime();
+        List<io.openchain.intelligence.flow.ValueFlow> flows = new java.util.ArrayList<>();
+        journal.loadFlows(since, 10_000, flows::addAll);
+        var signals = journal.loadSignals(since);
+        var scores = journal.loadScores(since);
+        chains.restoreIntelligence(flows, signals, scores);
+        log.info("intelligence restored from PostgreSQL in {} ms: {} flow(s), {} signal(s), {} score(s) since {}",
+                (System.nanoTime() - t0) / 1_000_000, flows.size(), signals.size(), scores.size(), since);
+        scheduler.scheduleWithFixedDelay(guard("journal purge", () -> {
+            int n = journal.purge(clock.instant().minus(retention));
+            if (n > 0) log.info("intelligence journal: {} row(s) older than {} purged", n, retention);
+        }), 1, 24, TimeUnit.HOURS);
     }
 
     /**

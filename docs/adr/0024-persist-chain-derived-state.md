@@ -1,6 +1,6 @@
 # ADR-0024: Persist chain-derived state in PostgreSQL
 
-- Status: accepted (2026-11-09; step 1 implemented, step 2 pending)
+- Status: accepted (2026-11-09; step 1 implemented; step 2 implemented but off by default, does not scale yet)
 - Date: 2026-11-09
 
 ## Context and problem statement
@@ -29,5 +29,13 @@ implementations for tests and the demo profile. ClickHouse (ADR-0004) is reconsi
   resume without gap after a restart, guarded by `max-resume-gap` (7200 blocks by default; a larger gap restarts near the
   head and logs the skipped range). The reorg window is stored as block references only (one small upsert per block):
   reorgs are detected after a restart, but events of blocks indexed before it are not retracted.
-- **Step 2 (pending):** flows, wallet profiles, signals, risk scores and the event history behind dry-runs.
+- **Step 2 (done, 2026-11-09):** flows, signals and risk scores journaled write-behind (`value_flows`, `signals`,
+  `risk_scores`, V9) through decorators of the in-memory stores, so detectors keep reading memory; reloaded in the
+  background at start-up within `intelligence-retention` (7 days), flows rebuilding wallet profiles without detection;
+  daily purge; drops counted (`oci_journal_dropped_total`). Not persisted: the event history behind rule dry-runs and the
+  rule engine windows. **Off by default** (`oci.persistence.intelligence-journal`): measured in production with Ethereum
+  mainnet + TRON at the head, ~4.8 million flows and ~950,000 signals per day, and the reload took 316 s for 50,000 flows.
+- **Step 3 (needed):** bound the in-memory working set (the same volume makes memory grow by millions of flows per day,
+  pre-existing), journal only the watchlist scope plus compact wallet-profile snapshots and the latest score per address,
+  so that the reload is proportional to the number of wallets, not to the number of transfers.
 

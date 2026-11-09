@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 1 — durable intelligence, ADR-0024 step 2)
+
+- **Flows, signals and risk scores can survive a restart** (off by default, `OCI_PERSISTENCE_INTELLIGENCE_JOURNAL=true`: at chain-wide volumes — about 4.8 million flows and 950,000 signals per day measured on 2026-11-09 — the reload does not scale to the retention yet): journaled write-behind in PostgreSQL (`V9__intelligence_journal`) by decorators of the in-memory stores (the detectors keep reading memory), reloaded in the background at start-up within `OCI_PERSISTENCE_INTELLIGENCE_RETENTION` (7 days; flows rebuild wallet profiles without detection), purged daily. A full queue drops and counts records (`oci_journal_dropped_total`, warning): never silent. Metrics `oci_journal_written_total`, `oci_journal_backlog`.
+
 ### Added (phase 1 — durable indexing, ADR-0024 step 1)
 
 - **Indexing resumes after a restart instead of skipping the downtime**: real chains persist their checkpoint (`V8__indexer_checkpoints`, last processed block + reorg-window block references). Before, a restart started again at head - 100: every block produced while the application was down was never indexed. A gap larger than `OCI_CHAINS_<NETWORK>_MAX_RESUME_GAP` (7200 blocks) restarts near the head and logs the skipped range.

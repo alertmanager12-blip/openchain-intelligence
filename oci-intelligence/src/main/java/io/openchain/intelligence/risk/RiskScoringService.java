@@ -34,5 +34,8 @@ public final class RiskScoringService {
 
     public List<RiskScore> history(Address a) { return history.history(a); }
 
+    /** Puts back a score stored before a restart (no recomputation, no change detection). */
+    public void restore(RiskScore s) { history.append(s); }
+
     public Optional<RiskScore> latest(Address a) { return history.latest(a); }
 }

@@ -426,6 +426,41 @@ public class ChainIngestionService {
 
     static final int HISTORY_CHUNK = 200;
 
+    /**
+     * Puts back chain-derived intelligence journaled before a restart (ADR-0024 step 2): flows rebuild the wallet profiles
+     * (no detection, no rules), then signals and scores. Same bounded share of the processing lock as address history.
+     */
+    public void restoreIntelligence(List<io.openchain.intelligence.flow.ValueFlow> flows, List<Signal> signals,
+                                    List<io.openchain.core.risk.RiskScore> scores) {
+        for (int i = 0; i < flows.size(); i += HISTORY_CHUNK) {
+            var chunk = flows.subList(i, Math.min(flows.size(), i + HISTORY_CHUNK));
+            long t0 = System.nanoTime();
+            restoreChunk(() -> {
+                for (var f : chunk) {
+                    if (intelligence.flows().add(f)) {
+                        intelligence.profiles().ingest(f);
+                        trackedWallets.add(f.from());
+                        trackedWallets.add(f.to());
+                    }
+                }
+            });
+            java.util.concurrent.locks.LockSupport.parkNanos(Math.max(1_000_000, 2 * (System.nanoTime() - t0)));
+        }
+        restoreChunk(() -> {
+            signals.forEach(s -> { if (intelligence.signals().saveIfAbsent(s)) remember(s); });
+            scores.forEach(s -> intelligence.scoring().restore(s));
+        });
+    }
+
+    private synchronized void restoreChunk(Runnable work) {
+        io.openchain.app.journal.IntelligenceJournal.RESTORING.set(true);
+        try {
+            work.run();
+        } finally {
+            io.openchain.app.journal.IntelligenceJournal.RESTORING.set(false);
+        }
+    }
+
     private synchronized void applyHistoryChunk(List<ChainEvent> ordered) {
         for (ChainEvent e : ordered) {
             if (e.removed()) continue;

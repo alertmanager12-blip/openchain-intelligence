@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(8);
-        assertThat(first.targetSchemaVersion).isEqualTo("8");
+        assertThat(first.migrationsExecuted).isEqualTo(9);
+        assertThat(first.targetSchemaVersion).isEqualTo("9");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -340,6 +340,48 @@ class JdbcRepositoriesPersistenceTest {
                 .addHistory(new Alert.HistoryEntry(AlertStatus.PENDING, AlertStatus.RESOLVED, "analyst", T0.plusSeconds(9), null)).build());
         assertThat(repo.findOpenByDedupKey("rule-a", "k1")).isEmpty();
         assertThat(repo.findById("a1").orElseThrow().history()).hasSize(3);
+    }
+
+    @Test
+    void intelligenceJournalRoundTripsFlowsSignalsAndScoresAndPurgesOldRows() {
+        var journal = new io.openchain.app.journal.JdbcIntelligenceJournal(jdbc, 1000);
+        try {
+            var net = Network.ETHEREUM;
+            var a = new io.openchain.core.model.Address(net, "0x" + "1".repeat(40));
+            var b = new io.openchain.core.model.Address(net, "0x" + "2".repeat(40));
+            var usdt = new io.openchain.core.model.Token(net, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT", 6);
+            var flow = new io.openchain.intelligence.flow.ValueFlow("ethereum:0xtx:1", net, "0xtx", T0, a, b, usdt,
+                    new java.math.BigInteger("123456789012345678901234567890"));
+            var old = new io.openchain.intelligence.flow.ValueFlow("ethereum:0xold:0", net, "0xold", T0.minusSeconds(30 * 86400), a, b, usdt,
+                    java.math.BigInteger.ONE);
+            var signal = new io.openchain.core.detection.Signal("sig_1", io.openchain.core.detection.SignalType.RAPID_DRAIN, a, "0xtx",
+                    Severity.HIGH, 0.7, EvidenceLevel.RISK_SIGNAL, List.of(new io.openchain.core.detection.Signal.Evidence("flow",
+                    "sent 95%", "0xtx", "detector", T0)), "rapid-drain@1", T0, "Rapid drain", "Sent 95% of its USDT balance.");
+            var score = new io.openchain.core.risk.RiskScore(a, 42, io.openchain.core.risk.RiskLevel.MEDIUM, List.of(
+                    new io.openchain.core.risk.RiskScore.Contribution("RAPID_DRAIN", "sig_1", "detector", 0.4, 0.7, 60, 28.0,
+                            "explanation", "Rapid drain", "summary")), "noisy-or", "oci-risk-1", T0);
+            journal.flow(flow);
+            journal.flow(old);
+            journal.flow(flow); // duplicate: ignored
+            journal.signal(signal);
+            journal.score(score);
+            journal.flush(5_000);
+            assertThat(journal.written()).isEqualTo(5);
+            assertThat(journal.dropped()).isZero();
+
+            List<io.openchain.intelligence.flow.ValueFlow> flows = new java.util.ArrayList<>();
+            journal.loadFlows(T0.minusSeconds(86400), 1, flows::addAll);
+            assertThat(flows).containsExactly(flow); // the 30-day-old flow is outside the window
+            assertThat(journal.loadSignals(T0.minusSeconds(86400))).containsExactly(signal);
+            assertThat(journal.loadScores(T0.minusSeconds(86400))).containsExactly(score);
+
+            assertThat(journal.purge(T0.minusSeconds(7 * 86400))).isEqualTo(1);
+            List<io.openchain.intelligence.flow.ValueFlow> all = new java.util.ArrayList<>();
+            journal.loadFlows(java.time.Instant.EPOCH, 100, all::addAll);
+            assertThat(all).containsExactly(flow);
+        } finally {
+            journal.close();
+        }
     }
 
     @Test

@@ -19,6 +19,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class MetricsConfiguration {
 
+    @Bean MeterBinder journalMetrics(org.springframework.beans.factory.ObjectProvider<io.openchain.app.journal.JdbcIntelligenceJournal> journals) {
+        return registry -> {
+            var j = journals.getIfAvailable();
+            if (j == null) return;
+            FunctionCounter.builder("oci.journal.written", j, x -> x.written()).description("Records written to the intelligence journal").register(registry);
+            FunctionCounter.builder("oci.journal.dropped", j, x -> x.dropped()).description("Records dropped (journal full or write error)").register(registry);
+            Gauge.builder("oci.journal.backlog", j, x -> x.backlog()).description("Records waiting to be written").register(registry);
+        };
+    }
+
     @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules) {
         return registry -> {
             for (Network n : Network.values()) {

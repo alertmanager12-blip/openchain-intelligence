@@ -349,7 +349,27 @@ public class OciProperties {
          * releases its claims when this lease expires; the delivery is then retried (at least once).
          */
         private Duration deliveryClaimLease = Duration.ofMinutes(2);
+        /**
+         * How long chain-derived intelligence (flows, signals, risk scores) is kept in PostgreSQL and reloaded at start-up
+         * (OCI_PERSISTENCE_INTELLIGENCE_RETENTION, default 7 days).
+         */
+        private Duration intelligenceRetention = Duration.ofDays(7);
+        /**
+         * Journal flows, signals and scores (OCI_PERSISTENCE_INTELLIGENCE_JOURNAL, default false). Off by default: on a
+         * chain-wide index it writes millions of rows per day (production 2026-11-09: ~4.8M flows/day) and the start-up
+         * reload does not scale to the retention period yet (ADR-0024 step 2 follow-up: watchlist scope, profile snapshots).
+         */
+        private boolean intelligenceJournal = false;
 
+        public boolean isIntelligenceJournal() { return intelligenceJournal; }
+        public void setIntelligenceJournal(boolean v) { this.intelligenceJournal = v; }
+        /** Records queued for the write-behind journal before new ones are dropped (and counted). */
+        private int journalCapacity = 200_000;
+
+        public Duration getIntelligenceRetention() { return intelligenceRetention; }
+        public void setIntelligenceRetention(Duration v) { this.intelligenceRetention = v; }
+        public int getJournalCapacity() { return journalCapacity; }
+        public void setJournalCapacity(int v) { this.journalCapacity = v; }
         public Duration getDeliveryClaimLease() { return deliveryClaimLease; }
         public void setDeliveryClaimLease(Duration deliveryClaimLease) { this.deliveryClaimLease = deliveryClaimLease; }
     }
