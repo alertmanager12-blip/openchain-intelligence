@@ -69,4 +69,17 @@ class SimulatedChainProviderTest {
         assertThatThrownBy(() -> a.scheduleNative(3, a.addressPool().get(0), a.addressPool().get(1), java.math.BigInteger.ONE))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    /** CodeQL java/tainted-arithmetic: the cursor comes from the API client; offset + limit must not overflow. */
+    @Test void addressHistoryCursorIsBoundedAndValidated() {
+        SimulatedChainProvider p = new SimulatedChainProvider(Network.TRON, 5);
+        p.mine(10);
+        var from = p.getTokenTransfers(0, 10).getFirst().from();
+        assertThat(p.getAddressTransactions(from, null, 1).items()).hasSize(1);
+        var beyond = p.getAddressTransactions(from, Integer.toString(Integer.MAX_VALUE), 50);
+        assertThat(beyond.items()).isEmpty();
+        assertThat(beyond.nextCursor()).isNull();
+        assertThatThrownBy(() -> p.getAddressTransactions(from, "-1", 10)).isInstanceOf(NumberFormatException.class);
+        assertThatThrownBy(() -> p.getAddressTransactions(from, "abc", 10)).isInstanceOf(NumberFormatException.class);
+    }
 }

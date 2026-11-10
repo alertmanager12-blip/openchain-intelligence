@@ -302,8 +302,8 @@ public final class DemoLedgerProvider implements BlockchainProvider {
         List<ChainTransaction> txs = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (int i = all.size() - 1; i >= 0; i--) if (seen.add(all.get(i).tx().hash())) txs.add(all.get(i).tx());
-        int offset = cursor == null ? 0 : Integer.parseInt(cursor);
-        int end = Math.min(txs.size(), offset + Math.max(1, limit));
+        int offset = SimulatedChainProvider.offsetCursor(cursor);
+        int end = (int) Math.min(txs.size(), (long) offset + Math.max(1, limit));
         int from = Math.min(offset, end);
         return new Page<>(List.copyOf(txs.subList(from, end)), end < txs.size() ? Integer.toString(end) : null);
     }

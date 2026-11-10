@@ -28,7 +28,7 @@ Légende : **observé** (vérifié sur le dépôt ou par l'API GitHub), **recomm
 | `CONTRIBUTING.md` | Bonnes règles de fond ; pas de convention de branches détaillée, de parcours nouveau contributeur, de processus de revue ni de politique IA ; exigeait 2 approbations alors qu'il n'y a qu'un mainteneur ; DCO obligatoire | Réécrit, DCO rendu facultatif (décision du mainteneur) |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 2.1 officiel, mais adresse de signalement `conduct@openchain-intelligence.org` inexistante | Signalement au mainteneur via son profil GitHub |
 | `SECURITY.md` | Délais et périmètre présents ; manquaient confidentialité, traitement des failles critiques, publication des correctifs ; mentionnait l'isolation multi-tenant, qui n'existe pas | Complété |
-| `.github/ISSUE_TEMPLATE/*` | Bug, feature, contribution de règle ; labels `triage` et `rule` inexistants sur GitHub (donc ignorés) ; schéma de règle mal nommé (`oci.rules/v1`) | Améliorés, modèle documentation ajouté |
+| `.github/ISSUE_TEMPLATE/*` | Bug, feature, contribution de règle ; labels `triage` et `rule` inexistants sur GitHub (donc ignorés) ; ancien nom du schéma de règle au lieu de `openchain.io/rule/v1` | Améliorés, modèle documentation ajouté |
 | `.github/PULL_REQUEST_TEMPLATE.md` | Checklist utile mais sans résumé structuré, compatibilité, sécurité, migration | Réécrit |
 | `.github/workflows/ci.yml` | Complet, permissions minimales (`contents: read`), aucun secret utilisé | Actions tierces épinglées par SHA |
 | `.github/dependabot.yml` | 4 écosystèmes, peu de regroupement, limites de 10 PR | Regroupé et limité |

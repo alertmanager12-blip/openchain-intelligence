@@ -290,9 +290,21 @@ public final class SimulatedChainProvider implements BlockchainProvider {
                 if (t.from().equals(address) || t.to().equals(address)) all.add(b.txs().get(i));
             }
         }
-        int offset = cursor == null ? 0 : Integer.parseInt(cursor);
-        int end = Math.min(all.size(), offset + Math.max(1, limit));
+        int offset = offsetCursor(cursor);
+        int end = (int) Math.min(all.size(), (long) offset + Math.max(1, limit));
         return new Page<>(List.copyOf(all.subList(Math.min(offset, end), end)), end < all.size() ? Integer.toString(end) : null);
+    }
+
+    /**
+     * Offset encoded in an address-history cursor ({@code null} is the first page).
+     *
+     * @throws NumberFormatException if the cursor is not a non-negative integer (the API answers 400 "invalid cursor")
+     */
+    public static int offsetCursor(String cursor) {
+        if (cursor == null) return 0;
+        int offset = Integer.parseInt(cursor);
+        if (offset < 0) throw new NumberFormatException("negative cursor: " + cursor);
+        return offset;
     }
 
     @Override public synchronized List<TokenTransfer> getTokenTransfers(long fromBlock, long toBlock) {

@@ -153,4 +153,19 @@ class KnownTransfersFallbackTest {
         assertThat(intel.signals().findByAddress(w)).containsExactly(signal);
         assertThat(intel.scoring().latest(w)).contains(score);
     }
+
+    /** CodeQL java/tainted-arithmetic: client-supplied cursors never overflow or crash the page (500). */
+    @Test void outOfRangeCursorsGiveAnEmptyPageOrA400() {
+        InvestigationController c = ctx.getBean(InvestigationController.class);
+        java.util.function.Function<String, String> wrap = raw -> Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+        var beyond = c.transactions(ME.value(), "polygon", wrap.apply("known:" + Integer.MAX_VALUE), 50);
+        assertThat(beyond.items()).isEmpty();
+        assertThat(beyond.nextCursor()).isNull();
+        // the demo TRON ledger (simulated provider): negative and huge offsets
+        String tronZero = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb";
+        assertThat(c.transactions(tronZero, "tron", wrap.apply(Integer.toString(Integer.MAX_VALUE)), 50).items()).isEmpty();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> c.transactions(tronZero, "tron", wrap.apply("-1"), 50))
+                .isInstanceOf(io.openchain.app.api.ApiException.class).hasMessageContaining("invalid cursor");
+    }
 }

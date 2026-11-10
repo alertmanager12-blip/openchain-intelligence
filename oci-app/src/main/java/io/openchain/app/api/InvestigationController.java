@@ -102,7 +102,7 @@ public class InvestigationController {
         }
         java.util.List<io.openchain.intelligence.flow.ValueFlow> all = new java.util.ArrayList<>(investigation.knownFlows(a));
         java.util.Collections.reverse(all);
-        int end = Math.min(all.size(), offset + limit);
+        int end = (int) Math.min(all.size(), (long) offset + limit);
         String next = end < all.size()
                 ? Base64.getUrlEncoder().withoutPadding().encodeToString((KNOWN_PREFIX + end).getBytes(StandardCharsets.UTF_8)) : null;
         return new CursorPage<>(all.subList(Math.min(offset, all.size()), end).stream().map(ApiMapper::transfer).toList(), next, false);
