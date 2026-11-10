@@ -80,7 +80,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund --ignore-scripts
           # ADR-0012 amendment 1: OFL-1.1 is allowed for these font packages only; everything else uses the base allowlist.
-          FONT_PACKAGES="@fontsource-variable/inter@5.3.0;@fontsource/jetbrains-mono@5.3.0"
+          FONT_PACKAGES="@fontsource-variable/ibm-plex-sans@5.3.0;@fontsource/ibm-plex-mono@5.3.0"
           npx --yes license-checker-rseidelsohn@4 --production --summary --excludePrivatePackages --excludePackages "$FONT_PACKAGES" \
             --onlyAllow "Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Python-2.0;BlueOak-1.0.0;Unlicense"
           npx --yes license-checker-rseidelsohn@4 --production --summary --includePackages "$FONT_PACKAGES" --onlyAllow "OFL-1.1"

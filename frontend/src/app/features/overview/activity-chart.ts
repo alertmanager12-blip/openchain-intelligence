@@ -24,7 +24,8 @@ import { Dashboard } from '../../core/models';
     .chart { padding: 4px 0 0; }
     svg { width: 100%; height: 120px; display: block; }
     .grid { stroke: var(--line); stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
-    .ev { fill: var(--accent); opacity: 0.75; }
+    .ev { fill: var(--line-strong); opacity: 0.55; }
+    .ev:hover { fill: var(--accent); opacity: 1; }
     .al { fill: var(--risk-high); }
     .axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--muted); }
     p { margin: 8px 0 0; }

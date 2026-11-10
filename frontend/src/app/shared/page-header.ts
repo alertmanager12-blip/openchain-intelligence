@@ -87,9 +87,9 @@ export interface Crumb {
     @media (max-width: 720px) {
       .ph, .search kbd { display: none; }
       .search { width: 30px; padding: 0; justify-content: center; }
-      .crumbs li:not(.cur):not(:nth-last-child(2)) { display: none; }
-      /* the first visible crumb must not start with a separator once the earlier ones are hidden */
-      .crumbs li:nth-last-child(2)::before { content: none; }
+      /* phones: the current page only; the earlier crumbs stay reachable through the browser's back button and the sidebar */
+      .crumbs li:not(.cur) { display: none; }
+      .crumbs li.cur::before { content: none; }
       .acts ::ng-deep .hide-sm { display: none; }
     }
   `,

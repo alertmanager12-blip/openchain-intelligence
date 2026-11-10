@@ -30,8 +30,7 @@
               }
             ],
             "styles": [
-              "src/theme/inter.css",
-              "node_modules/@fontsource/jetbrains-mono/latin-400.css",
+              "src/theme/fonts.css",
               "src/styles.scss"
             ],
             "allowedCommonJsDependencies": [

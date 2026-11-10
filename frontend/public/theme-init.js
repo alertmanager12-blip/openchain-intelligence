@@ -2,6 +2,7 @@
    nginx's Content-Security-Policy (script-src 'self') blocks inline scripts in production. */
 try {
   var p = localStorage.getItem('oci.theme');
-  var dark = p === 'dark' || ((!p || p === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
+  // dark is the default theme; "system" follows the operating system, "light" is an explicit choice
+  var dark = !p || p === 'dark' || (p === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 } catch (e) {}

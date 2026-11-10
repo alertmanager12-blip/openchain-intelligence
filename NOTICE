@@ -34,11 +34,8 @@ Fonts (font files only, distributed unmodified as separate files under the
 SIL Open Font License, Version 1.1; see ADR-0012 amendment 1; the licence text
 is included with each font package):
 
-  - Inter
-    Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
-    SIL Open Font License, Version 1.1
-  - JetBrains Mono
-    Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  - IBM Plex Sans, IBM Plex Mono
+    Copyright © 2017 IBM Corp. with Reserved Font Name "Plex" (https://github.com/IBM/plex)
     SIL Open Font License, Version 1.1
   - Packaged by Fontsource (https://fontsource.org)
 

@@ -49,6 +49,7 @@
 .it-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; }
 .it-meta .status { font-size: 12px; color: var(--ink-2); }
 .it-meta .mono { font-size: 11.5px; word-break: normal; }
+.it-meta .badge { font-size: 11px; line-height: 16px; padding: 0 5px; }
 .it-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; margin-top: 1px; }
 .stale { opacity: 0.6; transition: opacity var(--t-med); }
 .keys { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; padding: 8px 16px; border-top: 1px solid var(--line); }

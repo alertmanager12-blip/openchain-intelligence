@@ -76,6 +76,7 @@ export class GraphCanvas {
   private elements(nodes: GraphNode[], edges: KeyedEdge[], root: string | null): ElementDefinition[] {
     const ids = new Set(nodes.map((n) => n.id));
     const widths = edgeWidths(edges);
+    const flagged = new Set(nodes.filter((n) => n.riskLevel === 'HIGH' || n.riskLevel === 'CRITICAL').map((n) => n.id));
     return [
       ...nodes.map((n) => ({
         data: {
@@ -87,7 +88,13 @@ export class GraphCanvas {
         },
       })),
       ...edges.filter(({ edge }) => ids.has(edge.source) && ids.has(edge.target)).map(({ key, edge }) => ({
-        data: { id: key, source: edge.source, target: edge.target, w: widths.get(key) ?? 1, label: `${formatUnits(edge.rawAmount, edge.token.decimals, 2)} ${edge.token.symbol}` },
+        data: {
+          id: key, source: edge.source, target: edge.target, w: widths.get(key) ?? 1, label: `${formatUnits(edge.rawAmount, edge.token.decimals, 2)} ${edge.token.symbol}`,
+          // direction relative to the root wallet: into it, out of it, or between two other wallets
+          dir: edge.target === root ? 'in' : edge.source === root ? 'out' : 'hop',
+          // the counterparty is scored high or critical (the root's own score is shown on the root): worth a look, not evidence of shared intent
+          flag: edge.target === root ? flagged.has(edge.source) : edge.source === root ? flagged.has(edge.target) : flagged.has(edge.source) || flagged.has(edge.target),
+        },
       })),
     ];
   }
@@ -195,12 +202,15 @@ export class GraphCanvas {
       {
         selector: 'edge',
         style: {
-          width: 'data(w)', 'line-color': this.css('--line'), 'target-arrow-color': this.css('--muted'), 'target-arrow-shape': 'triangle', 'arrow-scale': 0.8,
+          width: 'data(w)', 'line-color': this.css('--line-strong'), 'line-opacity': 0.55, 'target-arrow-color': this.css('--line-strong'), 'target-arrow-shape': 'triangle', 'arrow-scale': 0.8,
           'curve-style': 'bezier', label: '', 'font-size': 11, color: this.css('--ink-2'), 'text-rotation': 'autorotate',
           'text-background-color': this.css('--surface'), 'text-background-opacity': 0.85, 'text-background-padding': '1px',
         },
       },
-      { selector: 'edge.hover, edge:selected', style: { label: 'data(label)', 'z-index': 20, 'text-background-opacity': 1 } },
+      { selector: 'edge[dir = "in"]', style: { 'line-color': this.css('--flow-in'), 'target-arrow-color': this.css('--flow-in'), 'line-opacity': 0.9 } },
+      { selector: 'edge[dir = "out"]', style: { 'line-color': this.css('--flow-out'), 'target-arrow-color': this.css('--flow-out'), 'line-opacity': 0.9 } },
+      { selector: 'edge[?flag]', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 4], 'line-color': this.css('--risk-high'), 'target-arrow-color': this.css('--risk-high'), 'line-opacity': 0.95 } },
+      { selector: 'edge.hover, edge:selected', style: { label: 'data(label)', 'z-index': 20, 'text-background-opacity': 1, 'line-opacity': 1 } },
       { selector: 'edge:selected', style: { 'line-color': this.css('--focus'), 'target-arrow-color': this.css('--focus'), 'overlay-opacity': 0 } },
       { selector: '.path', style: { 'line-color': this.css('--accent'), 'target-arrow-color': this.css('--accent'), 'z-index': 10 } },
       { selector: 'node.path', style: { 'border-color': this.css('--accent'), 'border-width': 4 } },

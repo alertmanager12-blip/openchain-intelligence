@@ -112,6 +112,11 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
             <span><i class="shape dia" aria-hidden="true"></i>Labelled</span>
             <span><i class="shape sq" aria-hidden="true"></i>Contract</span>
             <span><i class="shape root" aria-hidden="true"></i>Root, rings are hops</span>
+            <span class="sep" aria-hidden="true"></span>
+            <span><i class="flow in" aria-hidden="true"></i>Into the root</span>
+            <span><i class="flow out" aria-hidden="true"></i>Out of the root</span>
+            <span><i class="flow hop" aria-hidden="true"></i>Between other wallets</span>
+            <span><i class="flow flag" aria-hidden="true"></i>Counterparty scored high or critical (not proof of shared intent)</span>
             <span><svg class="weight" viewBox="0 0 26 10" aria-hidden="true"><path d="M1 5h6" stroke-width="1"/><path d="M10 5h6" stroke-width="2.5"/><path d="M19 5h6" stroke-width="4.5"/></svg>Line thickness: amount relative to the largest transfer of the same token</span>
           </div>
         </div>
@@ -148,6 +153,11 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
     .shape.sq { border-radius: 2px; }
     .shape.root { border-radius: 50%; border-width: 2.5px; border-color: var(--ink); width: 11px; height: 11px; }
     .weight { width: 26px; height: 10px; margin-right: 6px; stroke: var(--muted); fill: none; }
+    .sep { width: 1px; height: 14px; background: var(--line); }
+    .flow { display: inline-block; width: 18px; height: 0; margin-right: 6px; border-top: 2px solid var(--line-strong); }
+    .flow.in { border-color: var(--flow-in); }
+    .flow.out { border-color: var(--flow-out); }
+    .flow.flag { border-top-style: dashed; border-color: var(--risk-high); }
     @media (max-width: 900px) {
       .graph-page { height: auto; }
       .stage { overflow: visible; }

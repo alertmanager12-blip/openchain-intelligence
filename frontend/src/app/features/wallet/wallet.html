@@ -7,7 +7,7 @@
     <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
   </oci-page-header>
 
-  <header class="ident">
+  <header class="ident sev-rail sev-rail--{{ (w.value()?.risk?.level ?? 'unknown').toLowerCase() }}">
     <div class="id-main">
       <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
       <div class="chips"><oci-net [value]="network()" />
