@@ -61,6 +61,18 @@ public class MetricsConfiguration {
             Gauge.builder("oci.working.set.trim.millis", chains, c -> c.lastTrim() == null ? Double.NaN : c.lastTrim().millis())
                     .description("Duration of the last working-set trim").register(registry);
             FunctionCounter.builder("oci.events.retracted", chains, ChainIngestionService::eventsRetracted).register(registry);
+            // chain reorganisations (docs/P0_REORG_DESIGN.md)
+            FunctionCounter.builder("oci.reorg.reverted.flows", chains, ChainIngestionService::reorgRevertedFlows)
+                    .description("Value flows reverted after their block left the canonical chain").register(registry);
+            FunctionCounter.builder("oci.reorg.signals", chains, ChainIngestionService::reorgSignalsRemoved).tag("outcome", "withdrawn").register(registry);
+            FunctionCounter.builder("oci.reorg.signals", chains, ChainIngestionService::reorgSignalsRecomputed).tag("outcome", "recomputed").register(registry);
+            FunctionCounter.builder("oci.reorg.signals", chains, ChainIngestionService::reorgSignalsAdded).tag("outcome", "added").register(registry);
+            FunctionCounter.builder("oci.reorg.ignored", chains, ChainIngestionService::reorgIgnored)
+                    .description("Retractions with nothing to revert (unknown or already retracted: idempotent)").register(registry);
+            FunctionCounter.builder("oci.reorg.inexact.profiles", chains, ChainIngestionService::reorgInexactProfiles)
+                    .description("Retracted flows older than the exact memory of a profile (totals of that side left unchanged)").register(registry);
+            FunctionCounter.builder("oci.reorg.replay.truncated", chains, ChainIngestionService::reorgReplayTruncated)
+                    .description("Re-evaluations that hit the trigger budget").register(registry);
             FunctionCounter.builder("oci.balance.lookups", chains, ChainIngestionService::balanceLookups).tag("outcome", "made").register(registry);
             FunctionCounter.builder("oci.balance.lookups", chains, ChainIngestionService::balanceLookupFailures).tag("outcome", "failed").register(registry);
             FunctionCounter.builder("oci.balance.lookups", chains, ChainIngestionService::balanceLookupsSkipped).tag("outcome", "skipped").register(registry);

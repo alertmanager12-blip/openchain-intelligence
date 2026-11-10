@@ -54,7 +54,7 @@ public final class AlertService {
                     .filter(a -> a.ruleId().equals(m.ruleId()) && Objects.equals(a.dedupKey(), m.dedupKey()))
                     .findFirst();
             if (replay.isPresent()) {
-                Alert r = replay.get();
+                Alert r = reinstate(replay.get(), m.matchedEventIds(), now);
                 // alerts stored before subjects existed get theirs from the replayed (re-indexed) trigger
                 if ((r.subject() == null || r.subject().eventId() == null) && m.subject() != null && m.triggeringEventId().equals(r.matchedEventIds().isEmpty() ? null
                         : r.matchedEventIds().getLast())) {
@@ -65,7 +65,7 @@ public final class AlertService {
         }
         Optional<Alert> open = repository.findOpenByDedupKey(m.ruleId(), m.dedupKey());
         if (open.isPresent() && withinCooldown(open.get(), m.eventTime(), cooldown)) {
-            Alert a = open.get();
+            Alert a = reinstate(open.get(), m.matchedEventIds(), now);
             Alert grouped = a.toBuilder()
                     .occurrenceCount(a.occurrenceCount() + 1)
                     .addEventIds(m.matchedEventIds())
@@ -135,15 +135,62 @@ public final class AlertService {
     }
 
     /** Annotates alerts whose evidence includes an event removed by a chain reorganisation. */
-    public synchronized List<Alert> onRetraction(String eventId) {
+    /** How a retraction changed the evidence of one alert. */
+    public record EvidenceChange(Alert alert, Alert.EvidenceState before, Alert.EvidenceState after) {
+        /** The last valid piece of evidence just went: the channels that received the alert are told (alert.retracted). */
+        public boolean becameWithdrawn() { return after == Alert.EvidenceState.WITHDRAWN && before != Alert.EvidenceState.WITHDRAWN; }
+    }
+
+    private final java.util.concurrent.atomic.AtomicLong evidencePartiallyWithdrawn = new java.util.concurrent.atomic.AtomicLong(),
+            evidenceWithdrawn = new java.util.concurrent.atomic.AtomicLong(), evidenceReinstated = new java.util.concurrent.atomic.AtomicLong();
+
+    public long evidencePartiallyWithdrawn() { return evidencePartiallyWithdrawn.get(); }
+    public long evidenceWithdrawn() { return evidenceWithdrawn.get(); }
+    public long evidenceReinstated() { return evidenceReinstated.get(); }
+
+    /**
+     * An event matched by alerts left the canonical chain (reorganisation; the rule engine reports each retraction once).
+     * The alert is never deleted: the event joins its withdrawn evidence and the evidence state is recomputed (some evidence
+     * left: PARTIALLY_WITHDRAWN; none: WITHDRAWN), with a history entry. Idempotent: an event already withdrawn changes
+     * nothing. See docs/P0_REORG_DESIGN.md § 3.3.
+     */
+    public synchronized List<EvidenceChange> onRetraction(String eventId) {
         Instant now = clock.instant();
-        List<Alert> out = new ArrayList<>();
+        List<EvidenceChange> out = new ArrayList<>();
         for (Alert a : repository.findByMatchedEventId(eventId)) {
-            out.add(repository.save(a.toBuilder().updatedAt(now)
-                    .addComment(new Comment(SYSTEM + ":reorg", now, "event " + eventId
-                            + " was removed by a chain reorganisation; re-check the evidence")).build()));
+            if (a.withdrawnEventIds().contains(eventId)) continue;
+            List<String> withdrawn = new ArrayList<>(a.withdrawnEventIds());
+            withdrawn.add(eventId);
+            Alert.EvidenceState state = evidenceState(a.matchedEventIds(), withdrawn);
+            long remaining = a.matchedEventIds().stream().filter(id -> !withdrawn.contains(id)).count();
+            String reason = "event " + eventId + " left the canonical chain (reorganisation): "
+                    + (remaining == 0 ? "no valid evidence remains, re-check the alert before acting"
+                    : remaining + " of " + a.matchedEventIds().size() + " matched event(s) remain");
+            Alert saved = repository.save(a.toBuilder().updatedAt(now).withdrawnEventIds(withdrawn).evidenceState(state)
+                    .addHistory(new HistoryEntry(a.status(), a.status(), SYSTEM + ":reorg", now, reason))
+                    .addComment(new Comment(SYSTEM + ":reorg", now, reason)).build());
+            if (state == Alert.EvidenceState.WITHDRAWN) evidenceWithdrawn.incrementAndGet(); else evidencePartiallyWithdrawn.incrementAndGet();
+            out.add(new EvidenceChange(saved, a.evidenceState(), state));
         }
         return out;
+    }
+
+    /** VALID when nothing was withdrawn, WITHDRAWN when every matched event was, PARTIALLY_WITHDRAWN otherwise. */
+    static Alert.EvidenceState evidenceState(List<String> matched, List<String> withdrawn) {
+        if (withdrawn.isEmpty()) return Alert.EvidenceState.VALID;
+        return matched.stream().allMatch(withdrawn::contains) ? Alert.EvidenceState.WITHDRAWN : Alert.EvidenceState.PARTIALLY_WITHDRAWN;
+    }
+
+    /** Events of this match that had been withdrawn are back on the canonical chain (re-inclusion): their evidence counts again. */
+    private Alert reinstate(Alert a, java.util.Collection<String> eventIds, Instant now) {
+        List<String> withdrawn = new ArrayList<>(a.withdrawnEventIds());
+        if (!withdrawn.removeAll(eventIds)) return a;
+        Alert.EvidenceState state = evidenceState(a.matchedEventIds(), withdrawn);
+        evidenceReinstated.incrementAndGet();
+        return repository.save(a.toBuilder().updatedAt(now).withdrawnEventIds(withdrawn).evidenceState(state)
+                .addHistory(new HistoryEntry(a.status(), a.status(), SYSTEM + ":reorg", now,
+                        "evidence re-included in the canonical chain: " + String.join(", ", eventIds.stream().filter(a.withdrawnEventIds()::contains).toList())))
+                .build());
     }
 
     public Optional<Alert> find(String alertId) { return repository.findById(alertId); }

@@ -38,8 +38,10 @@ import java.util.Set;
 
 /**
  * Facade: ingest -> profile -> detection -> scoring, for both sides of each movement. Idempotent on event id.
- * Reorg-retracted value flows ({@code removed=true}) are not reverted (not supported yet); a retracted issuer freeze
- * or unfreeze IS reverted (the label state goes back to what it was before that event).
+ * Chain reorganisations ({@code removed=true}) are reverted: a value flow is removed with its effect on both profiles,
+ * the signals citing its transaction are re-evaluated from the remaining evidence and the scores recomputed
+ * ({@link #retractFlow}); a retracted approval or admin change drops the signals it alone justified; a retracted issuer
+ * freeze or unfreeze restores the label state it replaced. See docs/P0_REORG_DESIGN.md.
  *
  * <p>Issuer freezes ({@code STABLECOIN_FREEZE}): the frozen address gets an {@link LabelCategory#ISSUER_FROZEN} label
  * (source {@code <issuer>-onchain}, reliability 1.0, CONFIRMED_BY_SOURCE, reference = tx hash, observedAt = block
@@ -112,13 +114,36 @@ public final class IntelligencePipeline {
         if (!flows.add(f)) return Result.DUPLICATE;
         profiles.ingest(f);
         Set<Address> subjects = new LinkedHashSet<>(List.of(f.from(), f.to()));
-        return run(subjects, f, null);
+        Result r = run(subjects, f, null);
+        if (!retractedIds.remove(f.eventId())) return r;
+        // re-inclusion in another canonical block: the flow arrives after flows it explains (e.g. the forwarding of a
+        // re-included receipt), so the same window is re-evaluated as for its retraction
+        Replay rp = replay(subjects, f.timestamp());
+        List<Signal> all = new ArrayList<>(r.newSignals()); all.addAll(rp.fresh());
+        Map<String, String> errors = new LinkedHashMap<>(r.detectorErrors()); errors.putAll(rp.errors());
+        Set<Address> toScore = new LinkedHashSet<>(subjects);
+        rp.fresh().forEach(x -> toScore.add(x.address()));
+        return new Result(false, all, errors, toScore.stream().map(scoring::rescore).toList());
     }
 
-    /** APPROVAL, CONTRACT_ADMIN_CHANGE and STABLECOIN_(UN)FREEZE events (transfers go through {@link #onTransfer}). */
+    /** Ids of flows retracted by a reorganisation (bounded): a later arrival of the same id is a re-inclusion. */
+    private final Set<String> retractedIds = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(
+            new java.util.LinkedHashMap<String, Boolean>(64, 0.75f, false) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) { return size() > 100_000; }
+            }));
+
+    /**
+     * APPROVAL, CONTRACT_ADMIN_CHANGE and STABLECOIN_(UN)FREEZE events (transfers go through {@link #onTransfer}), and the
+     * retraction ({@code removed=true}) of any of them or of a transfer (TOKEN_TRANSFER, NATIVE_TRANSFER).
+     */
     public Result onEvent(ChainEvent e) {
         boolean freeze = e.type() == ChainEvent.EventType.STABLECOIN_FREEZE || e.type() == ChainEvent.EventType.STABLECOIN_UNFREEZE;
         if (freeze && e.removed()) return retractFreeze(e);
+        if (e.removed() && (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER)) {
+            RetractResult r = retractFlow(e.eventId());
+            return r.applied() ? new Result(false, r.added(), r.detectorErrors(), r.scores()) : Result.DUPLICATE;
+        }
+        if (e.removed()) { RetractResult r = retractEvent(e); return r.applied() ? new Result(false, List.of(), Map.of(), r.scores()) : Result.DUPLICATE; }
         if (e.removed() || !seenEvents.add(e.eventId())) return Result.DUPLICATE;
         if (freeze) return applyFreeze(e);
         Optional<Address> subject = switch (e.type()) {
@@ -177,6 +202,130 @@ public final class IntelligencePipeline {
         if (prev != null && prev.label() != null) labels.save(prev.label());
         if (prev == null) freezeStates.remove(key); else freezeStates.put(key, prev);
         return new Result(false, List.of(), Map.of(), List.of(scoring.rescore(target.get())));
+    }
+
+    // ------------------------------------------------------------ chain reorganisations (docs/P0_REORG_DESIGN.md)
+
+    /** Triggers replayed per wallet when re-evaluating after a retraction (closest to the retracted flow first). */
+    public static final int MAX_REPLAY_TRIGGERS = 500;
+    /** Re-evaluation window around the retracted flow: the longest trigger-based detector window (structuring, 24 h). */
+    public static final java.time.Duration REPLAY_WINDOW = java.time.Duration.ofHours(24);
+
+    /**
+     * Outcome of a flow retraction.
+     *
+     * @param applied     false when the flow was unknown or already retracted (idempotent: nothing done)
+     * @param profileSidesReverted sides whose profile was reverted exactly (0..2); fewer means the flow was older than the
+     *                    exact memory of that profile, whose totals then stay as they were (counted, see the design)
+     * @param removed     signals that cited the transaction and are no longer justified by the remaining evidence
+     * @param recomputed  signals that cited the transaction and are still justified: stored again, same id, new evidence
+     * @param added       signals that did not exist before the re-evaluation (e.g. a pass-through now anchored on another receipt)
+     * @param replayTruncated true when a wallet had more than {@link #MAX_REPLAY_TRIGGERS} flows to replay in the window
+     */
+    public record RetractResult(boolean applied, ValueFlow flow, int profileSidesReverted, Set<Address> touched,
+                                List<Signal> removed, List<Signal> recomputed, List<Signal> added,
+                                Map<String, String> detectorErrors, List<RiskScore> scores, boolean replayTruncated) {
+        static RetractResult none() { return new RetractResult(false, null, 0, Set.of(), List.of(), List.of(), List.of(), Map.of(), List.of(), false); }
+    }
+
+    /**
+     * Reverts a value flow whose block left the canonical chain: removes it (and its id, so a re-inclusion in another
+     * canonical block is applied as new), reverts both profiles, forgets the balance recorded for it, then re-evaluates
+     * every signal that cites its transaction, whatever its subject: such signals are removed and detection is replayed on
+     * the remaining evidence, so a signal still justified comes back with the same id and updated evidence, and one that is
+     * no longer justified does not. Scores of every wallet involved are recomputed. Idempotent. Callers serialise.
+     */
+    public synchronized RetractResult retractFlow(String eventId) {
+        Optional<ValueFlow> gone = flows.remove(eventId);
+        if (gone.isEmpty()) return RetractResult.none();
+        ValueFlow f = gone.get();
+        int sides = profiles.revert(f);
+        balances.forget(eventId);
+        // only flow-derived signals: an approval or admin-change signal of the same transaction stands on its own event
+        // (handled by retractEvent) and would not be recreated by replaying flows
+        List<Signal> dependent = signals.findByEvidenceReference(f.txHash()).stream()
+                .filter(x -> x.type() != io.openchain.core.detection.SignalType.UNUSUAL_APPROVAL
+                        && x.type() != io.openchain.core.detection.SignalType.OWNERSHIP_CHANGE).toList();
+        Set<String> dependentIds = new LinkedHashSet<>();
+        Set<Address> subjects = new LinkedHashSet<>(List.of(f.from(), f.to()));
+        for (Signal s : dependent) { signals.remove(s.id()); dependentIds.add(s.id()); subjects.add(s.address()); }
+
+        retractedIds.add(eventId);
+        Replay rp = replay(subjects, f.timestamp());
+        List<Signal> fresh = rp.fresh();
+        Map<String, String> errors = rp.errors();
+        boolean truncated = rp.truncated();
+        List<Signal> recomputed = fresh.stream().filter(x -> dependentIds.contains(x.id())).toList();
+        List<Signal> added = fresh.stream().filter(x -> !dependentIds.contains(x.id())).toList();
+        Set<String> back = new java.util.HashSet<>(recomputed.stream().map(Signal::id).toList());
+        List<Signal> removed = dependent.stream().filter(x -> !back.contains(x.id())).toList();
+        Set<Address> toScore = new LinkedHashSet<>(subjects);
+        fresh.forEach(x -> toScore.add(x.address()));
+        List<RiskScore> scores = toScore.stream().map(scoring::rescore).toList();
+        return new RetractResult(true, f, sides, Set.copyOf(subjects), removed, recomputed, added, errors, scores, truncated);
+    }
+
+    private record Replay(List<Signal> fresh, Map<String, String> errors, boolean truncated) {}
+
+    /**
+     * Re-runs detection for these wallets around {@code center}: once without a trigger (exposure, circular flow), then
+     * with each of their flows within {@link #REPLAY_WINDOW} as trigger (closest first, at most
+     * {@link #MAX_REPLAY_TRIGGERS}, replayed chronologically). Signal ids are deterministic: what is still stored is not
+     * duplicated, what is still justified and was removed comes back with the same id.
+     */
+    private Replay replay(Set<Address> subjects, java.time.Instant center) {
+        List<Signal> fresh = new ArrayList<>();
+        Map<String, String> errors = new LinkedHashMap<>();
+        boolean truncated = false;
+        java.time.Instant from = center.minus(REPLAY_WINDOW), to = center.plus(REPLAY_WINDOW);
+        for (Address a : subjects) {
+            DetectionResult r = detection.run(new DetectionContext(a, null, null, profiles.profileOrEmpty(a), flows, labels, config, clock.instant(), balances));
+            fresh.addAll(r.newSignals()); errors.putAll(r.detectorErrors());
+            List<ValueFlow> triggers = flows.involving(a).stream()
+                    .filter(x -> !x.timestamp().isBefore(from) && !x.timestamp().isAfter(to)).distinct()
+                    .sorted(java.util.Comparator.comparing((ValueFlow x) -> java.time.Duration.between(center, x.timestamp()).abs()))
+                    .toList();
+            if (triggers.size() > MAX_REPLAY_TRIGGERS) { truncated = true; triggers = triggers.subList(0, MAX_REPLAY_TRIGGERS); }
+            for (ValueFlow t : triggers.stream().sorted(io.openchain.intelligence.flow.FlowOrder.CHRONOLOGICAL).toList()) {
+                DetectionResult rt = detection.run(new DetectionContext(a, t, null, profiles.profileOrEmpty(a), flows, labels, config, clock.instant(), balances));
+                fresh.addAll(rt.newSignals()); errors.putAll(rt.detectorErrors());
+            }
+        }
+        return new Replay(fresh, errors, truncated);
+    }
+
+    /**
+     * Reverts any retracted event ({@code removed=true}) and reports what changed, for callers that propagate it (rule
+     * engine, recent signals): value flows via {@link #retractFlow}, approvals and admin changes via their signals.
+     * Freezes are reverted through {@link #onEvent}. Idempotent.
+     */
+    public RetractResult retract(ChainEvent e) {
+        if (!e.removed()) return RetractResult.none();
+        return switch (e.type()) {
+            case TOKEN_TRANSFER, NATIVE_TRANSFER -> retractFlow(e.eventId());
+            case APPROVAL, CONTRACT_ADMIN_CHANGE -> retractEvent(e);
+            default -> RetractResult.none();
+        };
+    }
+
+    /** A retracted approval or contract admin change: its id is forgotten and the signals it alone justified are dropped. */
+    private synchronized RetractResult retractEvent(ChainEvent e) {
+        if (!seenEvents.remove(e.eventId())) return RetractResult.none();
+        Optional<String> tx = EventFields.string(e, EventFields.TX_HASH);
+        Set<Address> touched = new LinkedHashSet<>();
+        List<Signal> removed = new ArrayList<>();
+        if (tx.isPresent()) {
+            for (Signal s : signals.findByEvidenceReference(tx.get())) {
+                if (s.type() == io.openchain.core.detection.SignalType.UNUSUAL_APPROVAL
+                        || s.type() == io.openchain.core.detection.SignalType.OWNERSHIP_CHANGE) {
+                    signals.remove(s.id());
+                    removed.add(s);
+                    touched.add(s.address());
+                }
+            }
+        }
+        return new RetractResult(true, null, 0, Set.copyOf(touched), removed, List.of(), List.of(), Map.of(),
+                touched.stream().map(scoring::rescore).toList(), false);
     }
 
     private Result run(Set<Address> subjects, ValueFlow trigger, ChainEvent event) {

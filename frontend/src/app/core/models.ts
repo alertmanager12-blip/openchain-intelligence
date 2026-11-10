@@ -326,6 +326,10 @@ export interface Alert {
   summary: string;
   /** One plain-language line explaining why the rule fired. */
   evidenceSummary: string | null;
+  /** Evidence after chain reorganisations: VALID, PARTIALLY_WITHDRAWN or WITHDRAWN (absent from older servers: VALID). */
+  evidenceState?: 'VALID' | 'PARTIALLY_WITHDRAWN' | 'WITHDRAWN';
+  /** Matched events that left the canonical chain and were not re-included. */
+  withdrawnEventIds?: string[];
   evidenceLevel: EvidenceLevel;
   assignee: string | null;
   createdAt: string;

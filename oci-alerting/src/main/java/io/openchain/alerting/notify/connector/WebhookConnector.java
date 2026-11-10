@@ -44,7 +44,7 @@ public final class WebhookConnector implements NotificationConnector {
         headers.put("Content-Type", "application/json");
         headers.put(WebhookSignature.HEADER, WebhookSignature.header(secret, clock.instant().getEpochSecond(), body));
         headers.put(WebhookSignature.IDEMPOTENCY_HEADER, n.deliveryId());
-        headers.put(WebhookSignature.EVENT_HEADER, WebhookSignature.EVENT_ALERT_OPENED);
+        headers.put(WebhookSignature.EVENT_HEADER, n.event());
         return HttpConnectorSupport.post(http, url, headers, body);
     }
 }

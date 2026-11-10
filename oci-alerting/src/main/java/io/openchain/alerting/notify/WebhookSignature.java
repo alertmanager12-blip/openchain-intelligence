@@ -19,8 +19,8 @@ public final class WebhookSignature {
     public static final String HEADER = "X-OCI-Signature";
     public static final String IDEMPOTENCY_HEADER = "X-OCI-Delivery-Id";
     public static final String EVENT_HEADER = "X-OCI-Event";
-    /** Event sent with every alert notification (deliveries are enqueued when an alert is opened). */
-    public static final String EVENT_ALERT_OPENED = "alert.opened";
+    /** Event of an alert notification ({@code Notification.event()}): alert.opened, alert.retracted. */
+    public static final String EVENT_ALERT_OPENED = Notification.EVENT_OPENED;
     public static final int MIN_SECRET_BYTES = 32;
 
     private WebhookSignature() {}

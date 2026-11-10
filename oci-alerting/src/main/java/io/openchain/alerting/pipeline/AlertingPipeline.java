@@ -36,7 +36,15 @@ public final class AlertingPipeline {
 
     public Outcome onEvent(ChainEvent event) {
         EngineResult r = engine.process(event);
-        if (r.retractedEventId() != null) alerts.onRetraction(r.retractedEventId());
+        if (r.retractedEventId() != null) {
+            // an alert whose last valid evidence just left the canonical chain is announced on the channels of its rule
+            // (same routing as its opening), once per withdrawal, through the delivery outbox (retries, dead letters)
+            for (AlertService.EvidenceChange c : alerts.onRetraction(r.retractedEventId())) {
+                if (!c.becameWithdrawn()) continue;
+                Rule rule = engine.rule(c.alert().ruleId()).map(x -> x.rule()).orElse(null);
+                if (rule != null) for (Rule.ActionSpec action : rule.actions()) delivery.enqueueRetraction(c.alert(), action);
+            }
+        }
         List<Alert> created = new ArrayList<>(), grouped = new ArrayList<>();
         List<DeliveryRecord> enqueued = new ArrayList<>();
         for (RuleMatch m : r.matches()) {

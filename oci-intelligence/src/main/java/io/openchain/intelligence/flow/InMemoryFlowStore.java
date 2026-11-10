@@ -58,6 +58,22 @@ public final class InMemoryFlowStore implements FlowStore {
         return cutoff == null ? 0 : evictBefore(n -> cutoff, keep);
     }
 
+    @Override public synchronized java.util.Optional<ValueFlow> remove(String eventId) {
+        if (!ids.remove(eventId)) return java.util.Optional.empty();
+        ValueFlow found = null;
+        for (var lists : List.of(out, in)) {
+            for (var it = lists.entrySet().iterator(); it.hasNext(); ) {
+                List<ValueFlow> l = it.next().getValue();
+                for (var li = l.iterator(); li.hasNext(); ) {
+                    ValueFlow f = li.next();
+                    if (f.eventId().equals(eventId)) { found = f; li.remove(); }
+                }
+                if (l.isEmpty()) it.remove();
+            }
+        }
+        return java.util.Optional.ofNullable(found);
+    }
+
     @Override public synchronized int size() { return ids.size(); }
     @Override public synchronized List<ValueFlow> outgoing(Address a) { return List.copyOf(out.getOrDefault(a, List.of())); }
     @Override public synchronized List<ValueFlow> incoming(Address a) { return List.copyOf(in.getOrDefault(a, List.of())); }

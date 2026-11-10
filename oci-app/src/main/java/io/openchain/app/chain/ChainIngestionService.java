@@ -307,9 +307,10 @@ public class ChainIngestionService {
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (!e.removed() && e.eventTime() != null) observationStart.merge(e.network(), e.eventTime(), (a, b) -> a.isBefore(b) ? a : b);
         if (e.removed()) {
-            if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
             history.record(e);
-            evaluate(e);
+            evaluate(e); // the rule engine removes the event's contribution; alerts on it are re-checked
+            if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
+            else applyRetraction(e, intelligence.retract(e));
             return;
         }
         List<Signal> fresh = new ArrayList<>();
@@ -352,6 +353,58 @@ public class ChainIngestionService {
             evaluate(se);
         }
     }
+
+    /**
+     * Propagates a chain reorganisation (docs/P0_REORG_DESIGN.md): a signal no longer justified is retracted from the rule
+     * engine (its DETECTION_SIGNAL event, so its contribution and its alerts are re-checked) and from the recent signals;
+     * a signal recomputed from the remaining evidence keeps its id and stays active (only its evidence is refreshed); a
+     * signal that appears with the re-evaluation is handled like any new signal.
+     */
+    private void applyRetraction(ChainEvent e, IntelligencePipeline.RetractResult r) {
+        if (!r.applied()) { reorgIgnored.incrementAndGet(); return; }
+        if (r.flow() != null) reorgRevertedFlows.incrementAndGet();
+        if (r.flow() != null && r.profileSidesReverted() < (r.flow().from().equals(r.flow().to()) ? 1 : 2)) reorgInexactProfiles.incrementAndGet();
+        if (r.replayTruncated()) reorgReplayTruncated.incrementAndGet();
+        reorgSignalsRemoved.addAndGet(r.removed().size());
+        reorgSignalsRecomputed.addAndGet(r.recomputed().size());
+        reorgSignalsAdded.addAndGet(r.added().size());
+        Set<String> gone = new java.util.HashSet<>(r.removed().stream().map(Signal::id).toList());
+        java.util.Map<String, Signal> refreshed = new java.util.HashMap<>();
+        r.recomputed().forEach(x -> refreshed.put(x.id(), x));
+        synchronized (recentSignals) {
+            List<Signal> kept = new ArrayList<>();
+            for (Signal x : recentSignals) if (!gone.contains(x.id())) kept.add(refreshed.getOrDefault(x.id(), x));
+            recentSignals.clear();
+            recentSignals.addAll(kept);
+        }
+        for (Signal x : r.removed()) {
+            ChainEvent se = signalEvent(x, e);
+            ChainEvent retracted = new ChainEvent(se.eventId(), se.type(), se.network(), se.blockNumber(), se.blockHash(), se.eventTime(),
+                    se.ingestedAt(), true, se.fields());
+            history.record(retracted);
+            evaluate(retracted);
+        }
+        for (Signal x : r.added()) {
+            remember(x);
+            ChainEvent se = signalEvent(x, e);
+            history.record(se);
+            evaluate(se);
+        }
+        if (!r.removed().isEmpty() || !r.added().isEmpty() || !r.recomputed().isEmpty())
+            log.info("reorg {}: {} signal(s) withdrawn, {} recomputed from the remaining evidence, {} new{}", e.eventId(),
+                    r.removed().size(), r.recomputed().size(), r.added().size(), r.replayTruncated() ? " (re-evaluation truncated)" : "");
+    }
+
+    private final AtomicLong reorgRevertedFlows = new AtomicLong(), reorgSignalsRemoved = new AtomicLong(), reorgSignalsRecomputed = new AtomicLong(),
+            reorgSignalsAdded = new AtomicLong(), reorgIgnored = new AtomicLong(), reorgInexactProfiles = new AtomicLong(), reorgReplayTruncated = new AtomicLong();
+
+    public long reorgRevertedFlows() { return reorgRevertedFlows.get(); }
+    public long reorgSignalsRemoved() { return reorgSignalsRemoved.get(); }
+    public long reorgSignalsRecomputed() { return reorgSignalsRecomputed.get(); }
+    public long reorgSignalsAdded() { return reorgSignalsAdded.get(); }
+    public long reorgIgnored() { return reorgIgnored.get(); }
+    public long reorgInexactProfiles() { return reorgInexactProfiles.get(); }
+    public long reorgReplayTruncated() { return reorgReplayTruncated.get(); }
 
     private void remember(Signal s) {
         synchronized (recentSignals) {

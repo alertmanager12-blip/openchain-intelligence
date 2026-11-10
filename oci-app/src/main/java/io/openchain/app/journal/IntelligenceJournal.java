@@ -14,6 +14,12 @@ public interface IntelligenceJournal {
     void signal(Signal s);
     void score(RiskScore s);
 
+    /** A flow retracted by a chain reorganisation: its journal row goes too, in order with the writes (P0 reorg). */
+    default void forgetFlow(String eventId) {}
+
+    /** A signal no longer justified after a chain reorganisation. */
+    default void forgetSignal(String signalId) {}
+
     ThreadLocal<Boolean> RESTORING = ThreadLocal.withInitial(() -> false);
 
     static boolean restoring() { return RESTORING.get(); }

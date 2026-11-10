@@ -181,7 +181,8 @@ public class AlertFacade {
                 summary(a, fields), a.evidenceLevel() == null ? null : a.evidenceLevel().name(), a.assignee(), a.occurrenceCount(),
                 a.firstSeen(), a.lastSeen(), a.createdAt(), a.updatedAt(), a.matchedEventIds(), matched,
                 ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a), subject == null ? null : subject.counterparty(),
-                subject == null ? null : subject.blockNumber(), AlertNarrative.explain(a, fields));
+                subject == null ? null : subject.blockNumber(), AlertNarrative.explain(a, fields), a.evidenceState().name(),
+                a.withdrawnEventIds());
     }
 
     private String demoScenario(Alert a) {

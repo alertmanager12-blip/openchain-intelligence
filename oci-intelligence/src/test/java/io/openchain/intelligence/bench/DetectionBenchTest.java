@@ -49,10 +49,24 @@ class DetectionBenchTest {
             IntelligencePipeline p = IntelligencePipeline.inMemory(DetectionConfig.defaults(), ScoringConfig.defaults(), Clock.fixed(end, ZoneOffset.UTC));
             s.labels.forEach(p.labels()::save);
             List<Signal> signals = new ArrayList<>();
-            for (ValueFlow f : ordered) {
-                var r = p.onFlow(f);
-                signals.addAll(r.newSignals());
-                r.detectorErrors().forEach((k, v) -> errors.put(s.id + "/" + k, v));
+            if (!s.hasTimeline()) {
+                for (ValueFlow f : ordered) {
+                    var r = p.onFlow(f);
+                    signals.addAll(r.newSignals());
+                    r.detectorErrors().forEach((k, v) -> errors.put(s.id + "/" + k, v));
+                }
+            } else {
+                // reorganisation scenarios: the declared order, then the FINAL state of the signal store
+                for (BenchScenario.Step st : s.timeline) {
+                    var r = switch (st.kind()) {
+                        case ADD, REINCLUDE -> p.onFlow(st.flow());
+                        case RETRACT -> p.onEvent(retracted(st.flow()));
+                    };
+                    r.detectorErrors().forEach((k, v) -> errors.put(s.id + "/" + k, v));
+                }
+                java.util.Set<io.openchain.core.model.Address> subjects = new java.util.LinkedHashSet<>();
+                for (ValueFlow f : s.flows) { subjects.add(f.from()); subjects.add(f.to()); }
+                for (var a : subjects) signals.addAll(p.signals().findByAddress(a));
             }
             for (BenchScenario.Expectation e : s.expectations) {
                 List<Signal> matching = e.type() == null ? List.of()
@@ -129,6 +143,16 @@ class DetectionBenchTest {
         b.append("\n## Signals produced\n\n");
         fired.forEach((k, v) -> b.append("- ").append(k).append(": ").append(v.isEmpty() ? "none" : String.join(", ", v)).append('\n'));
         return b.toString();
+    }
+
+    /** The event an indexer emits when the block of this transfer leaves the canonical chain (same event id, removed). */
+    static io.openchain.core.event.ChainEvent retracted(ValueFlow f) {
+        return new io.openchain.core.event.ChainEvent(f.eventId(), io.openchain.core.event.ChainEvent.EventType.TOKEN_TRANSFER,
+                f.network(), 1, "0xorphaned", f.timestamp(), f.timestamp(), true, Map.of(
+                        "transaction.hash", f.txHash(), "transaction.from", f.from().value(), "transaction.to", f.to().value(),
+                        "transaction.amount_raw", f.rawAmount().toString(), "transaction.token.symbol", f.token().symbol(),
+                        "transaction.token.contract", f.token().contract() == null ? "" : f.token().contract(),
+                        "transaction.token.decimals", f.token().decimals()));
     }
 
     static String ratio(int a, int b) { return b == 0 ? "–" : String.format(Locale.ROOT, "%.2f", a / (double) b); }

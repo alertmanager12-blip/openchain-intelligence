@@ -35,4 +35,7 @@ public final class BalanceBook {
     public void recordSenderBalanceBefore(String eventId, BigDecimal balance) { before.put(eventId, balance); }
 
     public Optional<BigDecimal> senderBalanceBefore(String eventId) { return Optional.ofNullable(before.get(eventId)); }
+
+    /** Forgets the balance recorded for an event whose block left the canonical chain. */
+    public void forget(String eventId) { before.remove(eventId); }
 }

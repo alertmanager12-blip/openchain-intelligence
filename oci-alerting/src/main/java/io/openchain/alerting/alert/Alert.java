@@ -24,6 +24,13 @@ public final class Alert {
 
     public record Comment(String author, Instant at, String text) {}
 
+    /**
+     * Whether the evidence of the alert is still on the canonical chain (docs/P0_REORG_DESIGN.md § 3.3): VALID, some
+     * matched events withdrawn by a reorganisation (PARTIALLY_WITHDRAWN), or none of them left (WITHDRAWN). An alert is
+     * never deleted: this only qualifies its evidence.
+     */
+    public enum EvidenceState { VALID, PARTIALLY_WITHDRAWN, WITHDRAWN }
+
     public static final int MAX_EVENT_IDS = 500;
 
     private final String id;
@@ -52,6 +59,8 @@ public final class Alert {
     private final List<String> originChain;
     private final int hop;
     private final AlertSubject subject;
+    private final EvidenceState evidenceState;
+    private final List<String> withdrawnEventIds;
     private final long version;
 
     private Alert(Builder b) {
@@ -67,6 +76,8 @@ public final class Alert {
         this.groupKey = b.groupKey;
         this.dedupKey = b.dedupKey;
         this.matchedEventIds = List.copyOf(b.matchedEventIds);
+        this.withdrawnEventIds = List.copyOf(b.withdrawnEventIds);
+        this.evidenceState = b.evidenceState == null ? EvidenceState.VALID : b.evidenceState;
         this.evidence = Collections.unmodifiableMap(new LinkedHashMap<>(b.evidence));
         this.firstSeen = b.firstSeen;
         this.lastSeen = b.lastSeen;
@@ -121,6 +132,11 @@ public final class Alert {
      */
     public long version() { return version; }
 
+    /** Evidence state (reorganisations). */
+    public EvidenceState evidenceState() { return evidenceState; }
+    /** Matched events withdrawn by a reorganisation and not re-included since. */
+    public List<String> withdrawnEventIds() { return withdrawnEventIds; }
+
     public Builder toBuilder() { return new Builder(this); }
 
     public static Builder builder() { return new Builder(); }
@@ -146,6 +162,8 @@ public final class Alert {
         private List<String> originChain = new ArrayList<>();
         private int hop;
         private AlertSubject subject;
+        private EvidenceState evidenceState = EvidenceState.VALID;
+        private List<String> withdrawnEventIds = new ArrayList<>();
         private long version;
 
         private Builder() {}
@@ -159,6 +177,7 @@ public final class Alert {
             occurrenceCount = a.occurrenceCount; comments = new ArrayList<>(a.comments); history = new ArrayList<>(a.history);
             escalationLevel = a.escalationLevel; originChain = new ArrayList<>(a.originChain); hop = a.hop;
             subject = a.subject;
+            evidenceState = a.evidenceState; withdrawnEventIds = new ArrayList<>(a.withdrawnEventIds);
             version = a.version;
         }
 
@@ -185,6 +204,8 @@ public final class Alert {
         public Builder originChain(List<String> v) { originChain = new ArrayList<>(v); return this; }
         public Builder hop(int v) { hop = v; return this; }
         public Builder subject(AlertSubject v) { subject = v; return this; }
+        public Builder evidenceState(EvidenceState v) { evidenceState = v; return this; }
+        public Builder withdrawnEventIds(List<String> v) { withdrawnEventIds = new ArrayList<>(v); return this; }
         public Builder version(long v) { version = v; return this; }
         /** Replaces the comments (persistence adapters rebuilding a snapshot). */
         public Builder comments(List<Comment> v) { comments = new ArrayList<>(v); return this; }

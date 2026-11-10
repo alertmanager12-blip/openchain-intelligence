@@ -128,7 +128,11 @@ public final class Dto {
                            /** Block of the (latest) triggering event. */
                            Long blockNumber,
                            /** One plain-language line: why the rule fired (technical detail in evidence). */
-                           String evidenceSummary) {}
+                           String evidenceSummary,
+                           /** VALID, PARTIALLY_WITHDRAWN or WITHDRAWN: matched events that left the canonical chain (reorganisation). */
+                           String evidenceState,
+                           /** Matched events withdrawn by a reorganisation and not re-included since. */
+                           List<String> withdrawnEventIds) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,

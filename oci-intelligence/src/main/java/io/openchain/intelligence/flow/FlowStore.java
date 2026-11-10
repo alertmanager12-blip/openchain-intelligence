@@ -25,6 +25,12 @@ public interface FlowStore {
      * Removes the oldest flows (by event time) not touching a kept address until at most {@code max} evictable ones remain
      * (ADR-0024 step 3b: a hard bound whatever the volume); returns how many were removed.
      */
+    /**
+     * Removes one flow by event id (chain reorganisation: its block left the canonical chain). Idempotent: an unknown or
+     * already removed id returns empty. The id is forgotten, so the same transfer re-included later is a new flow.
+     */
+    default java.util.Optional<ValueFlow> remove(String eventId) { return java.util.Optional.empty(); }
+
     default int evictOldest(int max, java.util.function.Predicate<Address> keep) { return 0; }
 
     default int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,

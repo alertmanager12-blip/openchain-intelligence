@@ -198,6 +198,45 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().comments()).anyMatch(c -> c.author().equals("system:reorg"));
     }
 
+    /** P0 reorg: alert.retracted goes out once, when the last valid evidence is withdrawn, through the outbox. */
+    @Test void alertRetractedIsDeliveredOnceWhenNoValidEvidenceRemains() {
+        ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
+        byte[] secret = "pipeline-secret-pipeline-secret-!!".getBytes(StandardCharsets.UTF_8);
+        ConnectorRegistry reg = new ConnectorRegistry()
+                .register(new WebhookConnector("default-webhook", URI.create("https://hooks.example.com/oc"), secret, http, clock));
+        DeliveryService ds = new DeliveryService(new InMemoryDeliveryStore(), reg, BACKOFF, clock);
+        RuleEngine engine = new RuleEngine(EngineConfig.defaults());
+        engine.register(Fx.rule(header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: default-webhook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, ds);
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        p.onEvent(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000"));
+        p.dispatch(10);
+        assertThat(http.calls).hasSize(1);
+
+        assertThat(p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000"))).enqueued()).isEmpty();
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN);
+        assertThat(p.dispatch(10)).isEmpty(); // partial: nothing announced
+
+        p.onEvent(Fx.removed(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000")));
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> {
+            assertThat(d.status()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED);
+        });
+        assertThat(http.calls).hasSize(2);
+        assertThat(http.calls.getLast().headers().get(WebhookSignature.EVENT_HEADER)).isEqualTo("alert.retracted");
+        assertThat(new String(http.calls.getLast().body(), StandardCharsets.UTF_8)).contains("\"event\":\"alert.retracted\"");
+
+        p.onEvent(Fx.removed(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000"))); // repeated notice
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(http.calls).hasSize(2);
+        assertThat(alerts.find(a.id()).orElseThrow().status()).isEqualTo(AlertStatus.NOTIFIED); // kept, status unchanged
+    }
+
     @Test void deadLetteredDeliveryIsRecordedOnTheAlert() {
         ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
         http.status = 404;

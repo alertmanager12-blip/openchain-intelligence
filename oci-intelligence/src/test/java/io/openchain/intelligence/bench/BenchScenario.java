@@ -42,6 +42,18 @@ public final class BenchScenario {
     public final List<Expectation> expectations = new ArrayList<>();
     public final Map<String, String> names = new TreeMap<>();
 
+    /**
+     * Timeline of a scenario that contains chain reorganisations: transfers added, retracted (their block left the
+     * canonical chain) or re-included (the same transaction in another canonical block), in the declared order.
+     * Scenarios with a timeline are evaluated on the <b>final</b> state of the signal store, not on every signal ever
+     * produced: a signal whose evidence disappeared must be gone, or recomputed from the remaining evidence.
+     */
+    public enum StepKind { ADD, RETRACT, REINCLUDE }
+    public record Step(StepKind kind, ValueFlow flow) {}
+    public final List<Step> timeline = new ArrayList<>();
+
+    public boolean hasTimeline() { return timeline.stream().anyMatch(st -> st.kind() != StepKind.ADD); }
+
     public BenchScenario(String id, Kind kind, String description) {
         this.id = id;
         this.kind = kind;
@@ -50,7 +62,9 @@ public final class BenchScenario {
 
     public BenchScenario name(Address a, String name) { names.put(a.value(), name); return this; }
     public BenchScenario label(AddressLabel l) { labels.add(l); return this; }
-    public BenchScenario flow(ValueFlow f) { flows.add(f); return this; }
+    public BenchScenario flow(ValueFlow f) { flows.add(f); timeline.add(new Step(StepKind.ADD, f)); return this; }
+    public BenchScenario retract(ValueFlow f) { timeline.add(new Step(StepKind.RETRACT, f)); return this; }
+    public BenchScenario reinclude(ValueFlow f) { timeline.add(new Step(StepKind.REINCLUDE, f)); return this; }
     public BenchScenario expect(Address a, SignalType t) { expectations.add(new Expectation(a, nameOf(a), t, null, Mode.EXPECT, null, null)); return this; }
     public BenchScenario forbid(Address a, SignalType t) { expectations.add(new Expectation(a, nameOf(a), t, null, Mode.FORBID, null, null)); return this; }
     public BenchScenario missing(Address a, String capability) { expectations.add(new Expectation(a, nameOf(a), null, capability, Mode.MISSING, null, null)); return this; }

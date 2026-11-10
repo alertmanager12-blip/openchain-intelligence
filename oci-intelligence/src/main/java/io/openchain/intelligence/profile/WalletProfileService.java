@@ -98,6 +98,22 @@ public final class WalletProfileService {
         return cutoff == null ? java.util.Set.of() : evictIdle(n -> cutoff, keep);
     }
 
+    /**
+     * Reverts a flow whose block left the canonical chain, on both sides. Never creates a profile.
+     * @return the number of sides reverted (0, 1 or 2); fewer than expected means the flow was no longer remembered exactly
+     */
+    public int revert(ValueFlow f) {
+        int n = revertOn(f.from(), f);
+        if (!f.to().equals(f.from())) n += revertOn(f.to(), f);
+        return n;
+    }
+
+    private int revertOn(Address a, ValueFlow f) {
+        WalletProfileAccumulator acc = accumulators.get(a);
+        if (acc == null) return 0;
+        synchronized (acc) { return !acc.retired && acc.revert(f) ? 1 : 0; }
+    }
+
     public int size() { return accumulators.size(); }
 
     /** The live accumulator of an address, or null (tests). */

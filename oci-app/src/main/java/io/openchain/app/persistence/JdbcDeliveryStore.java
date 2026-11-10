@@ -131,6 +131,7 @@ public final class JdbcDeliveryStore implements DeliveryStore {
         m.put("originChain", n.originChain());
         m.put("hop", n.hop());
         m.put("createdAt", n.createdAt());
+        m.put("event", n.event());
         if (n.subject() != null) {
             var s = n.subject();
             Map<String, Object> sm = new LinkedHashMap<>();
@@ -161,7 +162,8 @@ public final class JdbcDeliveryStore implements DeliveryStore {
                 (String) m.get("groupKey"), (String) m.get("dedupKey"), ((Number) m.get("occurrenceCount")).longValue(),
                 (Instant) m.get("firstSeen"), (Instant) m.get("lastSeen"), (List<String>) m.get("matchedEventIds"),
                 (Map<String, Object>) m.get("evidence"), params, (List<String>) m.get("originChain"),
-                ((Number) m.get("hop")).intValue(), (Instant) m.get("createdAt"), subject(m.get("subject")));
+                ((Number) m.get("hop")).intValue(), (Instant) m.get("createdAt"), subject(m.get("subject")),
+                (String) m.get("event")); // absent in deliveries stored before the event was carried: alert.opened
     }
 
     @SuppressWarnings("unchecked")

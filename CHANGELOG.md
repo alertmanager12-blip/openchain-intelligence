@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (P0 — chain reorganisations, `docs/P0_REORG_REPORT.md`)
+
+- **A transfer whose block leaves the canonical chain is now reverted with everything derived from it**: the flow, its effect on both wallet profiles (exact), the signals citing its transaction (re-evaluated from the remaining evidence: a signal still justified keeps its id with updated evidence, one that is not is withdrawn, including indirect exposure on other wallets), the scores and the rule-engine contributions. Idempotent; a transaction re-included in another block is counted once and restores its signals. Retracted approvals and admin changes drop the signals they alone justified.
+- **Alerts are never deleted but their evidence is qualified** (migration V10, additive): `PARTIALLY_WITHDRAWN` or `WITHDRAWN`, with history, a console banner and `evidenceState` / `withdrawnEventIds` in the API; when the last valid evidence goes, `alert.retracted` is delivered once through the delivery outbox (header `X-OCI-Event`, payload field `event`). Metrics `oci_reorg_reverted_flows_total`, `oci_reorg_signals_total{outcome}`, `oci_reorg_ignored_total`, `oci_reorg_inexact_profiles_total`, `oci_reorg_replay_truncated_total`.
+
 ### Fixed (P0 — detector defects, `docs/bench/DETECTION_BENCH_STEP_2.md`)
 
 - `UnusualAmount`: baseline per direction (sent vs received); no infinite or inflated z when one amount dominates the history (at least 3× the median required instead). `FastForwarding`: receipts must explain the forwarding (≥ 50 % of the amount sent), share capped at 100 %. `Structuring`: the 10,000 threshold applies to USD stablecoins only. `CircularFlow`: one signal per return flow listing every path. Detection bench added (`oci-intelligence` tests, synthetic scenarios): precision 0.70 → 0.93 (1.00 with business rule R1 on statistical anomalies), recall of existing detectors unchanged (1.00).

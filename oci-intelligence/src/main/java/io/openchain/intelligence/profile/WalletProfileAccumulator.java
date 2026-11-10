@@ -43,7 +43,8 @@ public final class WalletProfileAccumulator {
 
     private final Address address;
     private final RecentKeys seenEvents = new RecentKeys(RECENT_KEYS);
-    private final RecentKeys txHashes = new RecentKeys(RECENT_KEYS);
+    /** Recent transaction hashes with the number of applied flows of each (a transaction is uncounted with its last flow). */
+    private final RecentCounts txHashes = new RecentCounts(RECENT_KEYS);
     private long transactionCount;
     private final Map<String, Tok> tokens = new LinkedHashMap<>();
     private final Map<Address, long[]> counterparties = new HashMap<>(); // [received, sent]
@@ -67,6 +68,13 @@ public final class WalletProfileAccumulator {
         /** @return true if the key was not among the remembered ones. */
         boolean add(String k) { return put(k, Boolean.TRUE) == null; }
         @Override protected boolean removeEldestEntry(Map.Entry<String, Boolean> e) { return size() > cap; }
+    }
+
+    /** Insertion-ordered counter that forgets its oldest keys beyond a capacity. */
+    private static final class RecentCounts extends LinkedHashMap<String, Integer> {
+        private final int cap;
+        RecentCounts(int cap) { super(16, 0.75f, false); this.cap = cap; }
+        @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> e) { return size() > cap; }
     }
 
     public WalletProfileAccumulator(Address address) { this.address = address; }
@@ -108,7 +116,40 @@ public final class WalletProfileAccumulator {
         return true;
     }
 
-    private void countTx(String hash) { if (txHashes.add(hash)) transactionCount++; }
+    private void countTx(String hash) { if (txHashes.merge(hash, 1, Integer::sum) == 1) transactionCount++; }
+
+    /**
+     * Exact inverse of {@link #apply(ValueFlow)} for a flow whose block left the canonical chain. Applies only to a flow
+     * this accumulator still remembers (the latest {@link #RECENT_KEYS} events): an older or unknown flow is left untouched
+     * (returns false) rather than subtracting what may never have been added, e.g. after the profile was evicted and
+     * restarted. Token totals, transfer counts, the transaction count and counterparties are restored exactly; an activity
+     * instant is removed while it is in the exact part (not yet folded).
+     *
+     * @return true if the flow was reverted
+     */
+    public boolean revert(ValueFlow f) {
+        if (!f.involves(address) || seenEvents.remove(f.eventId()) == null) return false;
+        Integer n = txHashes.get(f.txHash());
+        if (n != null) {
+            if (n <= 1) { txHashes.remove(f.txHash()); transactionCount--; } else txHashes.put(f.txHash(), n - 1);
+        }
+        Integer c = activity.get(f.timestamp());
+        if (c != null) { if (c <= 1) activity.remove(f.timestamp()); else activity.put(f.timestamp(), c - 1); }
+        Tok t = tokens.get(f.tokenKey());
+        if (t != null) {
+            if (f.to().equals(address)) { t.in = t.in.subtract(f.rawAmount()); t.inCount--; inbound--; }
+            if (f.from().equals(address)) { t.out = t.out.subtract(f.rawAmount()); t.outCount--; outbound--; }
+            if (t.inCount == 0 && t.outCount == 0) tokens.remove(f.tokenKey());
+        }
+        if (!f.from().equals(f.to())) {
+            long[] cp = counterparties.get(f.counterparty(address));
+            if (cp != null) {
+                if (f.to().equals(address)) cp[0]--; else cp[1]--;
+                if (cp[0] <= 0 && cp[1] <= 0) counterparties.remove(f.counterparty(address));
+            }
+        }
+        return true;
+    }
 
     private void record(Instant t) {
         if (foldedLast != null && !t.isAfter(foldedLast)) { // inside the folded span: only the first time can move

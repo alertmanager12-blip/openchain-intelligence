@@ -15,6 +15,15 @@ public interface SignalRepository {
 
     int size();
 
+    /**
+     * Signals that cite this transaction as evidence (the signal's own transaction or the reference of any evidence item),
+     * whatever their subject address: what a chain reorganisation of that transaction may invalidate.
+     */
+    default List<Signal> findByEvidenceReference(String txHash) { return List.of(); }
+
+    /** Removes one signal by id; returns it if it was stored. */
+    default Optional<Signal> remove(String id) { return Optional.empty(); }
+
     /** Removes the signals detected before {@code cutoff} unless {@code keep} holds; returns how many were removed. */
     default int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return 0; }
 

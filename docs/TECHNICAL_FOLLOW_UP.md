@@ -1,0 +1,11 @@
+# Suivi technique
+
+Points ouverts, connus et acceptés pour l'instant, avec leur origine. Un point est retiré seulement quand il est traité
+(référence du commit ou du document) ou quand une décision explicite l'abandonne.
+
+| # | Point | Origine | Effet aujourd'hui | Mesure / visibilité | Piste |
+|---|---|---|---|---|---|
+| TF-1 | Réorganisation reçue après un redémarrage | `docs/P0_REORG_REPORT.md` § 6.2 | les événements des blocs indexés avant le redémarrage ne sont plus connus : rien n'est annulé et les alertes en base correspondantes ne sont pas requalifiées | journal de l'indexeur (réorganisation détectée) | conserver les identifiants d'événements par bloc récent (fenêtre de réorganisation) avec le point de reprise V8 ; requalifier les alertes par identifiant d'événement |
+| TF-2 | Limite des 4 096 événements gardés exactement par profil | `docs/P0_REORG_REPORT.md` § 6.1 ; ADR-0024 étape 3b | un flux retiré plus ancien que cette mémoire n'est pas retiré du profil (totaux inchangés) ; ne concerne que des wallets extrêmement actifs | `oci_reorg_inexact_profiles_total` | dériver le retrait des totaux du flux stocké plutôt que de la mémoire de déduplication, si la métrique montre des cas réels |
+| TF-3 | Réévaluation limitée à 500 transactions par wallet | `docs/P0_REORG_REPORT.md` § 6.3 | au-delà, des signaux d'un wallet très actif peuvent ne pas être recalculés après une réorganisation | `oci_reorg_replay_truncated_total` ; pas encore dans le résultat | exposer la troncature dans le compte rendu de couverture (`SearchCoverage`, item 5 du plan P0) |
+| TF-4 | Routage des webhooks selon les abonnements effectifs | `docs/P0_REORG_REPORT.md` § 6.5 ; audit de mission § 4.6 | les abonnements déclarés d'un webhook (`alert.updated`, `alert.retracted`, …) ne filtrent rien : `alert.opened` et `alert.retracted` suivent les actions de la règle | aucune | filtrer à la mise en file selon les abonnements du connecteur ; à traiter avec la politique de routage (item 6) |

@@ -50,7 +50,68 @@ public final class BenchScenarios {
     public static List<BenchScenario> all() {
         return List.of(layeringHub(), muleFastForward(), sanctionedDirectAndIndirect(), outboundToMixer(), receivedThenDrained(),
                 structuringUsdt(), coordinatedFunding(), savingsDrained(), constantAmountMerchant(), dustThenSpend(), nonStablecoinBelowTenThousand(),
-                spoofedDustFromSanctioned());
+                spoofedDustFromSanctioned(), r01aRetractedInflow(), r01bStructuringStillValid(), r01cStructuringInvalidated(),
+                r01dExposureRetracted(), r01eReinclusionIdempotent());
+    }
+
+    // ---- R01: chain reorganisations (scenarios written before the implementation, 2026-11-10). Evaluated on the final
+    // state: a signal must disappear when its evidence disappears, stay (recomputed) when enough evidence remains, and
+    // come back exactly once when the transaction is re-included in another canonical block.
+
+    /** R01a: the mule's incoming transfer leaves the canonical chain; its pass-through no longer exists. */
+    static BenchScenario r01aRetractedInflow() {
+        Address x = a("d1a0"), mule = a("d1a1"), y = a("d1a2");
+        ValueFlow in = usdt(x, mule, "50000", at(0));
+        return new BenchScenario("R01a-reorg-retracted-inflow", BenchScenario.Kind.SUSPICIOUS,
+                "Mule receives 50,000 and forwards 49,500; the incoming transfer is reorged out")
+                .name(mule, "MULE").flow(in).flow(usdt(mule, y, "49500", at(600))).retract(in)
+                .forbid(mule, SignalType.FAST_FORWARDING);
+    }
+
+    /** R01b: 4 transfers just below the threshold, one reorged out: 3 remain, the structuring is still established. */
+    static BenchScenario r01bStructuringStillValid() {
+        Address e = a("d2a0");
+        ValueFlow third = usdt(e, a("d2b3"), "9800", at(7200));
+        return new BenchScenario("R01b-reorg-structuring-still-valid", BenchScenario.Kind.SUSPICIOUS,
+                "Four transfers of 9,500 to 9,900 within 4 hours; one is reorged out, three remain")
+                .name(e, "E").flow(usdt(a("d2a9"), e, "50000", at(0)))
+                .flow(usdt(e, a("d2b1"), "9500", at(3600))).flow(usdt(e, a("d2b2"), "9600", at(5400))).flow(third)
+                .flow(usdt(e, a("d2b4"), "9900", at(9000))).retract(third)
+                .expect(e, SignalType.STRUCTURING);
+    }
+
+    /** R01c: 3 transfers just below the threshold, one reorged out: only 2 remain, the structuring is no longer established. */
+    static BenchScenario r01cStructuringInvalidated() {
+        Address e = a("d3a0");
+        ValueFlow second = usdt(e, a("d3b2"), "9700", at(5400));
+        return new BenchScenario("R01c-reorg-structuring-invalidated", BenchScenario.Kind.SUSPICIOUS,
+                "Three transfers of 9,600 to 9,800; one is reorged out, two remain")
+                .name(e, "E").flow(usdt(a("d3a9"), e, "40000", at(0)))
+                .flow(usdt(e, a("d3b1"), "9600", at(3600))).flow(second).flow(usdt(e, a("d3b3"), "9800", at(7200))).retract(second)
+                .forbid(e, SignalType.STRUCTURING);
+    }
+
+    /** R01d: the transfer from a mixer is reorged out: the direct exposure and the exposure derived from it downstream go. */
+    static BenchScenario r01dExposureRetracted() {
+        Address mix = a("d4a0"), w = a("d4a1"), z = a("d4a2");
+        ValueFlow fromMixer = usdt(mix, w, "30000", at(0));
+        return new BenchScenario("R01d-reorg-exposure-retracted", BenchScenario.Kind.SUSPICIOUS,
+                "Wallet receives 30,000 from a mixer and passes 20,000 on; the transfer from the mixer is reorged out")
+                .name(mix, "MIX").name(w, "W").name(z, "Z")
+                .label(label(mix, LabelCategory.MIXER, 0.9, EvidenceLevel.RISK_SIGNAL))
+                .flow(fromMixer).flow(usdt(w, z, "20000", at(3600))).retract(fromMixer)
+                .forbid(w, SignalType.MIXER_EXPOSURE).forbid(z, SignalType.INDIRECT_EXPOSURE);
+    }
+
+    /** R01e: retracted twice (idempotent), then re-included in another canonical block: the pass-through is back. */
+    static BenchScenario r01eReinclusionIdempotent() {
+        Address x = a("d5a0"), mule = a("d5a1"), y = a("d5a2");
+        ValueFlow in = usdt(x, mule, "50000", at(0));
+        return new BenchScenario("R01e-reorg-reinclusion", BenchScenario.Kind.SUSPICIOUS,
+                "Mule pass-through; incoming transfer reorged out twice (duplicate notice), then re-included in another block")
+                .name(mule, "MULE").flow(in).flow(usdt(mule, y, "49500", at(600)))
+                .retract(in).retract(in).reinclude(in)
+                .expect(mule, SignalType.FAST_FORWARDING);
     }
 
     /** Mixer-funded hub disperses to 20 wallets, two collectors consolidate, exits to a mixer and an exchange, part comes back, structuring, peel chain. */

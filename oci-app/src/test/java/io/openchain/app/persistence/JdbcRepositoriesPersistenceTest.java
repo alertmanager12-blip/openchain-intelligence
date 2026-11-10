@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(9);
-        assertThat(first.targetSchemaVersion).isEqualTo("9");
+        assertThat(first.migrationsExecuted).isEqualTo(10); // V1..V10 (V10: alert evidence state)
+        assertThat(first.targetSchemaVersion).isEqualTo("10");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
@@ -468,6 +468,29 @@ class JdbcRepositoriesPersistenceTest {
         AlertService afterRestart = new AlertService(new JdbcAlertRepository(jdbc, tx), Clock.systemUTC());
         assertThat(afterRestart.onMatch(m, Duration.ofMinutes(5)).created()).isFalse();
         assertThat(afterRestart.repository().findAll()).hasSize(1);
+    }
+
+    /** V10 (docs/P0_REORG_DESIGN.md): the evidence state of an alert survives a restart; the alert itself is never deleted. */
+    @Test
+    void alertEvidenceStateRoundTrips() {
+        JdbcAlertRepository repo = new JdbcAlertRepository(jdbc, tx);
+        AlertService service = new AlertService(repo, Clock.systemUTC());
+        RuleMatch m1 = new RuleMatch("rule-a", "1.0.0", "Rule A", Severity.HIGH, EvidenceLevel.RISK_SIGNAL, Network.TRON, "tron|TA", "k-ev",
+                "tron:0xev1:0", T0, List.of("tron:0xev1:0"), Map.of("kind", "STATELESS"), List.of(), 0);
+        RuleMatch m2 = new RuleMatch("rule-a", "1.0.0", "Rule A", Severity.HIGH, EvidenceLevel.RISK_SIGNAL, Network.TRON, "tron|TA", "k-ev",
+                "tron:0xev2:0", T0.plusSeconds(30), List.of("tron:0xev2:0"), Map.of("kind", "STATELESS"), List.of(), 0);
+        Alert a = service.onMatch(m1, Duration.ofMinutes(5)).alert();
+        service.onMatch(m2, Duration.ofMinutes(5));
+        assertThat(repo.findById(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.VALID);
+        service.onRetraction("tron:0xev1:0");
+        AlertService afterRestart = new AlertService(new JdbcAlertRepository(jdbc, tx), Clock.systemUTC());
+        Alert partial = afterRestart.find(a.id()).orElseThrow();
+        assertThat(partial.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN);
+        assertThat(partial.withdrawnEventIds()).containsExactly("tron:0xev1:0");
+        assertThat(afterRestart.onRetraction("tron:0xev1:0")).as("idempotent across restarts").isEmpty();
+        assertThat(afterRestart.onRetraction("tron:0xev2:0")).singleElement().satisfies(c -> assertThat(c.becameWithdrawn()).isTrue());
+        assertThat(afterRestart.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(jdbc.queryForObject("select count(*) from alerts where evidence_state = 'WITHDRAWN'", Map.of(), Integer.class)).isEqualTo(1);
     }
 
     // ---- deliveries (outbox) ------------------------------------------------------------------------------------

@@ -70,7 +70,12 @@ public final class DeliveryService {
 
     public String defaultConnector() { return defaultConnectorId; }
 
-    public DeliveryRecord enqueue(Alert alert, ActionSpec action) {
+    public DeliveryRecord enqueue(Alert alert, ActionSpec action) { return enqueue(alert, action, false); }
+
+    /** Tells the channel of {@code action} that every valid piece of evidence of the alert was withdrawn (alert.retracted). */
+    public DeliveryRecord enqueueRetraction(Alert alert, ActionSpec action) { return enqueue(alert, action, true); }
+
+    private DeliveryRecord enqueue(Alert alert, ActionSpec action, boolean retraction) {
         Instant now = clock.instant();
         String id = ids.get();
         String target = action.connectorId();
@@ -82,7 +87,8 @@ public final class DeliveryService {
                 type = def.get().type(); // the pack says WEBHOOK; the operator's default channel may be Telegram, Slack...
             }
         }
-        Notification n = Notification.of(id, type, target, action.params(), alert, now);
+        Notification n = retraction ? Notification.retraction(id, type, target, action.params(), alert, now)
+                : Notification.of(id, type, target, action.params(), alert, now);
         if (connectors.find(target).isEmpty()) {
             String why = PLACEHOLDERS.contains(target)
                     ? "no notification channel configured: set OCI_DEFAULT_CONNECTOR or route the rule to a connector"

@@ -27,6 +27,11 @@ public final class JournalingStores {
         @Override public int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
                                          java.util.function.Predicate<Address> keep) { return delegate.evictBefore(cutoff, keep); }
         @Override public int evictOldest(int max, java.util.function.Predicate<Address> keep) { return delegate.evictOldest(max, keep); }
+        @Override public Optional<ValueFlow> remove(String eventId) {
+            Optional<ValueFlow> gone = delegate.remove(eventId);
+            if (gone.isPresent() && !IntelligenceJournal.restoring()) journal.forgetFlow(eventId);
+            return gone;
+        }
         @Override public int size() { return delegate.size(); }
     }
 
@@ -41,6 +46,12 @@ public final class JournalingStores {
         @Override public int size() { return delegate.size(); }
         @Override public int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return delegate.evictBefore(cutoff, keep); }
         @Override public int evictOldest(int max, java.util.function.Predicate<Signal> keep) { return delegate.evictOldest(max, keep); }
+        @Override public List<Signal> findByEvidenceReference(String txHash) { return delegate.findByEvidenceReference(txHash); }
+        @Override public Optional<Signal> remove(String id) {
+            Optional<Signal> gone = delegate.remove(id);
+            if (gone.isPresent() && !IntelligenceJournal.restoring()) journal.forgetSignal(id);
+            return gone;
+        }
     }
 
     public record Scores(RiskScoreRepository delegate, IntelligenceJournal journal) implements RiskScoreRepository {

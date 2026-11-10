@@ -21,6 +21,21 @@ public final class InMemorySignalRepository implements SignalRepository {
     @Override public synchronized List<Signal> findByAddress(Address a) { return List.copyOf(byAddress.getOrDefault(a, List.of())); }
     @Override public synchronized int size() { return byId.size(); }
 
+    /** Linear scan: called only on chain reorganisations, which are rare (0 in the 2026-11-10 production measurement). */
+    @Override public synchronized List<Signal> findByEvidenceReference(String txHash) {
+        if (txHash == null) return List.of();
+        return byId.values().stream().filter(s -> txHash.equals(s.txHash())
+                || s.evidence().stream().anyMatch(e -> txHash.equals(e.reference()))).toList();
+    }
+
+    @Override public synchronized Optional<Signal> remove(String id) {
+        Signal s = byId.remove(id);
+        if (s == null) return Optional.empty();
+        List<Signal> l = byAddress.get(s.address());
+        if (l != null) { l.removeIf(x -> x.id().equals(id)); if (l.isEmpty()) byAddress.remove(s.address()); }
+        return Optional.of(s);
+    }
+
     @Override public synchronized int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) {
         int before = byId.size();
         byId.values().removeIf(s -> s.detectedAt() != null && s.detectedAt().isBefore(cutoff) && !keep.test(s));

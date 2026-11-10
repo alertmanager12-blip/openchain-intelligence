@@ -181,10 +181,51 @@ class AlertServiceTest {
     @Test void reorgRetractionAnnotatesAlerts() {
         Alert a = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15)).alert();
         assertThat(service.onRetraction("e1")).singleElement().satisfies(x -> {
-            assertThat(x.id()).isEqualTo(a.id());
-            assertThat(x.comments().getLast().author()).isEqualTo("system:reorg");
+            assertThat(x.alert().id()).isEqualTo(a.id());
+            assertThat(x.alert().comments().getLast().author()).isEqualTo("system:reorg");
         });
         assertThat(service.onRetraction("unknown")).isEmpty();
+    }
+
+    /** P0 reorg: partial withdrawal and alert without valid evidence are distinct; the alert and its history are kept. */
+    @Test void partialWithdrawalThenNoValidEvidence() {
+        Alert a = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15)).alert();
+        service.onMatch(match("k1", T0.plusSeconds(60), "e2", Severity.HIGH), Duration.ofMinutes(15)); // grouped: e1, e2
+        var first = service.onRetraction("e1");
+        assertThat(first).singleElement().satisfies(c -> {
+            assertThat(c.after()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN);
+            assertThat(c.becameWithdrawn()).isFalse();
+            assertThat(c.alert().history().getLast().reason()).contains("1 of 2 matched event(s) remain");
+        });
+        var second = service.onRetraction("e2");
+        assertThat(second).singleElement().satisfies(c -> {
+            assertThat(c.after()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+            assertThat(c.becameWithdrawn()).isTrue();
+            assertThat(c.alert().withdrawnEventIds()).containsExactly("e1", "e2");
+            assertThat(c.alert().status()).isEqualTo(a.status()); // status unchanged: the analyst decides
+        });
+        assertThat(service.find(a.id()).orElseThrow().history()).hasSizeGreaterThanOrEqualTo(3);
+    }
+
+    /** A repeated retraction notice changes nothing and reports nothing (no second alert.retracted). */
+    @Test void repeatedRetractionIsIdempotent() {
+        service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15));
+        assertThat(service.onRetraction("e1")).singleElement().satisfies(c -> assertThat(c.becameWithdrawn()).isTrue());
+        assertThat(service.onRetraction("e1")).isEmpty();
+        assertThat(service.evidenceWithdrawn()).isEqualTo(1);
+    }
+
+    /** Re-inclusion of the event in another canonical block: the replayed match reinstates the evidence, no new alert. */
+    @Test void reinclusionReinstatesTheEvidence() {
+        Alert a = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15)).alert();
+        service.onRetraction("e1");
+        var again = service.onMatch(match("k1", T0, "e1", Severity.HIGH), Duration.ofMinutes(15));
+        assertThat(again.created()).isFalse();
+        assertThat(again.alert().id()).isEqualTo(a.id());
+        assertThat(again.alert().evidenceState()).isEqualTo(Alert.EvidenceState.VALID);
+        assertThat(again.alert().withdrawnEventIds()).isEmpty();
+        assertThat(again.alert().history().getLast().reason()).contains("re-included");
+        assertThat(service.evidenceReinstated()).isEqualTo(1);
     }
 
     @Test void matchedEventIdsAreBounded() {
