@@ -21,6 +21,12 @@ public interface FlowStore {
      * Removes the flows older than the cutoff of their network ({@code null}: none removed on that network) that involve no
      * kept address; returns how many were removed. Bounds the in-memory working set (default: nothing removed).
      */
+    /**
+     * Removes the oldest flows (by event time) not touching a kept address until at most {@code max} evictable ones remain
+     * (ADR-0024 step 3b: a hard bound whatever the volume); returns how many were removed.
+     */
+    default int evictOldest(int max, java.util.function.Predicate<Address> keep) { return 0; }
+
     default int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
                             java.util.function.Predicate<Address> keep) { return 0; }
 

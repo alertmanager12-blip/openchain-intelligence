@@ -120,4 +120,47 @@ class WorkingSetEvictionTest {
     static Signal signal(String id, Address a, Severity sev, Instant at) {
         return new Signal(id, SignalType.UNUSUAL_AMOUNT, a, null, sev, 0.5, Signal.EvidenceLevel.ANOMALY, List.of(), "test@1", at);
     }
+
+    // ---- ADR-0024 step 3b: hard caps, oldest first, kept addresses excepted
+
+    static Address w(int i) { return new Address(Network.TRON, "T" + String.format("%033d", i)); }
+
+    @Test void flowCapRemovesTheOldestFirst() {
+        var store = new InMemoryFlowStore();
+        for (int i = 0; i < 10; i++) store.add(flow("f" + i, w(i), w(100 + i), NOW.plusSeconds(i)));
+        store.add(flow("kept-old", KEPT, w(999), NOW.minusSeconds(3600)));
+        assertThat(store.evictOldest(4, KEPT::equals)).isEqualTo(6);
+        assertThat(store.size()).isEqualTo(5);
+        assertThat(store.contains("kept-old")).isTrue();
+        assertThat(store.contains("f5")).isFalse();
+        assertThat(store.contains("f6")).isTrue();
+        assertThat(store.contains("f9")).isTrue();
+        assertThat(store.evictOldest(4, KEPT::equals)).isZero();
+    }
+
+    @Test void signalCapRemovesTheOldestRemovableOnesWhateverTheirSeverity() {
+        var repo = new InMemorySignalRepository();
+        for (int i = 0; i < 6; i++) {
+            repo.saveIfAbsent(new Signal("s" + i, SignalType.UNUSUAL_AMOUNT, w(i), null, i % 2 == 0 ? Severity.HIGH : Severity.LOW, 0.5,
+                    Signal.EvidenceLevel.ANOMALY, List.of(), "test@1", NOW.plusSeconds(i)));
+        }
+        repo.saveIfAbsent(new Signal("s-kept", SignalType.UNUSUAL_AMOUNT, KEPT, null, Severity.LOW, 0.5,
+                Signal.EvidenceLevel.ANOMALY, List.of(), "test@1", NOW.minusSeconds(3600)));
+        assertThat(repo.evictOldest(2, sig -> sig.address().equals(KEPT))).isEqualTo(4);
+        assertThat(repo.findById("s-kept")).isPresent();
+        assertThat(repo.findById("s3")).isEmpty();
+        assertThat(repo.findById("s4")).isPresent();
+        assertThat(repo.findById("s5")).isPresent();
+    }
+
+    @Test void profileCapRemovesTheLeastRecentlyActiveWallets() {
+        var profiles = new WalletProfileService(Clock.fixed(NOW, ZoneOffset.UTC));
+        for (int i = 0; i < 5; i++) profiles.ingest(flow("p" + i, w(i), w(i), NOW.plusSeconds(i))); // self transfers: one profile each
+        profiles.ingest(flow("p-kept", KEPT, KEPT, NOW.minusSeconds(3600)));
+        Set<Address> gone = profiles.evictLeastRecent(2, KEPT::equals);
+        assertThat(gone).containsExactlyInAnyOrder(w(0), w(1), w(2));
+        assertThat(profiles.has(KEPT)).isTrue();
+        assertThat(profiles.has(w(3))).isTrue();
+        assertThat(profiles.size()).isEqualTo(3);
+    }
 }

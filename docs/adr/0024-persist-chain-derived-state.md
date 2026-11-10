@@ -1,6 +1,6 @@
 # ADR-0024: Persist chain-derived state in PostgreSQL
 
-- Status: accepted (2026-11-09; step 1 implemented; step 2 implemented but off by default, does not scale yet; step 3a implemented, not sufficient on its own: see the 2026-11-10 measurement)
+- Status: accepted (2026-11-09; step 1 implemented; step 2 implemented but off by default, does not scale yet; step 3a implemented, not sufficient on its own: see the 2026-11-10 measurement; step 3b implemented: hard caps and compact accumulators)
 - Date: 2026-11-09
 
 ## Context and problem statement
@@ -49,7 +49,19 @@ implementations for tests and the demo profile. ClickHouse (ADR-0004) is reconsi
   each trim takes 0.3 to 2.4 s and removes 9,000 to 64,000 flows, yet after 3 hours the working set still grows
   (962,000 flows, 301,000 signals, 650,000 profiles) and the old generation reaches 2.9 GB of 3 GB, with 269 full GCs
   (7.5 min of cumulated pauses). Step 3a slows the growth but does not bound memory at chain-wide volume: step 3b is needed.
-- **Step 3b (needed):** compact the accumulators of very active wallets (every event id, tx hash and timestamp is kept
-  per wallet: an exchange hot wallet holds millions), journal only the watchlist scope plus compact wallet-profile snapshots and the latest score per address,
-  so that the reload is proportional to the number of wallets, not to the number of transfers.
+- **Step 3b (implemented 2026-11-10, production measurement pending):** hard caps and compact accumulators.
+  - Caps applied after the time windows (`OCI_INGESTION_WORKING_SET_MAX_FLOWS`, `_MAX_PROFILES`, `_MAX_SIGNALS`; defaults
+    400,000 / 300,000 / 150,000, sized for a 3 GB heap): beyond a cap the oldest flows, the least recently active profiles
+    (with scores and tracking) and the oldest signals of wallets without a profile go, HIGH/CRITICAL included (raised
+    alerts are in PostgreSQL). Items sharing the boundary instant go together, so a cap always holds. Kept addresses are
+    neither removed nor counted.
+  - Wallet accumulators no longer grow with the number of transfers: the latest 4,096 event ids and transaction hashes for
+    de-duplication, exact activity times for the latest 2,048 instants (older ones folded into first time, end of span
+    and longest gap), the 1,024 heaviest counterparties, distinct contracts counted up to 1,024. Totals and counts stay
+    exact; the approximations only concern replays older than the latest 4,096 events of a wallet, out-of-order events
+    older than its folded span and the tail of its counterparties.
+  - Consequence: under sustained chain-wide volume the caps, not the time windows, set the effective look-back of detectors
+    for unwatched wallets. Watch a wallet or load its history to keep its full working set.
+- **Step 3c (needed for the journal):** journal only the watchlist scope plus compact wallet-profile snapshots and the
+  latest score per address, so that the reload is proportional to the number of wallets, not to the number of transfers.
 

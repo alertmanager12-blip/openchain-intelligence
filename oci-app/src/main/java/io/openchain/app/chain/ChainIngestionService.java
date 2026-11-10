@@ -675,20 +675,36 @@ public class ChainIngestionService {
      *       CRITICAL ones.</li>
      * </ul>
      */
+    public TrimResult trimWorkingSet(Duration flowRetention, Duration signalRetention, Duration profileIdle,
+                                     java.util.function.Predicate<Address> keep) {
+        return trimWorkingSet(flowRetention, signalRetention, profileIdle, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, keep);
+    }
+
+    /**
+     * Same as above, then enforces hard caps (ADR-0024 step 3b): at chain-wide volume the time windows alone do not bound
+     * memory, so when a count is still above its cap the oldest flows, the least recently active profiles (with their
+     * scores and tracking) and the oldest signals of wallets that left the working set are removed until it is not. Under
+     * the caps, HIGH and CRITICAL signals are no longer exempt: alerts already raised are stored apart and stay.
+     */
     public synchronized TrimResult trimWorkingSet(Duration flowRetention, Duration signalRetention, Duration profileIdle,
+                                                  int maxFlows, int maxSignals, int maxProfiles,
                                                   java.util.function.Predicate<Address> keep) {
         long t0 = System.nanoTime();
         Instant now = clock.instant();
         Map<Network, Instant> reference = new java.util.EnumMap<>(Network.class);
         flowWatermark.forEach((n, w) -> reference.put(n, w.isAfter(now) ? now : w));
         int flows = intelligence.flows().evictBefore(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(flowRetention); }, keep);
-        Set<Address> idle = intelligence.profiles().evictIdle(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(profileIdle); }, keep);
+        flows += intelligence.flows().evictOldest(maxFlows, keep);
+        Set<Address> idle = new java.util.HashSet<>(
+                intelligence.profiles().evictIdle(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(profileIdle); }, keep));
+        idle.addAll(intelligence.profiles().evictLeastRecent(maxProfiles, keep));
         intelligence.scoring().forget(idle);
         trackedWallets.removeAll(idle);
         var profiles = intelligence.profiles();
         int signals = intelligence.signals().evictBefore(now.minus(signalRetention),
                 s -> keep.test(s.address()) || profiles.has(s.address())
                         || s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0);
+        signals += intelligence.signals().evictOldest(maxSignals, s -> keep.test(s.address()) || profiles.has(s.address()));
         TrimResult r = new TrimResult(flows, signals, idle.size(), intelligence.flows().size(), intelligence.signals().size(),
                 profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000);
         lastTrim = r;

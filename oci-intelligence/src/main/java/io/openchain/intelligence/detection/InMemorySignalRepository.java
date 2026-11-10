@@ -31,4 +31,11 @@ public final class InMemorySignalRepository implements SignalRepository {
         }
         return before - byId.size();
     }
+
+    @Override public synchronized int evictOldest(int max, java.util.function.Predicate<Signal> keep) {
+        long[] times = byId.values().stream().filter(s -> s.detectedAt() != null && !keep.test(s))
+                .mapToLong(s -> s.detectedAt().toEpochMilli()).sorted().toArray();
+        java.time.Instant cutoff = io.openchain.intelligence.memory.Caps.cutoff(times, max);
+        return cutoff == null ? 0 : evictBefore(cutoff, keep);
+    }
 }

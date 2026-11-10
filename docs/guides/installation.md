@@ -89,7 +89,7 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 
 Live providers are implemented but have not been validated against production nodes yet.
 
-### In-memory working set (ADR-0024 step 3a)
+### In-memory working set (ADR-0024 steps 3a and 3b)
 
 Detectors, profiles, risk scores and the console read an in-memory working set. Without bounds it grows with the chain:
 about 4.8 million flows and 950,000 signals per day were measured on 2026-11-09 with Ethereum mainnet and TRON indexed at
@@ -100,6 +100,21 @@ the head. A background trim runs every `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL`
 | Value flows | older than 24 h, measured against the latest flow time of **their network** (event time, not the clock: a catch-up after downtime keeps what it just indexed; a stalled network does not block the others) | flows touching a watched wallet or an address whose history was loaded |
 | Wallet profiles, their risk scores and the "tracked wallets" count | no flow for 7 days (same reference) | watched wallets, loaded histories |
 | Signals | older than 48 h **and** their wallet no longer has a profile (a risk score is computed from the stored signals of the wallet, so they stay while the wallet is active) | HIGH and CRITICAL signals, watched wallets, loaded histories |
+
+**Hard caps (step 3b).** At chain-wide volume the time windows alone do not bound memory (measured on 2026-11-10: with
+2-hour windows the old generation still reached 2.9 GB of a 3 GB heap after 3 hours). After the time windows, the trim
+enforces caps: `OCI_INGESTION_WORKING_SET_MAX_FLOWS` (default 400,000), `OCI_INGESTION_WORKING_SET_MAX_PROFILES` (300,000)
+and `OCI_INGESTION_WORKING_SET_MAX_SIGNALS` (150,000). Beyond a cap the oldest flows, the least recently active profiles
+(with their scores and tracking) and the oldest signals of wallets without a profile are removed, **HIGH and CRITICAL
+signals included** (alerts already raised are stored in PostgreSQL and stay). Watched wallets and loaded histories are
+never removed and are not counted. The defaults are sized for the 3 GB heap of the 4 GB container of `docker-compose.yml`;
+raise them with the heap. When a cap is the binding limit, the effective windows are shorter than 24 h / 7 days / 48 h:
+the trim log line shows how much was removed.
+
+**Very active wallets (step 3b).** A wallet profile no longer grows with its number of transfers: duplicate detection
+remembers the latest 4,096 event ids and transaction hashes, activity times are exact for the latest 2,048 instants
+(older ones are folded, first activity stays exact), the 1,024 counterparties with the most transfers are kept and
+distinct contracts are counted up to 1,024. Token totals and transfer counts stay exact.
 
 Not affected: alerts, deliveries, rules, labels and the watchlist (PostgreSQL); rule-engine windows (bounded by their own
 rule windows); the recent-events buffer (`OCI_INGESTION_EVENT_HISTORY_SIZE`); indexer checkpoints (restart without gap).
@@ -124,8 +139,9 @@ Watch a wallet (Watchlist) or load its history to keep its full working set.
 `/actuator/prometheus`: `oci_working_set_size{kind="flows|signals|profiles|scored_addresses|tracked_wallets"}` (after the
 last trim), `oci_working_set_trim_millis`, and the JVM gauges `jvm_memory_used_bytes{area="heap"}`,
 `jvm_gc_pause_seconds`, `jvm_gc_live_data_size_bytes` (heap after GC). A stable `jvm_gc_live_data_size_bytes` over a day
-is the sign that the working set is bounded; a steady rise means something else grows (per-wallet accumulators of very
-active wallets are not compacted yet, ADR-0024 step 3b). Rollback without a new image: `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0`.
+is the sign that the working set is bounded; a steady rise means something else grows, or that the caps are too high for
+the heap. Rollback without a new image: `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0` (no trim at all) or caps set to
+`2147483647` (time windows only, as in step 3a).
 
 ### Address history (on demand, ADR-0020)
 

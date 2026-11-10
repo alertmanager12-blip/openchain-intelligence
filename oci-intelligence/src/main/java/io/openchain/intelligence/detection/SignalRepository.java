@@ -17,4 +17,7 @@ public interface SignalRepository {
 
     /** Removes the signals detected before {@code cutoff} unless {@code keep} holds; returns how many were removed. */
     default int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return 0; }
+
+    /** Removes the oldest signals that are not kept until at most {@code max} removable ones remain (ADR-0024 step 3b). */
+    default int evictOldest(int max, java.util.function.Predicate<Signal> keep) { return 0; }
 }

@@ -91,4 +91,26 @@ class WorkingSetTrimTest {
         assertThat(r.flows()).isGreaterThanOrEqualTo(2);
         assertThat(chains.lastTrim()).isEqualTo(r);
     }
+
+    /** ADR-0024 step 3b: whatever the time windows, the caps hold. */
+    @Test void hardCapsHoldWhateverTheTimeWindows() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        IntelligencePipeline intel = ctx.getBean(IntelligencePipeline.class);
+        Instant now = Instant.now();
+        List<ValueFlow> flows = new java.util.ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            Address from = new Address(Network.POLYGON, "0x" + String.format("%040x", 0x1000 + i));
+            Address to = new Address(Network.POLYGON, "0x" + String.format("%040x", 0x2000 + i));
+            flows.add(flow("0xcap" + i, from, to, USDT, now.minus(Duration.ofMinutes(40 - i))));
+        }
+        chains.restoreIntelligence(flows, List.of(), List.of());
+
+        var r = chains.trimWorkingSet(Duration.ofDays(30), Duration.ofDays(30), Duration.ofDays(30), 10, 10, 12, a -> false);
+
+        assertThat(intel.flows().size()).isLessThanOrEqualTo(10);
+        assertThat(intel.profiles().size()).isLessThanOrEqualTo(12);
+        assertThat(intel.flows().contains("polygon:0xcap39:0")).isTrue(); // the newest stay
+        assertThat(intel.flows().contains("polygon:0xcap0:0")).isFalse();
+        assertThat(r.remainingFlows()).isEqualTo(intel.flows().size());
+    }
 }

@@ -26,6 +26,7 @@ public final class JournalingStores {
         @Override public List<ValueFlow> involving(Address a) { return delegate.involving(a); }
         @Override public int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
                                          java.util.function.Predicate<Address> keep) { return delegate.evictBefore(cutoff, keep); }
+        @Override public int evictOldest(int max, java.util.function.Predicate<Address> keep) { return delegate.evictOldest(max, keep); }
         @Override public int size() { return delegate.size(); }
     }
 
@@ -39,6 +40,7 @@ public final class JournalingStores {
         @Override public List<Signal> findByAddress(Address a) { return delegate.findByAddress(a); }
         @Override public int size() { return delegate.size(); }
         @Override public int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return delegate.evictBefore(cutoff, keep); }
+        @Override public int evictOldest(int max, java.util.function.Predicate<Signal> keep) { return delegate.evictOldest(max, keep); }
     }
 
     public record Scores(RiskScoreRepository delegate, IntelligenceJournal journal) implements RiskScoreRepository {

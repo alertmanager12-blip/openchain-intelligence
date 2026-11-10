@@ -49,6 +49,15 @@ public final class InMemoryFlowStore implements FlowStore {
         return gone.size();
     }
 
+    @Override public synchronized int evictOldest(int max, java.util.function.Predicate<Address> keep) {
+        // every flow is in exactly one outgoing list
+        long[] times = out.values().stream().flatMap(List::stream)
+                .filter(f -> f.timestamp() != null && !keep.test(f.from()) && !keep.test(f.to()))
+                .mapToLong(f -> f.timestamp().toEpochMilli()).sorted().toArray();
+        java.time.Instant cutoff = io.openchain.intelligence.memory.Caps.cutoff(times, max);
+        return cutoff == null ? 0 : evictBefore(n -> cutoff, keep);
+    }
+
     @Override public synchronized int size() { return ids.size(); }
     @Override public synchronized List<ValueFlow> outgoing(Address a) { return List.copyOf(out.getOrDefault(a, List.of())); }
     @Override public synchronized List<ValueFlow> incoming(Address a) { return List.copyOf(in.getOrDefault(a, List.of())); }

@@ -82,7 +82,26 @@ public final class WalletProfileService {
         return gone;
     }
 
+    /**
+     * Removes the profiles of the least recently active wallets that are not kept until at most {@code max} removable ones
+     * remain (ADR-0024 step 3b); returns the removed addresses.
+     */
+    public java.util.Set<Address> evictLeastRecent(int max, java.util.function.Predicate<Address> keep) {
+        java.util.List<Long> times = new java.util.ArrayList<>();
+        for (var e : accumulators.entrySet()) {
+            if (keep.test(e.getKey())) continue;
+            java.time.Instant last;
+            synchronized (e.getValue()) { last = e.getValue().lastActivity(); }
+            if (last != null) times.add(last.toEpochMilli());
+        }
+        java.time.Instant cutoff = io.openchain.intelligence.memory.Caps.cutoff(times.stream().mapToLong(Long::longValue).sorted().toArray(), max);
+        return cutoff == null ? java.util.Set.of() : evictIdle(n -> cutoff, keep);
+    }
+
     public int size() { return accumulators.size(); }
+
+    /** The live accumulator of an address, or null (tests). */
+    WalletProfileAccumulator accumulator(Address a) { return accumulators.get(a); }
 
     public boolean has(Address a) { return accumulators.containsKey(a); }
 

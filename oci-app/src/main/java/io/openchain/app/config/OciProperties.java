@@ -114,6 +114,20 @@ public class OciProperties {
         private Duration workingSetSignalRetention = Duration.ofHours(48);
         private Duration workingSetProfileIdle = Duration.ofDays(7);
         private Duration workingSetTrimInterval = Duration.ofMinutes(10);
+        /**
+         * Hard caps on the working set (ADR-0024 step 3b), applied after the time windows: the oldest items beyond them are
+         * removed. Sized for a 3 GB heap with Ethereum mainnet and TRON indexed at the head; raise them with the heap.
+         */
+        private int workingSetMaxFlows = 400_000;
+        private int workingSetMaxSignals = 150_000;
+        private int workingSetMaxProfiles = 300_000;
+
+        public int getWorkingSetMaxFlows() { return workingSetMaxFlows; }
+        public void setWorkingSetMaxFlows(int v) { this.workingSetMaxFlows = v; }
+        public int getWorkingSetMaxSignals() { return workingSetMaxSignals; }
+        public void setWorkingSetMaxSignals(int v) { this.workingSetMaxSignals = v; }
+        public int getWorkingSetMaxProfiles() { return workingSetMaxProfiles; }
+        public void setWorkingSetMaxProfiles(int v) { this.workingSetMaxProfiles = v; }
 
         public Duration getWorkingSetFlowRetention() { return workingSetFlowRetention; }
         public void setWorkingSetFlowRetention(Duration v) { this.workingSetFlowRetention = v; }

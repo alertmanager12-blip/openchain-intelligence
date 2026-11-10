@@ -150,8 +150,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         if (trim > 0) {
             scheduler.scheduleWithFixedDelay(guard("working-set trim", this::trimWorkingSet), trim, trim, TimeUnit.MILLISECONDS);
             log.info("working-set trim every {}: flows older than {}, profiles idle for {}, signals older than {} once their wallet left "
-                    + "the working set (HIGH/CRITICAL, watchlist and loaded histories kept)", ing.getWorkingSetTrimInterval(),
-                    ing.getWorkingSetFlowRetention(), ing.getWorkingSetProfileIdle(), ing.getWorkingSetSignalRetention());
+                    + "the working set (HIGH/CRITICAL, watchlist and loaded histories kept); caps {} flows, {} signals, {} profiles",
+                    ing.getWorkingSetTrimInterval(), ing.getWorkingSetFlowRetention(), ing.getWorkingSetProfileIdle(),
+                    ing.getWorkingSetSignalRetention(), ing.getWorkingSetMaxFlows(), ing.getWorkingSetMaxSignals(), ing.getWorkingSetMaxProfiles());
         } else {
             log.warn("working-set trim disabled (OCI_INGESTION_WORKING_SET_TRIM_INTERVAL={}): memory grows with uptime",
                     ing.getWorkingSetTrimInterval());
@@ -356,6 +357,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         java.util.Set<Address> histories = history.historyAddresses();
         var w = watchlistService;
         var r = chains.trimWorkingSet(ing.getWorkingSetFlowRetention(), ing.getWorkingSetSignalRetention(), ing.getWorkingSetProfileIdle(),
+                ing.getWorkingSetMaxFlows(), ing.getWorkingSetMaxSignals(), ing.getWorkingSetMaxProfiles(),
                 a -> histories.contains(a) || (w != null && w.isWatched(a)));
         log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s), {} idle profile(s); kept {} flow(s), {} signal(s), "
                 + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.profiles(),
