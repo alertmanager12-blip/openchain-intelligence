@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (P0 — detector defects, `docs/bench/DETECTION_BENCH_STEP_2.md`)
+
+- `UnusualAmount`: baseline per direction (sent vs received); no infinite or inflated z when one amount dominates the history (at least 3× the median required instead). `FastForwarding`: receipts must explain the forwarding (≥ 50 % of the amount sent), share capped at 100 %. `Structuring`: the 10,000 threshold applies to USD stablecoins only. `CircularFlow`: one signal per return flow listing every path. Detection bench added (`oci-intelligence` tests, synthetic scenarios): precision 0.70 → 0.93 (1.00 with business rule R1 on statistical anomalies), recall of existing detectors unchanged (1.00).
+
 ### Changed (console UI/UX redesign, see `docs/FRONTEND_UI_UX_REDESIGN.md`)
 
 - **Dark theme by default** (blue-black anthracite, signal-cyan accent used sparingly; light and "system" still available in Settings, a stored choice is kept). Type moves to **IBM Plex Sans / IBM Plex Mono** (OFL-1.1, Latin subsets, replace Inter and JetBrains Mono; ADR-0012 revision, NOTICE and CI allow-list updated).

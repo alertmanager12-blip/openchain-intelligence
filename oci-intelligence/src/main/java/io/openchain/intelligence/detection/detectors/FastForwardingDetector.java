@@ -14,7 +14,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Funds forwarded almost entirely shortly after receipt (pass-through behaviour). One signal per receipt episode. */
+/**
+ * Funds forwarded almost entirely shortly after receipt (pass-through behaviour). One signal per receipt episode.
+ * The receipts must explain what was sent (received ≥ {@code minInflowShareOfOutflow} × sent) and the forwarded share
+ * counts at most what was received: before, a funded wallet receiving 1 USDT and then paying 1,000 scored "100,000 %".
+ */
 public final class FastForwardingDetector extends AbstractDetector {
     public FastForwardingDetector() { super("fast-forwarding", 1); }
 
@@ -31,7 +35,8 @@ public final class FastForwardingDetector extends AbstractDetector {
         List<ValueFlow> outs = between(sameToken(ctx.flows().outgoing(ctx.subject()), t), first.timestamp(), t.timestamp())
                 .stream().filter(f -> !f.to().equals(ctx.subject())).toList();
         BigDecimal out = sum(outs);
-        double ratio = out.divide(in, MathContext.DECIMAL64).doubleValue();
+        if (in.compareTo(out.multiply(BigDecimal.valueOf(cfg.minInflowShareOfOutflow()))) < 0) return List.of(); // not a pass-through
+        double ratio = out.min(in).divide(in, MathContext.DECIMAL64).doubleValue();
         if (ratio < cfg.minRatio()) return List.of();
         Duration delay = Duration.between(first.timestamp(), t.timestamp());
         double speed = 1 - Math.min(1, delay.toSeconds() / (double) Math.max(1, cfg.window().toSeconds()));

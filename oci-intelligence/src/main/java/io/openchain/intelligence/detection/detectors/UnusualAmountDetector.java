@@ -14,8 +14,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Amount far above the wallet's own baseline for the same token (upper tail only).
- * Robust z = 0.6745 * (x - median) / MAD; falls back to 1.2533 * mean absolute deviation when MAD = 0.
+ * Amount far above the wallet's own baseline for the same token and the <b>same direction</b> (what it usually sends,
+ * or what it usually receives; mixing both made a collector that forwards the sum of its deposits look unusual).
+ * Upper tail only. Robust z = 0.6745 * (x - median) / MAD. When MAD = 0 (more than half of the baseline is one same
+ * amount) no robust z exists: the amount must then be at least {@code minRatioWithoutDispersion} times the median
+ * (before: an infinite or huge z made any larger amount unusual, 50 then 60).
  * Pure statistics: emitted as ANOMALY, never as a risk qualification.
  */
 public final class UnusualAmountDetector extends AbstractDetector {
@@ -28,8 +31,10 @@ public final class UnusualAmountDetector extends AbstractDetector {
         if (t == null || !t.involves(ctx.subject())) return List.of();
         var cfg = ctx.config().unusualAmount();
         List<BigDecimal> hist = new ArrayList<>();
-        for (ValueFlow f : sameToken(ctx.flows().involving(ctx.subject()), t))
-            if (!f.eventId().equals(t.eventId()) && !f.timestamp().isAfter(t.timestamp())) hist.add(f.amount());
+        boolean outgoing = t.from().equals(ctx.subject());
+        List<ValueFlow> sameDirection = outgoing ? ctx.flows().outgoing(ctx.subject()) : ctx.flows().incoming(ctx.subject());
+        for (ValueFlow f : sameToken(sameDirection, t))
+            if (!f.eventId().equals(t.eventId()) && !f.timestamp().isAfter(t.timestamp()) && !f.from().equals(f.to())) hist.add(f.amount());
         if (hist.size() < cfg.minHistory()) return List.of();
         BigDecimal x = t.amount();
         BigDecimal med = median(hist);
@@ -37,24 +42,33 @@ public final class UnusualAmountDetector extends AbstractDetector {
         List<BigDecimal> dev = hist.stream().map(h -> h.subtract(med).abs()).toList();
         BigDecimal scale = median(dev).multiply(new BigDecimal("1.4826"), MC); // 1/0.6745
         String method = "MAD";
+        Severity sev;
+        String zs;
+        // MAD = 0: more than half of the baseline is one same amount, the robust scale does not exist. The former fallback
+        // (mean absolute deviation) then gave a tiny scale and huge z for an amount barely above the usual one (z = 17 for
+        // 9,600 against 20 sends of 5,000): a relative deviation is required instead.
         if (scale.signum() == 0) {
-            scale = dev.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(dev.size()), MC).multiply(new BigDecimal("1.2533"), MC);
-            method = "meanAD";
+            if (med.signum() <= 0) return List.of();
+            double ratio = x.divide(med, MC).doubleValue();
+            if (ratio < cfg.minRatioWithoutDispersion()) return List.of();
+            sev = ratio >= 2 * cfg.minRatioWithoutDispersion() ? Severity.MEDIUM : Severity.LOW;
+            method = "dominant amount";
+            zs = String.format(java.util.Locale.ROOT, "n/a, amount = %.2f x median >= %.1f", ratio, cfg.minRatioWithoutDispersion());
+        } else {
+            double z = x.subtract(med).divide(scale, MC).doubleValue();
+            if (z < cfg.zThreshold()) return List.of();
+            sev = z >= 2 * cfg.zThreshold() ? Severity.MEDIUM : Severity.LOW;
+            zs = String.format(java.util.Locale.ROOT, "%.2f", z) + " >= " + cfg.zThreshold();
         }
-        double z = scale.signum() == 0 ? Double.POSITIVE_INFINITY : x.subtract(med).divide(scale, MC).doubleValue();
-        if (z < cfg.zThreshold()) return List.of();
-        Severity sev = z >= 2 * cfg.zThreshold() ? Severity.MEDIUM : Severity.LOW;
         double conf = Math.min(0.9, 0.3 + 0.02 * hist.size());
-        String zs = Double.isInfinite(z) ? "inf (constant history)" : String.format(java.util.Locale.ROOT, "%.2f", z);
         var ev = List.of(
                 flowEvidence(t, "unusual transfer"),
                 new Evidence("statistic", "amount " + plain(x) + " " + t.token().symbol() + " vs own median " + plain(med)
-                        + " (" + method + ", n=" + hist.size() + "), robust z=" + zs + " >= " + cfg.zThreshold(),
+                        + " (" + method + ", n=" + hist.size() + ", " + (outgoing ? "sent" : "received") + "), robust z=" + zs,
                         t.txHash(), qualifiedId(), t.timestamp()));
         String sym = t.token().symbol();
         String summary = (t.from().equals(ctx.subject()) ? "Sent " : "Received ") + amount(x, sym)
-                + " in one transfer, far above its usual amount (median " + amount(med, sym) + " over "
+                + " in one transfer, far above what it usually " + (outgoing ? "sends" : "receives") + " (median " + amount(med, sym) + " over "
                 + plural(hist.size(), "earlier transfer", "earlier transfers") + ").";
         return List.of(signal(ctx, SignalType.UNUSUAL_AMOUNT, ctx.subject(), t.txHash(), sev, conf, EvidenceLevel.ANOMALY, ev, t.eventId(), summary));
     }
