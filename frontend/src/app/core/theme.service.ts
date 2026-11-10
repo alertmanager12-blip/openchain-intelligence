@@ -4,7 +4,7 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 export type ThemePref = 'system' | 'light' | 'dark';
 const KEY = 'oci.theme';
 
-/** Theme preference persisted per browser; "system" follows prefers-color-scheme live. */
+/** Theme preference persisted per browser; dark by default, "system" follows prefers-color-scheme live. */
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
   private readonly doc = inject(DOCUMENT);
@@ -32,9 +32,9 @@ export class ThemeService {
   private read(): ThemePref {
     try {
       const v = localStorage.getItem(KEY);
-      return v === 'light' || v === 'dark' || v === 'system' ? v : 'system';
+      return v === 'light' || v === 'dark' || v === 'system' ? v : 'dark';
     } catch {
-      return 'system';
+      return 'dark';
     }
   }
 }

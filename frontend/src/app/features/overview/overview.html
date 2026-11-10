@@ -6,6 +6,15 @@
 
   <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="6" loadingText="Loading the dashboard" (retry)="dash.reload()">
     @if (dash.value(); as d) {
+      @if (openUrgent(); as u) {
+        @if (u.critical > 0) {
+          <div class="attention" role="status">
+            <span class="sev-dot CRITICAL" aria-hidden="true"></span>
+            <p><strong>{{ u.critical }} critical {{ u.critical === 1 ? 'alert is' : 'alerts are' }} open.</strong> Each one needs a conclusion: confirm, dismiss as a false positive or investigate.</p>
+            <a matButton="outlined" [routerLink]="['/alerts']" [queryParams]="{ severity: 'CRITICAL', status: 'OPEN' }">Review critical alerts</a>
+          </div>
+        }
+      }
       <section aria-labelledby="h-now">
         <h2 id="h-now" class="sr-only">Right now</h2>
         <dl class="stats">
@@ -32,10 +41,10 @@
             @if (al.recent.length) {
               <ul class="recent">
                 @for (a of al.recent; track a.id) {
-                  <li (click)="openAlert(a.id)">
+                  <li (click)="openAlert(a.id)" class="sev-rail sev-rail--{{ a.severity.toLowerCase() }}">
                     <span class="sev-dot {{ a.severity }}" [attr.title]="sentence(a.severity)"></span>
                     <div class="r-main">
-                      <a class="r-title" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }" (click)="$event.stopPropagation()"><span class="sr-only">{{ sentence(a.severity) }}: </span>{{ a.ruleName }}</a>
+                      <a class="r-title" [attr.title]="a.ruleName" [routerLink]="['/alerts']" [queryParams]="{ id: a.id }" (click)="$event.stopPropagation()"><span class="sr-only">{{ sentence(a.severity) }}: </span>{{ a.ruleName }}</a>
                       <div class="r-meta"><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.address) { <span class="mono">{{ short(a.address) }}</span> }</div>
                     </div>
                     <div class="r-score">
@@ -149,11 +158,11 @@
             <div class="table-wrap"><table mat-table [dataSource]="(d.recentSignals ?? []).slice(0, 6)" [trackBy]="byId">
               <ng-container matColumnDef="signal">
                 <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
-                <td mat-cell *matCellDef="let s"><span class="strong" [attr.title]="s.type">{{ signalTitle(s) }}</span><div class="sub clamp">{{ signalSummary(s) }}</div></td>
+                <td mat-cell *matCellDef="let s"><span class="strong" [attr.title]="s.type">{{ signalTitle(s) }}</span><div class="sub clamp" [attr.title]="signalSummary(s)">{{ signalSummary(s) }}</div></td>
               </ng-container>
               <ng-container matColumnDef="evidence">
                 <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
-                <td mat-cell *matCellDef="let s"><oci-evidence [value]="s.evidenceLevel" /><div class="sub">Confidence <span class="num">{{ (s.confidence * 100).toFixed(0) }}</span>%</div></td>
+                <td mat-cell *matCellDef="let s"><oci-evidence [value]="s.evidenceLevel" /><div class="sub">Confidence {{ (s.confidence * 100).toFixed(0) }}%</div></td>
               </ng-container>
               <ng-container matColumnDef="address">
                 <th mat-header-cell *matHeaderCellDef scope="col">Address</th>

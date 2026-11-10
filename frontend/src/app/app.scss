@@ -10,7 +10,7 @@ main:focus { outline: none; }
 /* ---------------------------------------------------------------- sidebar */
 .side {
   position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 8px; padding: 8px; min-width: 0;
-  background: var(--bg); border-right: 1px solid var(--line); z-index: 30;
+  background: var(--rail); border-right: 1px solid var(--line); z-index: 30;
 }
 :host(.mobile) .side {
   position: fixed; inset: 0 auto 0 0; width: min(280px, 86vw); background: var(--surface); box-shadow: var(--shadow-overlay);
@@ -54,7 +54,10 @@ button { font: inherit; color: inherit; }
 }
 .nav-link svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
 .nav-link:hover { background: var(--hover); color: var(--ink); text-decoration: none; }
-.nav-link.active { color: var(--ink); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.nav-link.active { color: var(--ink); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+/* the active page: a 2px accent edge on the sidebar's inner margin, the only accent stroke of the shell */
+.nav-link.active::before { content: ''; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 2px; border-radius: 0 2px 2px 0; background: var(--accent); }
+:host(.collapsed) .nav-link.active::before { left: -6px; }
 .nav-link.active svg { color: var(--accent); }
 .nav-link:focus-visible { outline-offset: -2px; }
 .nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

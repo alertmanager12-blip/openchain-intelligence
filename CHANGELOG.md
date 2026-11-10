@@ -8,6 +8,13 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Changed (console UI/UX redesign, see `docs/FRONTEND_UI_UX_REDESIGN.md`)
+
+- **Dark theme by default** (blue-black anthracite, signal-cyan accent used sparingly; light and "system" still available in Settings, a stored choice is kept). Type moves to **IBM Plex Sans / IBM Plex Mono** (OFL-1.1, Latin subsets, replace Inter and JetBrains Mono; ADR-0012 revision, NOTICE and CI allow-list updated).
+- Overview: a bar names open critical alerts with a link to review them; HIGH/CRITICAL alerts carry a severity edge; the activity chart lets alert hours stand out. Explorer: larger lookup, live format detection, explicit automatic network choice. Wallet: identity card with the risk reading beside it.
+- **Fund flow graph**: edges show direction (into the root, out of the root, between other wallets) and a dashed edge when the counterparty is scored HIGH or CRITICAL (legend: not proof of shared intent).
+- Alerts inbox: readable severity chip on HIGH/CRITICAL rows; full text on hover for truncated titles. Phones: current breadcrumb only, full-width explorer controls.
+
 ### Added (public landing page)
 
 - **Landing page on `/`** (ChainSentinel): what the platform is, the problem, the four capabilities (each item marked available, partial or planned), how it works, an illustrative wallet dossier, the developer API (real contract of `GET /api/v1/wallets/{address}/risk`), open source principles (Apache-2.0), use cases, community. Illustrative data is labeled as such; only Ethereum and TRON are presented as live networks. Repository, documentation, issue and contribution links are hidden until a public repository URL is set in `features/landing/public-links.ts` (none exists yet). Lazy chunk of 73 kB (17 kB transferred), no new dependency, `prefers-reduced-motion` respected.

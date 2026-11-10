@@ -2,117 +2,129 @@
 @use './theme/theme-colors' as brand;
 
 /*
- * OpenChain Intelligence design system, third pass: a neutral, flat SaaS console (Linear / Vercel family).
+ * ChainSentinel design system, fourth pass (docs/FRONTEND_UI_UX_REDESIGN.md): an analyst's instrument for blockchain
+ * intelligence. Dark by default (blue-black anthracite), light kept as an explicit choice.
  *
  *   canvas   (--bg)        the page; tables and sections sit directly on it
- *   surface  (--surface)   panels: 1px line, 8px radius, no shadow
- *   subtle   (--well)      a quiet fill inside a panel for readouts (no inset shadow any more)
- *   overlay                menus, popovers, dialogs, toasts: the only elements with a shadow (--shadow-overlay)
+ *   surface  (--surface)   panels: 1px line, 10px radius, a hairline top highlight in dark (--shadow-panel), no glow
+ *   subtle   (--well)      a quiet fill inside a panel for readouts
+ *   overlay                menus, popovers, dialogs, toasts: the only elements with a cast shadow (--shadow-overlay)
  *
- * One accent (teal) for primary actions, focus, the active nav item and links. The risk scale (sage, ochre, brick,
- * oxblood) and the severity / evidence chips carry product meaning and keep their colours.
- * Type: Inter (variable, self-hosted) for everything, JetBrains Mono for addresses, hashes and YAML only.
+ * One accent (signal cyan) for primary actions, focus, the active navigation item and links, used sparingly. The risk
+ * scale (green, amber, orange, red) and the severity / evidence chips carry product meaning: HIGH and CRITICAL are the
+ * only saturated colours on a page, so the eye goes to them first. Severity is never conveyed by colour alone (labels).
+ * Type: IBM Plex Sans (variable, self-hosted) for everything, IBM Plex Mono for addresses, hashes and YAML only.
  * Text colours meet WCAG AA (4.5:1) on --bg, --surface and --well in both themes; field outlines meet 3:1 (1.4.11).
  */
 :root {
   color-scheme: light;
-  --bg: #fafafa;
+  --bg: #f4f6f8;
   --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --well: #f7f7f8;
+  --surface-2: #edf0f3;
+  --well: #f3f5f7;
   --sunken: var(--well);
-  --line: #e7e7e9;
-  --line-soft: #efeff1;
+  --line: #dfe4e9;
+  --line-soft: #e9edf1;
   /* outlines of text fields: 3:1 against the surface (WCAG 1.4.11) */
-  --line-strong: #8e8e96;
+  --line-strong: #808b96;
   /* outline of buttons and chips: decorative, their label identifies them */
-  --line-control: #dcdce0;
-  --ink: #18181b;
-  --ink-2: #4f4f57;
-  --muted: #6a6a73;
-  --accent: #1f6f78;
-  --accent-hover: #195c64;
+  --line-control: #d2d9e0;
+  --ink: #0e1620;
+  --ink-2: #3c4855;
+  --muted: #5b6774;
+  --accent: #0a7381;
+  --accent-hover: #085f6b;
   --accent-ink: #ffffff;
-  --accent-tint: #e9f2f3;
-  --focus: #1f6f78;
-  --hover: rgb(24 24 27 / 4%);
+  --accent-tint: #e4f2f4;
+  --focus: #0a7381;
+  --hover: rgb(14 22 32 / 4.5%);
 
-  /* risk scale: base = graphics (gauge, bars), text = labels on tinted chips */
-  --risk-low: #6f8f7e;      --risk-low-text: #3a5647;
-  --risk-medium: #a8840f;   --risk-medium-text: #6a5108;
-  --risk-high: #c2552b;     --risk-high-text: #8e3718;
-  --risk-critical: #9e2a2b; --risk-critical-text: #862123;
-  --risk-unknown: #a1a1aa;
-  --tint: 13%;
+  /* risk scale: base = graphics (gauge, bars, dots), text = labels on tinted chips */
+  --risk-low: #3e8e69;      --risk-low-text: #22603f;
+  --risk-medium: #b38608;   --risk-medium-text: #6b5106;
+  --risk-high: #d05a1f;     --risk-high-text: #983c10;
+  --risk-critical: #c9293b; --risk-critical-text: #a11d2e;
+  --risk-unknown: #9aa4ae;
+  /* fund flow direction, relative to the investigated wallet (graph edges): never a risk colour */
+  --flow-in: #4f5fd0;
+  --flow-out: #0a7381;
+  --tint: 12%;
 
   --ok: var(--risk-low-text);
   --warn: var(--risk-medium-text);
   --danger: var(--risk-critical-text);
 
+  --shadow-panel: 0 1px 2px rgb(14 22 32 / 4%);
   --shadow-raised: none;
   --shadow-inset: none;
   --shadow-control: none;
-  --shadow-overlay: 0 0 0 1px rgb(0 0 0 / 3%), 0 4px 8px -2px rgb(0 0 0 / 6%), 0 16px 32px -8px rgb(0 0 0 / 14%);
-  --scrim: rgb(9 9 11 / 32%);
+  --shadow-overlay: 0 0 0 1px rgb(14 22 32 / 4%), 0 6px 12px -4px rgb(14 22 32 / 8%), 0 20px 40px -12px rgb(14 22 32 / 18%);
+  --scrim: rgb(8 13 18 / 36%);
 
   --r-chip: 4px;
   --r-control: 6px;
-  --r-well: 6px;
-  --r-panel: 8px;
+  --r-well: 8px;
+  --r-panel: 10px;
+  --r-overlay: 12px;
+  /* sidebar: a half step between the canvas and the panels */
+  --rail: color-mix(in srgb, var(--surface) 50%, var(--bg));
   --rail-w: 240px;
   --rail-w-collapsed: 56px;
-  --topbar-h: 48px;
+  --topbar-h: 52px;
   --gutter: 32px;
 
-  --font: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font: 'IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-display: var(--font);
-  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-15: 15px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-30: 22px;
+  --fs-12: 12px; --fs-13: 13.5px; --fs-14: 14.5px; --fs-15: 15px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-30: 24px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --t-fast: 120ms;
-  --t-med: 160ms;
+  --t-med: 180ms;
 }
 
 @mixin dark-tokens {
   color-scheme: dark;
-  --bg: #0b0b0c;
-  --surface: #121214;
-  --surface-2: #1a1a1d;
-  --well: #17171a;
-  --line: #232326;
-  --line-soft: #1c1c1f;
-  --line-strong: #6b6b74;
-  --line-control: #2e2e33;
-  --ink: #ededef;
-  --ink-2: #b3b3ba;
-  --muted: #8f8f98;
-  --accent: #5fb0b8;
-  --accent-hover: #74c0c8;
-  --accent-ink: #0b0b0c;
-  --accent-tint: #142a2c;
-  --focus: #6cc0c8;
-  --hover: rgb(255 255 255 / 4%);
-  --risk-low: #8fb3a0;      --risk-low-text: #a6c6b4;
-  --risk-medium: #e0bc4a;   --risk-medium-text: #e0bc4a;
-  --risk-high: #e57a4e;     --risk-high-text: #f09a72;
-  --risk-critical: #e0605f; --risk-critical-text: #f08a88;
-  --risk-unknown: #5d5d66;
-  --tint: 16%;
-  --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 6%), 0 4px 8px -2px rgb(0 0 0 / 50%), 0 16px 40px -8px rgb(0 0 0 / 70%);
-  --scrim: rgb(0 0 0 / 60%);
+  --bg: #080d12;
+  --surface: #0d141b;
+  --surface-2: #142029;
+  --well: #0a1117;
+  --line: #1c2833;
+  --line-soft: #15202a;
+  --line-strong: #607080;
+  --line-control: #263440;
+  --ink: #e6edf3;
+  --ink-2: #aab7c4;
+  --muted: #8392a1;
+  --accent: #3cc6d4;
+  --accent-hover: #66d4df;
+  --accent-ink: #04131a;
+  --accent-tint: #0e2a32;
+  --focus: #66d4df;
+  --hover: rgb(160 190 220 / 5.5%);
+  --risk-low: #4fbb8b;      --risk-low-text: #7dd1ac;
+  --risk-medium: #e0b343;   --risk-medium-text: #ebc666;
+  --risk-high: #f0854c;     --risk-high-text: #f7a87c;
+  --risk-critical: #f0525b; --risk-critical-text: #ff8d93;
+  --risk-unknown: #536271;
+  --flow-in: #95a3ff;
+  --flow-out: #3cc6d4;
+  --tint: 15%;
+  --shadow-panel: inset 0 1px 0 rgb(200 225 250 / 3%);
+  --shadow-overlay: 0 0 0 1px rgb(150 185 220 / 9%), 0 8px 16px -4px rgb(0 0 0 / 55%), 0 24px 48px -12px rgb(0 0 0 / 70%);
+  --scrim: rgb(2 6 10 / 64%);
 }
 :root[data-theme='dark'] { @include dark-tokens; }
 
 /* ------------------------------------------------------------------ Material 3 theme
- * Palettes: src/theme/_theme-colors.scss (generated from teal #1F6F78). Every system role Material components read is
+ * Palettes: src/theme/_theme-colors.scss (generated from teal #1F6F78; every role used is overridden below). Every system role Material components read is
  * then pointed at the custom properties above, so the tokens stay the single source and flip with [data-theme].
  * Surfaces are flat: all surface-container roles are the panel colour and surface-tint is transparent (no elevation tint).
  */
 html {
   @include mat.theme((
     color: (primary: brand.$primary-palette, tertiary: brand.$tertiary-palette, theme-type: color-scheme),
-    typography: (plain-family: ('Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif), brand-family: ('Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif),
+    typography: (plain-family: ('IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif), brand-family: ('IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif),
       bold-weight: 600, medium-weight: 500, regular-weight: 400),
     density: -2,
   ));
@@ -128,7 +140,7 @@ html {
     corner-extra-small: var(--r-chip), corner-small: var(--r-control), corner-medium: var(--r-panel), corner-large: var(--r-panel), corner-extra-large: var(--r-panel), corner-full: var(--r-control),
     body-large-size: var(--fs-14), body-medium-size: var(--fs-13), body-small-size: var(--fs-12), label-large-size: var(--fs-13), label-medium-size: var(--fs-12),
     title-small-size: var(--fs-13), title-medium-size: var(--fs-14),
-    /* Inter is designed with its own spacing: Material's 0.1 to 0.5px tracking makes it look loose */
+    /* Plex is spaced for UI text already: Material's 0.1 to 0.5px tracking makes it look loose */
     body-large-tracking: 0, body-medium-tracking: 0, body-small-tracking: 0, label-large-tracking: 0, label-medium-tracking: 0, label-small-tracking: 0,
     title-large-tracking: -0.01em, title-medium-tracking: 0, title-small-tracking: 0,
     level0: none, level1: none, level2: none, level3: var(--shadow-overlay), level4: var(--shadow-overlay), level5: var(--shadow-overlay),
@@ -194,19 +206,18 @@ html {
 [hidden] { display: none !important; }
 html, body { margin: 0; min-height: 100%; }
 body {
-  background: var(--bg); color: var(--ink); font: 400 var(--fs-13) / 1.5 var(--font); letter-spacing: -0.003em;
-  font-feature-settings: 'cv11', 'ss03';
+  background: var(--bg); color: var(--ink); font: 400 var(--fs-13) / 1.5 var(--font); letter-spacing: 0;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
 }
 a { color: var(--accent); text-decoration: none; text-underline-offset: 3px; }
 a:hover { text-decoration: underline; }
 h1, h2, h3, h4 { font-family: var(--font); font-weight: 600; margin: 0; color: var(--ink); }
-h1 { font-size: 20px; line-height: 1.3; letter-spacing: -0.015em; }
-h2 { font-size: var(--fs-14); line-height: 1.4; letter-spacing: -0.005em; }
+h1 { font-size: 22px; line-height: 1.25; letter-spacing: -0.012em; }
+h2 { font-size: var(--fs-14); line-height: 1.4; letter-spacing: 0; }
 h3 { font-size: var(--fs-13); line-height: 1.4; }
 h4 { font-size: var(--fs-13); line-height: 1.4; font-weight: 500; color: var(--ink-2); }
 p { margin: 0 0 8px; }
-.mono { font-family: var(--mono); font-size: 0.92em; word-break: break-all; letter-spacing: -0.01em; }
+.mono { font-family: var(--mono); font-size: 0.9em; word-break: break-all; letter-spacing: 0; }
 .small { font-size: var(--fs-12); }
 .xsmall { font-size: 11px; }
 .muted { color: var(--muted); }
@@ -242,7 +253,7 @@ kbd {
 @media (max-width: 1100px) { .split { grid-template-columns: minmax(0, 1fr); } }
 
 /* panel: flat container for forms, tables and tools */
-.card, .panel-raised { --th-bg: var(--surface); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 16px; min-width: 0; }
+.card, .panel-raised { --th-bg: var(--surface); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 16px; min-width: 0; box-shadow: var(--shadow-panel); }
 .card--flush { padding: 0; overflow: clip; }
 .card > h2:first-child, .card-head { margin-bottom: 12px; }
 .card-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-height: 24px; }
@@ -259,6 +270,21 @@ kbd {
 .note { border: 1px solid var(--line); background: var(--well); padding: 10px 12px; border-radius: var(--r-panel); color: var(--ink-2); font-size: var(--fs-13); }
 .note--warn { border-color: color-mix(in srgb, var(--risk-medium) 40%, var(--line)); background: color-mix(in srgb, var(--risk-medium) 8%, var(--surface)); color: var(--ink); }
 .note--danger { border-color: color-mix(in srgb, var(--risk-critical) 40%, var(--line)); background: color-mix(in srgb, var(--risk-critical) 7%, var(--surface)); color: var(--ink); }
+
+/* attention: one line that says what needs a decision now (critical alerts), with the action that answers it */
+.attention {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px 10px 14px; border-radius: var(--r-panel);
+  border: 1px solid color-mix(in srgb, var(--risk-critical) 38%, var(--line));
+  background: color-mix(in srgb, var(--risk-critical) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--risk-critical);
+}
+.attention p { margin: 0; flex: 1 1 320px; color: var(--ink-2); }
+.attention strong { color: var(--ink); font-weight: 600; }
+.attention--warn { border-color: color-mix(in srgb, var(--risk-medium) 38%, var(--line)); background: color-mix(in srgb, var(--risk-medium) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--risk-medium); }
+
+/* severity rail: a 2px edge on list rows and panels whose subject is HIGH or CRITICAL, the only colour at the row's edge */
+.sev-rail { position: relative; }
+.sev-rail--critical { box-shadow: inset 2px 0 0 var(--risk-critical); }
+.sev-rail--high { box-shadow: inset 2px 0 0 var(--risk-high); }
 
 /* ------------------------------------------------------------------ readouts (measurements) */
 .well { background: var(--well); border: 1px solid var(--line-soft); border-radius: var(--r-panel); padding: 12px 14px; min-width: 0; }
@@ -284,7 +310,7 @@ kbd {
   .instrument > .readout:nth-child(n + 3) { border-top: 1px solid var(--line); }
 }
 /* one-line stats strip (overview, wallet): a single panel divided by hairlines */
-.stats { display: grid; grid-template-columns: repeat(var(--stats, 6), minmax(0, 1fr)); margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.stats { display: grid; grid-template-columns: repeat(var(--stats, 6), minmax(0, 1fr)); margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--shadow-panel); }
 .stat { display: grid; gap: 4px; padding: 12px 16px; min-width: 0; align-content: start; }
 .stat + .stat { border-left: 1px solid var(--line); }
 .stat dt { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

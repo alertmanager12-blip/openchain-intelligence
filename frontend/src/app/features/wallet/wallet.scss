@@ -1,11 +1,19 @@
-.ident { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); gap: 16px 40px; align-items: center; min-width: 0; }
+/* the wallet's identity card: who it is (address, network, labels) on the left, its risk reading on the right */
+.ident {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 16px 0; align-items: stretch; min-width: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--shadow-panel); overflow: hidden;
+}
+.ident.sev-rail--critical { box-shadow: inset 3px 0 0 var(--risk-critical), var(--shadow-panel); }
+.ident.sev-rail--high { box-shadow: inset 3px 0 0 var(--risk-high), var(--shadow-panel); }
+.ident .id-main { padding: 18px 20px; align-content: center; }
+.ident .id-gauge { padding: 18px 20px; border-left: 1px solid var(--line); background: var(--well); display: grid; align-content: center; }
 .id-main { display: grid; gap: 8px; min-width: 0; }
 .addr-row { display: flex; gap: 4px; align-items: center; min-width: 0; }
 .addr { font-family: var(--mono); font-size: 17px; font-weight: 500; letter-spacing: -0.02em; min-width: 0; overflow-wrap: anywhere; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .label { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; padding-left: 4px; }
 .id-gauge { min-width: 0; }
-@media (max-width: 800px) { .ident { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 800px) { .ident { grid-template-columns: minmax(0, 1fr); } .ident .id-gauge { border-left: 0; border-top: 1px solid var(--line); } }
 .tabs-wrap { min-width: 0; }
 .score-tab { display: grid; gap: 12px; }
 .score-tab p { margin: 0; }
@@ -18,7 +26,7 @@
 .share span { display: block; height: 100%; background: var(--ink-2); }
 .ph { height: 240px; }
 @media (max-width: 720px) { .addr { font-size: 13px; } }
-.coverage { margin-top: -12px; }
+.coverage { margin-top: -8px; }
 .sig-summary { color: var(--ink-2); max-width: 64ch; }
 
 .limits { margin-top: 10px; div { margin-top: 2px; } }
