@@ -145,6 +145,17 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);
         scheduler.scheduleWithFixedDelay(guard("escalation", alertService::escalateOverdue), 60, 60, TimeUnit.SECONDS);
+        var ing = props.getIngestion();
+        long trim = ing.getWorkingSetTrimInterval().toMillis();
+        if (trim > 0) {
+            scheduler.scheduleWithFixedDelay(guard("working-set trim", this::trimWorkingSet), trim, trim, TimeUnit.MILLISECONDS);
+            log.info("working-set trim every {}: flows older than {}, profiles idle for {}, signals older than {} once their wallet left "
+                    + "the working set (HIGH/CRITICAL, watchlist and loaded histories kept)", ing.getWorkingSetTrimInterval(),
+                    ing.getWorkingSetFlowRetention(), ing.getWorkingSetProfileIdle(), ing.getWorkingSetSignalRetention());
+        } else {
+            log.warn("working-set trim disabled (OCI_INGESTION_WORKING_SET_TRIM_INTERVAL={}): memory grows with uptime",
+                    ing.getWorkingSetTrimInterval());
+        }
         // first flush of pending deliveries off the main thread: INTERNAL_EVENT deliveries wait for the ingestion lock, so a
         // long first indexing pass on a busy real chain must not keep start-up (and readiness) waiting
         scheduler.execute(guard("initial dispatch", () -> alerting.dispatch(1_000)));
@@ -332,6 +343,23 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                     + "development secrets. Set OCI_DEMO_MODE=false (with OCI_SECURITY_API_KEY_PEPPER and OCI_CRYPTO_MASTER_KEY) "
                     + "or disable the real chains.");
         }
+    }
+
+    private io.openchain.app.watchlist.WatchlistService watchlistService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setWatchlistService(io.openchain.app.watchlist.WatchlistService w) { this.watchlistService = w; }
+
+    /** Bounds the in-memory working set; watched wallets and addresses with loaded history are kept. */
+    private void trimWorkingSet() {
+        var ing = props.getIngestion();
+        java.util.Set<Address> histories = history.historyAddresses();
+        var w = watchlistService;
+        var r = chains.trimWorkingSet(ing.getWorkingSetFlowRetention(), ing.getWorkingSetSignalRetention(), ing.getWorkingSetProfileIdle(),
+                a -> histories.contains(a) || (w != null && w.isWatched(a)));
+        log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s), {} idle profile(s); kept {} flow(s), {} signal(s), "
+                + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.profiles(),
+                r.remainingFlows(), r.remainingSignals(), r.remainingProfiles(), r.remainingScoredAddresses(), r.trackedWallets());
     }
 
     private io.openchain.app.journal.JdbcIntelligenceJournal journal;

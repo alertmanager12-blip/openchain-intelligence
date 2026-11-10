@@ -21,6 +21,14 @@ public final class InMemoryRiskScoreRepository implements RiskScoreRepository {
         l.add(s);
         if (l.size() > maxPerAddress) l.removeFirst();
     }
+    @Override public synchronized int addresses() { return data.size(); }
+
+    @Override public synchronized int forget(java.util.Collection<Address> addresses) {
+        int n = 0;
+        for (Address a : addresses) if (data.remove(a) != null) n++;
+        return n;
+    }
+
     @Override public synchronized List<RiskScore> history(Address a) { return List.copyOf(data.getOrDefault(a, List.of())); }
     @Override public synchronized Optional<RiskScore> latest(Address a) {
         List<RiskScore> l = data.get(a);

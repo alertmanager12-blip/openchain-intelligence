@@ -34,6 +34,12 @@ public final class RiskScoringService {
 
     public List<RiskScore> history(Address a) { return history.history(a); }
 
+    /** Forgets the scores of wallets evicted from the working set. */
+    public int forget(java.util.Collection<Address> addresses) { return history.forget(addresses); }
+
+    /** Addresses with a score held in memory (-1 when unknown). */
+    public int addressCount() { return history.addresses(); }
+
     /** Puts back a score stored before a restart (no recomputation, no change detection). */
     public void restore(RiskScore s) { history.append(s); }
 

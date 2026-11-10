@@ -57,7 +57,11 @@ public final class IntelligencePipeline {
     private final RiskScoringService scoring;
     private final DetectionConfig config;
     private final Clock clock;
-    private final Set<String> seenEvents = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Ids of non-transfer events already processed (approvals, admin changes, freezes): bounded, oldest forgotten first. */
+    private final Set<String> seenEvents = java.util.Collections.synchronizedSet(java.util.Collections.newSetFromMap(
+            new java.util.LinkedHashMap<String, Boolean>(1024, 0.75f, false) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) { return size() > 500_000; }
+            }));
     private final io.openchain.intelligence.detection.BalanceBook balances = new io.openchain.intelligence.detection.BalanceBook();
     /** Last applied freeze/unfreeze per (address, label source), with the state it replaced (for reorg reverts). */
     private final Map<String, FreezeState> freezeStates = new java.util.concurrent.ConcurrentHashMap<>();

@@ -156,6 +156,13 @@ public final class AddressHistoryService implements AutoCloseable {
     }
 
     /** Runs the backfill of {@code id} on the caller's thread (also used by tests). Returns the final progress. */
+    /** Addresses whose history was loaded (any status): their flows are kept in the working set. */
+    public java.util.Set<Address> historyAddresses() {
+        java.util.Set<Address> out = new java.util.HashSet<>();
+        for (Progress p : store.all()) out.add(new Address(p.network(), p.address()));
+        return out;
+    }
+
     public Progress run(String id) {
         Progress p = store.load(id).orElseThrow(() -> new IllegalArgumentException("unknown history backfill " + id));
         if (p.status().terminal()) return p;

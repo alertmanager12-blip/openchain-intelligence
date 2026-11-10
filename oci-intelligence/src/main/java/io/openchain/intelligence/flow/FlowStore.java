@@ -17,6 +17,16 @@ public interface FlowStore {
     /** Flows received by the address, ordered by timestamp ascending. */
     List<ValueFlow> incoming(Address address);
 
+    /**
+     * Removes the flows older than the cutoff of their network ({@code null}: none removed on that network) that involve no
+     * kept address; returns how many were removed. Bounds the in-memory working set (default: nothing removed).
+     */
+    default int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
+                            java.util.function.Predicate<Address> keep) { return 0; }
+
+    /** Flows held, or -1 when unknown. */
+    default int size() { return -1; }
+
     /** All flows involving the address (both directions), ordered by timestamp ascending. */
     default List<ValueFlow> involving(Address address) {
         var all = new java.util.ArrayList<ValueFlow>(outgoing(address));

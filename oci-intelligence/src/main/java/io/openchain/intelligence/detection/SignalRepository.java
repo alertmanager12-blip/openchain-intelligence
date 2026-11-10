@@ -14,4 +14,7 @@ public interface SignalRepository {
     List<Signal> findByAddress(Address address);
 
     int size();
+
+    /** Removes the signals detected before {@code cutoff} unless {@code keep} holds; returns how many were removed. */
+    default int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return 0; }
 }

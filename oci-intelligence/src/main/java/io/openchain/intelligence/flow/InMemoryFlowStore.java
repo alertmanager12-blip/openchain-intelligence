@@ -28,6 +28,28 @@ public final class InMemoryFlowStore implements FlowStore {
     }
 
     @Override public synchronized boolean contains(String eventId) { return ids.contains(eventId); }
+
+    @Override public synchronized int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoffOf,
+                                                  java.util.function.Predicate<Address> keep) {
+        java.util.Set<String> gone = new HashSet<>();
+        for (var lists : List.of(out, in)) {
+            for (var it = lists.entrySet().iterator(); it.hasNext(); ) {
+                List<ValueFlow> l = it.next().getValue();
+                l.removeIf(f -> {
+                    java.time.Instant cutoff = cutoffOf.apply(f.network());
+                    boolean old = cutoff != null && f.timestamp() != null && f.timestamp().isBefore(cutoff)
+                            && !keep.test(f.from()) && !keep.test(f.to());
+                    if (old) gone.add(f.eventId());
+                    return old;
+                });
+                if (l.isEmpty()) it.remove();
+            }
+        }
+        ids.removeAll(gone);
+        return gone.size();
+    }
+
+    @Override public synchronized int size() { return ids.size(); }
     @Override public synchronized List<ValueFlow> outgoing(Address a) { return List.copyOf(out.getOrDefault(a, List.of())); }
     @Override public synchronized List<ValueFlow> incoming(Address a) { return List.copyOf(in.getOrDefault(a, List.of())); }
 }

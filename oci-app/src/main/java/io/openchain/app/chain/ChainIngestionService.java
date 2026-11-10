@@ -319,8 +319,7 @@ public class ChainIngestionService {
             if (flow.isPresent()) {
                 ValueFlow f = flow.get();
                 transfersIndexed.incrementAndGet();
-                trackedWallets.add(f.from());
-                trackedWallets.add(f.to());
+                track(f);
                 WalletProfile senderBefore = intelligence.profiles().profileOrEmpty(f.from());
                 Optional<BigDecimal> realBalance = Optional.empty();
                 boolean real = intelligence.balances().authoritative(e.network());
@@ -439,8 +438,7 @@ public class ChainIngestionService {
                 for (var f : chunk) {
                     if (intelligence.flows().add(f)) {
                         intelligence.profiles().ingest(f);
-                        trackedWallets.add(f.from());
-                        trackedWallets.add(f.to());
+                        track(f);
                     }
                 }
             });
@@ -468,8 +466,7 @@ public class ChainIngestionService {
             if (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER) {
                 Optional<ValueFlow> f = toFlow(e);
                 if (f.isEmpty()) continue;
-                trackedWallets.add(f.get().from());
-                trackedWallets.add(f.get().to());
+                track(f.get());
                 r = intelligence.onFlow(f.get());
             } else if (e.type() == ChainEvent.EventType.APPROVAL) {
                 r = intelligence.onEvent(e);
@@ -644,6 +641,59 @@ public class ChainIngestionService {
     public long eventsRetracted() { return eventsRetracted.get(); }
     /** Addresses seen in at least one indexed value flow. */
     public Set<Address> trackedWallets() { return Set.copyOf(trackedWallets); }
+
+    public int trackedWalletCount() { return trackedWallets.size(); }
+
+    /** Latest flow time seen per network (event time): the working-set trim measures ages against it, not the clock. */
+    private final Map<Network, Instant> flowWatermark = new ConcurrentHashMap<>();
+
+    private void track(ValueFlow f) {
+        trackedWallets.add(f.from());
+        trackedWallets.add(f.to());
+        if (f.timestamp() != null) flowWatermark.merge(f.network(), f.timestamp(), (a, b) -> a.isAfter(b) ? a : b);
+    }
+
+    /** What one working-set trim removed and what is left (logged, exposed as metrics, returned for tests). */
+    public record TrimResult(int flows, int signals, int profiles, int remainingFlows, int remainingSignals,
+                             int remainingProfiles, int remainingScoredAddresses, int trackedWallets, long millis) {}
+
+    private volatile TrimResult lastTrim;
+
+    /** The last working-set trim, or null before the first one. */
+    public TrimResult lastTrim() { return lastTrim; }
+
+    /**
+     * Bounds the in-memory working set (ADR-0024 step 3a). Ages of flows and profiles are measured, per network, against
+     * the latest flow time seen on that network (event time, capped at the clock), not the clock: a catch-up after downtime
+     * never evicts what it just indexed, and a stalled network does not stop the trim of the others. Kept addresses
+     * (watchlist, loaded address history) are never trimmed.
+     * <ul>
+     *   <li>flows older than {@code flowRetention};</li>
+     *   <li>profiles, scores and tracking of wallets without a flow for {@code profileIdle};</li>
+     *   <li>signals older than {@code signalRetention} whose wallet no longer has a profile (risk scores are computed from
+     *       the stored signals of the wallet, so they stay as long as the wallet is in the working set), except HIGH and
+     *       CRITICAL ones.</li>
+     * </ul>
+     */
+    public synchronized TrimResult trimWorkingSet(Duration flowRetention, Duration signalRetention, Duration profileIdle,
+                                                  java.util.function.Predicate<Address> keep) {
+        long t0 = System.nanoTime();
+        Instant now = clock.instant();
+        Map<Network, Instant> reference = new java.util.EnumMap<>(Network.class);
+        flowWatermark.forEach((n, w) -> reference.put(n, w.isAfter(now) ? now : w));
+        int flows = intelligence.flows().evictBefore(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(flowRetention); }, keep);
+        Set<Address> idle = intelligence.profiles().evictIdle(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(profileIdle); }, keep);
+        intelligence.scoring().forget(idle);
+        trackedWallets.removeAll(idle);
+        var profiles = intelligence.profiles();
+        int signals = intelligence.signals().evictBefore(now.minus(signalRetention),
+                s -> keep.test(s.address()) || profiles.has(s.address())
+                        || s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0);
+        TrimResult r = new TrimResult(flows, signals, idle.size(), intelligence.flows().size(), intelligence.signals().size(),
+                profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000);
+        lastTrim = r;
+        return r;
+    }
 
     /** Most recent detection signals first. */
     public List<Signal> recentSignals() {

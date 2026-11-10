@@ -50,9 +50,41 @@ public final class WalletProfileService {
     }
 
     private boolean update(Address a, Function<WalletProfileAccumulator, Boolean> op) {
-        WalletProfileAccumulator acc = accumulators.computeIfAbsent(a, WalletProfileAccumulator::new);
-        synchronized (acc) { return op.apply(acc); }
+        while (true) {
+            WalletProfileAccumulator acc = accumulators.computeIfAbsent(a, WalletProfileAccumulator::new);
+            synchronized (acc) {
+                if (acc.retired) continue; // removed by evictIdle between the lookup and the lock: use a fresh one
+                return op.apply(acc);
+            }
+        }
     }
+
+    /**
+     * Removes the profiles of wallets inactive since the cutoff of their network (latest flow older; {@code null}: none on
+     * that network) that are not kept; returns the removed addresses (their scores and tracking can then be dropped too).
+     */
+    public java.util.Set<Address> evictIdle(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoffOf,
+                                            java.util.function.Predicate<Address> keep) {
+        java.util.Set<Address> gone = new java.util.HashSet<>();
+        for (var e : accumulators.entrySet()) {
+            WalletProfileAccumulator acc = e.getValue();
+            if (keep.test(e.getKey())) continue;
+            java.time.Instant cutoff = cutoffOf.apply(e.getKey().network());
+            if (cutoff == null) continue;
+            synchronized (acc) { // no flow can be applied to it while it is checked and removed
+                java.time.Instant last = acc.lastActivity();
+                if (last != null && last.isBefore(cutoff) && accumulators.remove(e.getKey(), acc)) {
+                    acc.retired = true;
+                    gone.add(e.getKey());
+                }
+            }
+        }
+        return gone;
+    }
+
+    public int size() { return accumulators.size(); }
+
+    public boolean has(Address a) { return accumulators.containsKey(a); }
 
     public Optional<WalletProfile> profile(Address a) {
         WalletProfileAccumulator acc = accumulators.get(a);

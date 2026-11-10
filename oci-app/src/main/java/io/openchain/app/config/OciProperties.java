@@ -106,6 +106,24 @@ public class OciProperties {
         /** Recorded (enriched) events kept in memory for alert context and dry runs. */
         private int eventHistorySize = 100_000;
         /**
+         * In-memory working set bounds (ADR-0024 step 3), except for watched wallets and addresses with loaded history:
+         * flows older than {@code workingSetFlowRetention}, signals older than {@code workingSetSignalRetention} (HIGH and
+         * CRITICAL kept) and profiles of wallets idle for {@code workingSetProfileIdle}; trimmed every {@code workingSetTrimInterval}.
+         */
+        private Duration workingSetFlowRetention = Duration.ofHours(24);
+        private Duration workingSetSignalRetention = Duration.ofHours(48);
+        private Duration workingSetProfileIdle = Duration.ofDays(7);
+        private Duration workingSetTrimInterval = Duration.ofMinutes(10);
+
+        public Duration getWorkingSetFlowRetention() { return workingSetFlowRetention; }
+        public void setWorkingSetFlowRetention(Duration v) { this.workingSetFlowRetention = v; }
+        public Duration getWorkingSetSignalRetention() { return workingSetSignalRetention; }
+        public void setWorkingSetSignalRetention(Duration v) { this.workingSetSignalRetention = v; }
+        public Duration getWorkingSetProfileIdle() { return workingSetProfileIdle; }
+        public void setWorkingSetProfileIdle(Duration v) { this.workingSetProfileIdle = v; }
+        public Duration getWorkingSetTrimInterval() { return workingSetTrimInterval; }
+        public void setWorkingSetTrimInterval(Duration v) { this.workingSetTrimInterval = v; }
+        /**
          * Observation time a real chain needs before "first seen by the platform" fields (wallet.age_days, wallet.tx_count,
          * counterparty.age_days, approval.spender_age_days) are emitted (OCI_INGESTION_AGE_WARMUP, default 30 days).
          */

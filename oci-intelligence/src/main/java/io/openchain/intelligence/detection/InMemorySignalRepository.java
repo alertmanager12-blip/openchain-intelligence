@@ -20,4 +20,15 @@ public final class InMemorySignalRepository implements SignalRepository {
     @Override public synchronized Optional<Signal> findById(String id) { return Optional.ofNullable(byId.get(id)); }
     @Override public synchronized List<Signal> findByAddress(Address a) { return List.copyOf(byAddress.getOrDefault(a, List.of())); }
     @Override public synchronized int size() { return byId.size(); }
+
+    @Override public synchronized int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) {
+        int before = byId.size();
+        byId.values().removeIf(s -> s.detectedAt() != null && s.detectedAt().isBefore(cutoff) && !keep.test(s));
+        for (var it = byAddress.entrySet().iterator(); it.hasNext(); ) {
+            List<Signal> l = it.next().getValue();
+            l.removeIf(s -> !byId.containsKey(s.id()));
+            if (l.isEmpty()) it.remove();
+        }
+        return before - byId.size();
+    }
 }

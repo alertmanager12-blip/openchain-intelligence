@@ -51,6 +51,15 @@ public class MetricsConfiguration {
                         .description("Time events waited for the processing lock").tag("network", id).register(registry);
             }
             FunctionCounter.builder("oci.events.indexed", chains, ChainIngestionService::eventsIndexed).register(registry);
+            // working set (ADR-0024 step 3a): sizes after the last trim, and its duration
+            for (var e : java.util.Map.<String, java.util.function.ToDoubleFunction<ChainIngestionService.TrimResult>>of(
+                    "flows", t -> t.remainingFlows(), "signals", t -> t.remainingSignals(), "profiles", t -> t.remainingProfiles(),
+                    "scored_addresses", t -> t.remainingScoredAddresses(), "tracked_wallets", t -> t.trackedWallets()).entrySet()) {
+                Gauge.builder("oci.working.set.size", chains, c -> c.lastTrim() == null ? Double.NaN : e.getValue().applyAsDouble(c.lastTrim()))
+                        .description("Items held in memory after the last working-set trim").tag("kind", e.getKey()).register(registry);
+            }
+            Gauge.builder("oci.working.set.trim.millis", chains, c -> c.lastTrim() == null ? Double.NaN : c.lastTrim().millis())
+                    .description("Duration of the last working-set trim").register(registry);
             FunctionCounter.builder("oci.events.retracted", chains, ChainIngestionService::eventsRetracted).register(registry);
             FunctionCounter.builder("oci.balance.lookups", chains, ChainIngestionService::balanceLookups).tag("outcome", "made").register(registry);
             FunctionCounter.builder("oci.balance.lookups", chains, ChainIngestionService::balanceLookupFailures).tag("outcome", "failed").register(registry);

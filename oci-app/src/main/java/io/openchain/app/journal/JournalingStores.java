@@ -24,6 +24,9 @@ public final class JournalingStores {
         @Override public List<ValueFlow> outgoing(Address a) { return delegate.outgoing(a); }
         @Override public List<ValueFlow> incoming(Address a) { return delegate.incoming(a); }
         @Override public List<ValueFlow> involving(Address a) { return delegate.involving(a); }
+        @Override public int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
+                                         java.util.function.Predicate<Address> keep) { return delegate.evictBefore(cutoff, keep); }
+        @Override public int size() { return delegate.size(); }
     }
 
     public record Signals(SignalRepository delegate, IntelligenceJournal journal) implements SignalRepository {
@@ -35,6 +38,7 @@ public final class JournalingStores {
         @Override public Optional<Signal> findById(String id) { return delegate.findById(id); }
         @Override public List<Signal> findByAddress(Address a) { return delegate.findByAddress(a); }
         @Override public int size() { return delegate.size(); }
+        @Override public int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return delegate.evictBefore(cutoff, keep); }
     }
 
     public record Scores(RiskScoreRepository delegate, IntelligenceJournal journal) implements RiskScoreRepository {
@@ -44,5 +48,7 @@ public final class JournalingStores {
         }
         @Override public List<RiskScore> history(Address a) { return delegate.history(a); }
         @Override public Optional<RiskScore> latest(Address a) { return delegate.latest(a); }
+        @Override public int forget(java.util.Collection<Address> addresses) { return delegate.forget(addresses); }
+        @Override public int addresses() { return delegate.addresses(); }
     }
 }

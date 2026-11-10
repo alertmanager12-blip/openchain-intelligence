@@ -39,6 +39,12 @@ public final class WalletProfileAccumulator {
 
     public WalletProfileAccumulator(Address address) { this.address = address; }
 
+    /** Set (under the accumulator lock) when the working-set trim removed it: writers then retry with a fresh one. */
+    boolean retired;
+
+    /** Time of the latest applied flow, or null. Callers synchronise on the accumulator. */
+    public Instant lastActivity() { return activity.isEmpty() ? null : activity.lastKey(); }
+
     /** @return false when the flow was already applied or does not involve this wallet. */
     public boolean apply(ValueFlow f) {
         if (!f.involves(address) || !seenEvents.add(f.eventId())) return false;
