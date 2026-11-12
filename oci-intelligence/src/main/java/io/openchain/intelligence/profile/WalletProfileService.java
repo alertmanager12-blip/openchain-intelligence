@@ -116,6 +116,62 @@ public final class WalletProfileService {
 
     public int size() { return accumulators.size(); }
 
+    /**
+     * The instance of {@code a} held by its profile, or {@code a} itself when it has no profile (CanonicalInstances: flows
+     * then share the profile's instance; it lives as long as the profile, nothing else retains it).
+     */
+    public Address canonicalAddress(Address a) {
+        WalletProfileAccumulator acc = accumulators.get(a);
+        return acc == null ? a : acc.address();
+    }
+
+    /**
+     * Orphan dedup keys (step 3 diagnostic, read-only, computed on demand): keys of profiles whose flow is no longer in the
+     * flow store. Keys are copied under each profile's lock, then checked outside it (no lock is held on two structures).
+     *
+     * @param flowInStore whether the flow store still holds an event id
+     * @param sampleMask  distinct orphan ids are sampled on {@code (hash & sampleMask) == 0} (e.g. 63: 1 in 64)
+     */
+    public OrphanKeyReport orphanKeys(java.util.function.Predicate<String> flowInStore, int sampleMask) {
+        long t0 = System.nanoTime();
+        java.time.Instant now = clock.instant();
+        long profiles = 0, eventKeys = 0, txLevelKeys = 0, liveFlowKeys = 0, orphanFlowKeys = 0, orphanFlowKeyBytes = 0;
+        long txKeys = 0, orphanTxKeys = 0, orphanTxKeyBytes = 0, profilesWithOrphans = 0;
+        long[] perProfile = new long[OrphanKeyReport.PER_PROFILE_BUCKETS.length + 1];
+        long[] byIdle = new long[OrphanKeyReport.IDLE_BUCKETS.length + 1];
+        java.util.Set<String> sample = new java.util.HashSet<>();
+        for (WalletProfileAccumulator acc : accumulators.values()) {
+            List<String> ev, tx; java.time.Instant last;
+            synchronized (acc) { if (acc.retired) continue; ev = acc.eventKeys(); tx = acc.txKeys(); last = acc.lastActivity(); }
+            profiles++;
+            java.util.Set<String> liveTx = new java.util.HashSet<>();
+            long orphans = 0;
+            for (String k : ev) {
+                eventKeys++;
+                if (k.endsWith(":tx")) { txLevelKeys++; continue; } // transaction-level key: never a flow id
+                if (flowInStore.test(k)) {
+                    liveFlowKeys++;
+                    int a = k.indexOf(':'), b = k.lastIndexOf(':');
+                    if (a >= 0 && b > a) liveTx.add(k.substring(a + 1, b));
+                } else {
+                    orphanFlowKeys++; orphans++; orphanFlowKeyBytes += OrphanKeyReport.entryBytes(k);
+                    if ((k.hashCode() & sampleMask) == 0) sample.add(k);
+                }
+            }
+            for (String h : tx) {
+                txKeys++;
+                if (!liveTx.contains(h)) { orphanTxKeys++; orphanTxKeyBytes += OrphanKeyReport.entryBytes(h); }
+            }
+            if (orphans > 0) profilesWithOrphans++;
+            perProfile[OrphanKeyReport.bucket(OrphanKeyReport.PER_PROFILE_BUCKETS, orphans)]++;
+            long idleSeconds = last == null ? Long.MAX_VALUE : java.time.Duration.between(last, now).toSeconds();
+            byIdle[OrphanKeyReport.bucket(OrphanKeyReport.IDLE_BUCKETS, idleSeconds)] += orphans;
+        }
+        return new OrphanKeyReport(now, profiles, eventKeys, txLevelKeys, liveFlowKeys, orphanFlowKeys, orphanFlowKeyBytes,
+                (long) sample.size() * (sampleMask + 1L), txKeys, orphanTxKeys, orphanTxKeyBytes, profilesWithOrphans,
+                perProfile, byIdle, (System.nanoTime() - t0) / 1_000_000);
+    }
+
     /** The live accumulator of an address, or null (tests). */
     WalletProfileAccumulator accumulator(Address a) { return accumulators.get(a); }
 

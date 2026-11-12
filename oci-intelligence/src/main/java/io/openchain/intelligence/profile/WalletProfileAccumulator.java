@@ -183,6 +183,13 @@ public final class WalletProfileAccumulator {
         for (int i = COUNTERPARTY_CAP; i < all.size(); i++) counterparties.remove(all.get(i).getKey());
     }
 
+    /** The address this profile describes (the canonical instance shared with stored flows, see CanonicalInstances). */
+    public Address address() { return address; }
+
+    /** Copy of the remembered dedup keys (diagnostic, read-only): event ids then transaction hashes. Callers synchronise. */
+    List<String> eventKeys() { return new ArrayList<>(seenEvents.keySet()); }
+    List<String> txKeys() { return new ArrayList<>(txHashes.keySet()); }
+
     /** Entries held in the bounded collections (tests: the footprint does not grow with the number of transfers). */
     int retainedEntries() { return seenEvents.size() + txHashes.size() + activity.size() + counterparties.size() + contracts.size(); }
 

@@ -61,6 +61,18 @@ public class MetricsConfiguration {
         };
     }
 
+    /** Instance sharing of stored flows (step 3 option A): size of the bounded token table and how often it shares. */
+    @Bean MeterBinder canonicalInstanceMetrics(io.openchain.intelligence.IntelligencePipeline intelligence) {
+        return registry -> {
+            var c = intelligence.canonicalInstances();
+            Gauge.builder("oci.canonical.tokens", c, x -> x.stats().tokens()).description("Canonical token instances held (bounded)").register(registry);
+            Gauge.builder("oci.canonical.token.lookups", c, x -> x.stats().tokenHits()).tag("result", "shared").register(registry);
+            Gauge.builder("oci.canonical.token.lookups", c, x -> x.stats().tokenMisses()).tag("result", "registered").register(registry);
+            Gauge.builder("oci.canonical.addresses.shared", c, x -> x.stats().addressesShared())
+                    .description("Flow addresses replaced by the instance held by the wallet profile").register(registry);
+        };
+    }
+
     @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules,
                                  io.openchain.intelligence.IntelligencePipeline intelligence) {
         return registry -> {

@@ -79,9 +79,26 @@ public final class IntelligencePipeline {
 
     public IntelligencePipeline(FlowStore flows, WalletProfileService profiles, LabelRepository labels, SignalRepository signals,
                                 DetectionEngine detection, RiskScoringService scoring, DetectionConfig config, Clock clock) {
+        this(flows, profiles, labels, signals, detection, scoring, config, clock, null);
+    }
+
+    /** @param canonical instance sharing of stored flows; null: the default (bounded tokens, addresses held by profiles) */
+    public IntelligencePipeline(FlowStore flows, WalletProfileService profiles, LabelRepository labels, SignalRepository signals,
+                                DetectionEngine detection, RiskScoringService scoring, DetectionConfig config, Clock clock,
+                                io.openchain.intelligence.memory.CanonicalInstances canonical) {
         this.flows = flows; this.profiles = profiles; this.labels = labels; this.signals = signals;
         this.detection = detection; this.scoring = scoring; this.config = config; this.clock = clock;
+        this.canonical = canonical != null ? canonical : new io.openchain.intelligence.memory.CanonicalInstances(
+                io.openchain.intelligence.memory.CanonicalInstances.DEFAULT_TOKEN_CAPACITY, profiles::canonicalAddress);
     }
+
+    private final io.openchain.intelligence.memory.CanonicalInstances canonical;
+
+    /** Instance sharing of stored flows (option A): {@link #canonical(ValueFlow)} and its statistics. */
+    public io.openchain.intelligence.memory.CanonicalInstances canonicalInstances() { return canonical; }
+
+    /** An equal flow sharing the canonical token and address instances (identity only; see CanonicalInstances). */
+    public ValueFlow canonical(ValueFlow f) { return canonical.flow(f); }
 
     /** Fully in-memory wiring with the default detectors. */
     public static IntelligencePipeline inMemory(DetectionConfig dc, ScoringConfig sc, Clock clock) {
@@ -110,7 +127,8 @@ public final class IntelligencePipeline {
         return nat.map(this::onFlow).orElse(Result.DUPLICATE);
     }
 
-    public Result onFlow(ValueFlow f) {
+    public Result onFlow(ValueFlow incoming) {
+        ValueFlow f = canonical.flow(incoming); // equal flow, shared instances
         if (!flows.add(f)) return Result.DUPLICATE;
         profiles.ingest(f);
         Set<Address> subjects = new LinkedHashSet<>(List.of(f.from(), f.to()));

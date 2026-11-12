@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Changed (memory — shared instances, `docs/KEY_COMPACTION_IMPLEMENTATION_REPORT.md`)
+
+- **Stored flows share one instance per equal token and per address** instead of a new token and new addresses per decoded event. Tokens are shared on their full identity (network, contract, symbol, decimals: two tokens with the same symbol stay distinct) in a bounded table (4,096, least recently used forgotten first); addresses reuse the instance held by the wallet's profile, so no table of their own and no reference outlives the profile. Native coin descriptors are now one per network. Equality, identification, deduplication, retractions and re-inclusions are unchanged (differential tests, forced hash collisions).
+- **Diagnostic of orphan dedup keys** (keys kept by profiles after their flow left memory), on request only: `GET /api/v1/admin/working-set/profile-keys` (permission `keys:admin`).
+
 ### Added (observation — exempt working set, `docs/EXEMPT_METRICS_REPORT.md`)
 
 - **The addresses exempt from the working-set trim are measured, nothing else changes**: per category (watchlist; address history loaded, partial, in progress, empty, failed) the number of addresses, flows and signals in memory, an estimate of their memory, the age of the last consultation and, for information only, how far the proposed caps (10,000 flows per address, 150,000 in all) would be exceeded. Prometheus gauges `oci_exempt_*` (no address label) and `GET /api/v1/admin/working-set/exempt` (permission `keys:admin`) for the per-address detail; one summary line per trim.

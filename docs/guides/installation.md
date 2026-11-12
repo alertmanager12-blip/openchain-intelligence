@@ -125,6 +125,12 @@ signals × 1,057 B, lab costs), `oci_exempt_max_flows_per_address`, `oci_exempt_
 `oci_exempt_proposed_cap_addresses_over` and `oci_exempt_proposed_cap_flows_over`. Per address:
 `GET /api/v1/admin/working-set/exempt` (permission `keys:admin`); addresses are deliberately not Prometheus labels.
 
+**Shared instances (step 3).** Stored flows share one instance per equal token (bounded table of 4,096 tokens, least
+recently used forgotten first) and per address (the instance already held by the wallet's profile; nothing else retains
+it). Only object identity changes. Gauges: `oci_canonical_tokens`, `oci_canonical_token_lookups{result}`,
+`oci_canonical_addresses_shared`. Diagnostic of dedup keys kept by profiles after their flow left memory, computed only
+on request: `GET /api/v1/admin/working-set/profile-keys` (permission `keys:admin`).
+
 **Very active wallets (step 3b).** A wallet profile no longer grows with its number of transfers: duplicate detection
 remembers the latest 4,096 event ids and transaction hashes, activity times are exact for the latest 2,048 instants
 (older ones are folded, first activity stays exact), the 1,024 counterparties with the most transfers are kept and

@@ -488,7 +488,8 @@ public class ChainIngestionService {
             var chunk = flows.subList(i, Math.min(flows.size(), i + HISTORY_CHUNK));
             long t0 = System.nanoTime();
             restoreChunk(() -> {
-                for (var f : chunk) {
+                for (var restored : chunk) {
+                    var f = intelligence.canonical(restored); // equal flow, shared instances
                     if (intelligence.flows().add(f)) {
                         intelligence.profiles().ingest(f);
                         track(f);
