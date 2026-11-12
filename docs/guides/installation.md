@@ -104,9 +104,14 @@ the head. A background trim runs every `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL`
 **Hard caps (step 3b).** At chain-wide volume the time windows alone do not bound memory (measured on 2026-11-10: with
 2-hour windows the old generation still reached 2.9 GB of a 3 GB heap after 3 hours). After the time windows, the trim
 enforces caps: `OCI_INGESTION_WORKING_SET_MAX_FLOWS` (default 400,000), `OCI_INGESTION_WORKING_SET_MAX_PROFILES` (300,000)
-and `OCI_INGESTION_WORKING_SET_MAX_SIGNALS` (150,000). Beyond a cap the oldest flows, the least recently active profiles
-(with their scores and tracking) and the oldest signals of wallets without a profile are removed, **HIGH and CRITICAL
-signals included** (alerts already raised are stored in PostgreSQL and stay). Watched wallets and loaded histories are
+and `OCI_INGESTION_WORKING_SET_MAX_SIGNALS` (150,000). Beyond a cap the oldest flows and the least recently active
+profiles (with their scores and tracking) are removed. Signals are bounded twice: per wallet
+(`OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET`, 64: the most represented signal type gives way first, so every kind
+of evidence keeps its latest signals, and HIGH/CRITICAL go only when nothing weaker is left) and globally, exactly at the
+cap, in this order: INFO..MEDIUM of wallets without a profile, INFO..MEDIUM of profiled wallets, HIGH/CRITICAL of wallets
+without a profile, HIGH/CRITICAL of profiled wallets (alerts already raised are stored in PostgreSQL and stay). Every
+removal is counted: `oci_signals_evicted_total{reason,severity}` and `oci_signals_evicted_by_type_total{reason,type}`, and
+each trim log line lists the signals removed by severity. Watched wallets and loaded histories are
 never removed and are not counted. The defaults are sized for the 3 GB heap of the 4 GB container of `docker-compose.yml`;
 raise them with the heap. When a cap is the binding limit, the effective windows are shorter than 24 h / 7 days / 48 h:
 the trim log line shows how much was removed.

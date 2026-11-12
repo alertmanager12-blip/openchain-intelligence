@@ -359,9 +359,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         var r = chains.trimWorkingSet(ing.getWorkingSetFlowRetention(), ing.getWorkingSetSignalRetention(), ing.getWorkingSetProfileIdle(),
                 ing.getWorkingSetMaxFlows(), ing.getWorkingSetMaxSignals(), ing.getWorkingSetMaxProfiles(),
                 a -> histories.contains(a) || (w != null && w.isWatched(a)));
-        log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s), {} idle profile(s); kept {} flow(s), {} signal(s), "
-                + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.profiles(),
-                r.remainingFlows(), r.remainingSignals(), r.remainingProfiles(), r.remainingScoredAddresses(), r.trackedWallets());
+        log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s) {}, {} idle profile(s); kept {} flow(s), {} signal(s), "
+                + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.signalsRemovedBySeverity(),
+                r.profiles(), r.remainingFlows(), r.remainingSignals(), r.remainingProfiles(), r.remainingScoredAddresses(), r.trackedWallets());
     }
 
     private io.openchain.app.journal.JdbcIntelligenceJournal journal;

@@ -55,13 +55,14 @@ public class ModulesConfiguration {
     @Bean EventHistory eventHistory(OciProperties props) { return new EventHistory(props.getIngestion().getEventHistorySize()); }
 
     @Bean
-    IntelligencePipeline intelligencePipeline(LabelCatalog labels, Clock clock,
+    IntelligencePipeline intelligencePipeline(LabelCatalog labels, Clock clock, OciProperties props,
                                               org.springframework.beans.factory.ObjectProvider<io.openchain.app.journal.IntelligenceJournal> journals) {
         // in memory: the working set read synchronously by the detectors; with PostgreSQL every new flow, signal and score
         // is also journaled behind the hot path and reloaded at start-up (ADR-0024 step 2)
         io.openchain.app.journal.IntelligenceJournal journal = journals.getIfAvailable();
         io.openchain.intelligence.flow.FlowStore flows = new InMemoryFlowStore();
-        io.openchain.intelligence.detection.SignalRepository signals = new InMemorySignalRepository();
+        io.openchain.intelligence.detection.SignalRepository signals =
+                new InMemorySignalRepository(props.getIngestion().getWorkingSetMaxSignalsPerWallet());
         io.openchain.intelligence.risk.RiskScoreRepository scores = new InMemoryRiskScoreRepository();
         if (journal != null) {
             flows = new io.openchain.app.journal.JournalingStores.Flows(flows, journal);

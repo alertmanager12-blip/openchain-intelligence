@@ -708,7 +708,9 @@ public class ChainIngestionService {
 
     /** What one working-set trim removed and what is left (logged, exposed as metrics, returned for tests). */
     public record TrimResult(int flows, int signals, int profiles, int remainingFlows, int remainingSignals,
-                             int remainingProfiles, int remainingScoredAddresses, int trackedWallets, long millis) {}
+                             int remainingProfiles, int remainingScoredAddresses, int trackedWallets, long millis,
+                             /** signals removed by this trim, by severity (P0 item 3: no silent removal) */
+                             java.util.Map<String, Long> signalsRemovedBySeverity) {}
 
     private volatile TrimResult lastTrim;
 
@@ -754,14 +756,33 @@ public class ChainIngestionService {
         intelligence.scoring().forget(idle);
         trackedWallets.removeAll(idle);
         var profiles = intelligence.profiles();
+        java.util.Map<String, Long> evictedBefore = intelligence.signals().evictionCounts();
         int signals = intelligence.signals().evictBefore(now.minus(signalRetention),
                 s -> keep.test(s.address()) || profiles.has(s.address())
                         || s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0);
-        signals += intelligence.signals().evictOldest(maxSignals, s -> keep.test(s.address()) || profiles.has(s.address()));
+        // exact global cap (P0 item 3), HIGH/CRITICAL protected first: (0) INFO..MEDIUM of wallets without a profile,
+        // (1) INFO..MEDIUM of profiled wallets, (2) HIGH/CRITICAL of wallets without a profile, (3) HIGH/CRITICAL of
+        // profiled wallets; watched wallets and loaded histories exempt (measured separately)
+        signals += intelligence.signals().evictToCap(maxSignals, s -> keep.test(s.address()), s -> {
+            boolean grave = s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0;
+            boolean profiled = profiles.has(s.address());
+            return grave ? (profiled ? 3 : 2) : (profiled ? 1 : 0);
+        });
         TrimResult r = new TrimResult(flows, signals, idle.size(), intelligence.flows().size(), intelligence.signals().size(),
-                profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000);
+                profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000,
+                bySeverity(evictedBefore, intelligence.signals().evictionCounts()));
         lastTrim = r;
         return r;
+    }
+
+    /** Signal removals between two snapshots of the eviction counters, summed by severity (key reason|severity|type). */
+    static java.util.Map<String, Long> bySeverity(java.util.Map<String, Long> before, java.util.Map<String, Long> after) {
+        java.util.Map<String, Long> out = new java.util.TreeMap<>();
+        after.forEach((k, v) -> {
+            long d = v - before.getOrDefault(k, 0L);
+            if (d > 0) out.merge(k.split("\\|")[1], d, Long::sum);
+        });
+        return out;
     }
 
     /** Most recent detection signals first. */

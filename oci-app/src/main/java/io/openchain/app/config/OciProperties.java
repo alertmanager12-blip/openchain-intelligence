@@ -124,6 +124,10 @@ public class OciProperties {
 
         public int getWorkingSetMaxFlows() { return workingSetMaxFlows; }
         public void setWorkingSetMaxFlows(int v) { this.workingSetMaxFlows = v; }
+        /** Signals kept per wallet (P0 item 3): lowest severity, then oldest, removed first; HIGH/CRITICAL last. */
+        private int workingSetMaxSignalsPerWallet = 64;
+        public int getWorkingSetMaxSignalsPerWallet() { return workingSetMaxSignalsPerWallet; }
+        public void setWorkingSetMaxSignalsPerWallet(int v) { this.workingSetMaxSignalsPerWallet = v; }
         public int getWorkingSetMaxSignals() { return workingSetMaxSignals; }
         public void setWorkingSetMaxSignals(int v) { this.workingSetMaxSignals = v; }
         public int getWorkingSetMaxProfiles() { return workingSetMaxProfiles; }

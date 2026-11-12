@@ -29,7 +29,8 @@ public class MetricsConfiguration {
         };
     }
 
-    @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules) {
+    @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules,
+                                 io.openchain.intelligence.IntelligencePipeline intelligence) {
         return registry -> {
             for (Network n : Network.values()) {
                 String id = n.id();
@@ -61,6 +62,24 @@ public class MetricsConfiguration {
             Gauge.builder("oci.working.set.trim.millis", chains, c -> c.lastTrim() == null ? Double.NaN : c.lastTrim().millis())
                     .description("Duration of the last working-set trim").register(registry);
             FunctionCounter.builder("oci.events.retracted", chains, ChainIngestionService::eventsRetracted).register(registry);
+            // signal removals (P0 item 3): nothing is removed silently
+            var signalStore = intelligence.signals();
+            for (var reason : io.openchain.intelligence.detection.SignalRepository.EvictionReason.values()) {
+                for (var sev : io.openchain.core.detection.Severity.values()) {
+                    String prefix = reason + "|" + sev + "|";
+                    FunctionCounter.builder("oci.signals.evicted", signalStore, st -> st.evictionCounts().entrySet().stream()
+                                    .filter(e -> e.getKey().startsWith(prefix)).mapToLong(java.util.Map.Entry::getValue).sum())
+                            .description("Signals removed from the working set").tag("reason", reason.name().toLowerCase())
+                            .tag("severity", sev.name()).register(registry);
+                }
+                for (var type : io.openchain.core.detection.SignalType.values()) {
+                    String prefix = reason + "|", suffix = "|" + type;
+                    FunctionCounter.builder("oci.signals.evicted.by.type", signalStore, st -> st.evictionCounts().entrySet().stream()
+                                    .filter(e -> e.getKey().startsWith(prefix) && e.getKey().endsWith(suffix)).mapToLong(java.util.Map.Entry::getValue).sum())
+                            .description("Signals removed from the working set, by signal type").tag("reason", reason.name().toLowerCase())
+                            .tag("type", type.name()).register(registry);
+                }
+            }
             // chain reorganisations (docs/P0_REORG_DESIGN.md)
             FunctionCounter.builder("oci.reorg.reverted.flows", chains, ChainIngestionService::reorgRevertedFlows)
                     .description("Value flows reverted after their block left the canonical chain").register(registry);

@@ -113,4 +113,40 @@ class WorkingSetTrimTest {
         assertThat(intel.flows().contains("polygon:0xcap0:0")).isFalse();
         assertThat(r.remainingFlows()).isEqualTo(intel.flows().size());
     }
+
+    /** P0 item 3: the global signal cap is exact, removes the weakest tiers first and reports every removal by severity. */
+    @Test void globalSignalCapIsExactAndKeepsGraveSignalsOfActiveWallets() {
+        ChainIngestionService chains = ctx.getBean(ChainIngestionService.class);
+        IntelligencePipeline intel = ctx.getBean(IntelligencePipeline.class);
+        Instant now = Instant.now();
+        Address active = new Address(Network.POLYGON, "0x" + "7a".repeat(20)), peer = new Address(Network.POLYGON, "0x" + "7b".repeat(20));
+        Address gone = new Address(Network.POLYGON, "0x" + "7c".repeat(20)), watched = new Address(Network.POLYGON, "0x" + "7d".repeat(20));
+        List<Signal> sigs = new java.util.ArrayList<>();
+        for (int i = 0; i < 6; i++) sigs.add(signal("cap-low-" + i, active, Severity.LOW, now.minusSeconds(600 - i)));
+        sigs.add(signal("cap-high", active, Severity.HIGH, now.minusSeconds(900)));
+        for (int i = 0; i < 4; i++) sigs.add(signal("cap-noprofile-" + i, gone, Severity.MEDIUM, now.minusSeconds(60)));
+        sigs.add(signal("cap-watched", watched, Severity.LOW, now.minusSeconds(3000)));
+        chains.restoreIntelligence(List.of(flow("0xcapflow", active, peer, USDT, now.minusSeconds(30))), sigs, List.of());
+
+        // the context is shared (other tests, demo network): the expectations are invariants, not exact ids
+        var profiles = intel.profiles();
+        List<Signal> all = intel.signals().findAll();
+        long nonExempt = all.stream().filter(x -> !x.address().equals(watched)).count();
+        long noProfile = all.stream().filter(x -> !x.address().equals(watched) && !profiles.has(x.address())
+                && x.severity().compareTo(Severity.HIGH) < 0).count();
+        int cap = (int) (nonExempt - noProfile - 2);
+        var r = chains.trimWorkingSet(Duration.ofDays(30), Duration.ofDays(30), Duration.ofDays(30), 1_000_000, cap, 1_000_000, watched::equals);
+
+        List<Signal> left = intel.signals().findAll();
+        assertThat(left.stream().filter(x -> !x.address().equals(watched)).count()).as("exactly the cap").isEqualTo(cap);
+        assertThat(left).noneMatch(x -> !x.address().equals(watched) && !profiles.has(x.address())
+                && x.severity().compareTo(Severity.HIGH) < 0); // tier 0 gone first
+        for (int i = 0; i < 4; i++) assertThat(intel.signals().findById("cap-noprofile-" + i)).isEmpty();
+        assertThat(intel.signals().findById("cap-high")).isPresent();              // HIGH kept while weaker ones remain
+        assertThat(intel.signals().findById("cap-watched")).isPresent();           // exempt
+        assertThat(r.signalsRemovedBySeverity()).doesNotContainKeys("HIGH", "CRITICAL");
+        assertThat(r.signalsRemovedBySeverity().values().stream().mapToLong(Long::longValue).sum()).isEqualTo(noProfile + 2);
+        assertThat(intel.signals().evictionCounts()).containsKey("GLOBAL_CAP_NO_PROFILE|MEDIUM|UNUSUAL_AMOUNT");
+    }
+
 }

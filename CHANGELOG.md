@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (P0 — signal cap, `docs/bench/SIGNAL_CAP_REPORT.md`)
+
+- **The signal store is bounded per wallet and exactly at the global cap**: 64 signals per wallet by default (`OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET`; the most represented signal type gives way first, so every kind of evidence keeps its latest signals; HIGH/CRITICAL only when nothing weaker is left), and the global cap of 150,000 is enforced exactly in four tiers that remove HIGH/CRITICAL last. Every removal is counted (`oci_signals_evicted_total{reason,severity}`, `oci_signals_evicted_by_type_total{reason,type}`) and each trim log line lists the signals removed by severity. Measured on a busy synthetic wallet (203 signals): score unchanged (83).
+
 ### Fixed (P0 — chain reorganisations, `docs/P0_REORG_REPORT.md`)
 
 - **A transfer whose block leaves the canonical chain is now reverted with everything derived from it**: the flow, its effect on both wallet profiles (exact), the signals citing its transaction (re-evaluated from the remaining evidence: a signal still justified keeps its id with updated evidence, one that is not is withdrawn, including indirect exposure on other wallets), the scores and the rule-engine contributions. Idempotent; a transaction re-included in another block is counted once and restores its signals. Retracted approvals and admin changes drop the signals they alone justified.

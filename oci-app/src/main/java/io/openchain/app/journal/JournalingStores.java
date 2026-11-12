@@ -43,10 +43,15 @@ public final class JournalingStores {
         }
         @Override public Optional<Signal> findById(String id) { return delegate.findById(id); }
         @Override public List<Signal> findByAddress(Address a) { return delegate.findByAddress(a); }
+        @Override public List<Signal> findAll() { return delegate.findAll(); }
         @Override public int size() { return delegate.size(); }
         @Override public int evictBefore(java.time.Instant cutoff, java.util.function.Predicate<Signal> keep) { return delegate.evictBefore(cutoff, keep); }
         @Override public int evictOldest(int max, java.util.function.Predicate<Signal> keep) { return delegate.evictOldest(max, keep); }
         @Override public List<Signal> findByEvidenceReference(String txHash) { return delegate.findByEvidenceReference(txHash); }
+        @Override public int evictToCap(int max, java.util.function.Predicate<Signal> exempt, java.util.function.ToIntFunction<Signal> tier) {
+            return delegate.evictToCap(max, exempt, tier);
+        }
+        @Override public java.util.Map<String, Long> evictionCounts() { return delegate.evictionCounts(); }
         @Override public Optional<Signal> remove(String id) {
             Optional<Signal> gone = delegate.remove(id);
             if (gone.isPresent() && !IntelligenceJournal.restoring()) journal.forgetSignal(id);
