@@ -116,6 +116,15 @@ never removed and are not counted. The defaults are sized for the 3 GB heap of t
 raise them with the heap. When a cap is the binding limit, the effective windows are shorter than 24 h / 7 days / 48 h:
 the trim log line shows how much was removed.
 
+**Exempt addresses (observation).** Watched wallets and every address whose history row exists (any wallet whose page,
+transactions or risk were consulted) are never trimmed. Their footprint is measured after each trim, by category
+(`watchlist`, `history_loaded`, `history_partial`, `history_in_progress`, `history_empty`, `history_failed`):
+`oci_exempt_addresses`, `oci_exempt_flows`, `oci_exempt_signals`, `oci_exempt_memory_estimate_bytes` (flows × 703 B +
+signals × 1,057 B, lab costs), `oci_exempt_max_flows_per_address`, `oci_exempt_oldest_view_age_seconds`,
+`oci_exempt_not_viewed_since_start`, `oci_exempt_flows_distinct`, and, for information only (nothing is enforced),
+`oci_exempt_proposed_cap_addresses_over` and `oci_exempt_proposed_cap_flows_over`. Per address:
+`GET /api/v1/admin/working-set/exempt` (permission `keys:admin`); addresses are deliberately not Prometheus labels.
+
 **Very active wallets (step 3b).** A wallet profile no longer grows with its number of transfers: duplicate detection
 remembers the latest 4,096 event ids and transaction hashes, activity times are exact for the latest 2,048 instants
 (older ones are folded, first activity stays exact), the 1,024 counterparties with the most transfers are kept and

@@ -29,6 +29,38 @@ public class MetricsConfiguration {
         };
     }
 
+    /** Exempt working set, by category (step 2 point 1, observation only). No address label: the per-address detail is in
+     *  {@code GET /api/v1/admin/working-set/exempt} (permission keys:admin), not in Prometheus. */
+    @Bean MeterBinder exemptWorkingSetMetrics(io.openchain.app.chain.ExemptWorkingSetMonitor monitor) {
+        return registry -> {
+            for (var c : io.openchain.app.chain.ExemptWorkingSetMonitor.Category.values()) {
+                String tag = c.name().toLowerCase();
+                java.util.function.ToDoubleFunction<java.util.function.ToLongFunction<io.openchain.app.chain.ExemptWorkingSetMonitor.CategorySummary>> of =
+                        f -> { var s = monitor.last(); return s == null ? Double.NaN : f.applyAsLong(s.byCategory().get(c)); };
+                Gauge.builder("oci.exempt.addresses", monitor, m -> of.applyAsDouble(x -> x.addresses())).tag("category", tag)
+                        .description("Addresses exempt from the working-set trim").register(registry);
+                Gauge.builder("oci.exempt.flows", monitor, m -> of.applyAsDouble(x -> x.flows())).tag("category", tag)
+                        .description("Flows in memory touching exempt addresses (a flow between two of them counted for each)").register(registry);
+                Gauge.builder("oci.exempt.signals", monitor, m -> of.applyAsDouble(x -> x.signals())).tag("category", tag).register(registry);
+                Gauge.builder("oci.exempt.memory.estimate.bytes", monitor, m -> of.applyAsDouble(x -> x.estimatedBytes())).tag("category", tag)
+                        .description("Estimate: flows x 703 B + signals x 1,057 B (lab costs)").register(registry);
+                Gauge.builder("oci.exempt.max.flows.per.address", monitor, m -> of.applyAsDouble(x -> x.maxFlowsPerAddress())).tag("category", tag).register(registry);
+                Gauge.builder("oci.exempt.oldest.view.age.seconds", monitor, m -> {
+                    var s = monitor.last();
+                    Long v = s == null ? null : s.byCategory().get(c).oldestViewAgeSeconds();
+                    return v == null ? Double.NaN : v;
+                }).tag("category", tag).description("Oldest last consultation among the category's addresses consulted since start-up").register(registry);
+                Gauge.builder("oci.exempt.not.viewed.since.start", monitor, m -> of.applyAsDouble(x -> x.notViewedSinceStart())).tag("category", tag).register(registry);
+            }
+            Gauge.builder("oci.exempt.flows.distinct", monitor, m -> { var s = m.last(); return s == null ? Double.NaN : s.distinctExemptFlows(); })
+                    .description("Distinct flows touching at least one exempt address").register(registry);
+            Gauge.builder("oci.exempt.proposed.cap.addresses.over", monitor, m -> { var s = m.last(); return s == null ? Double.NaN : s.addressesOverProposedPerAddressCap(); })
+                    .description("Information only: addresses above the proposed 10,000 flows per address (not enforced)").register(registry);
+            Gauge.builder("oci.exempt.proposed.cap.flows.over", monitor, m -> { var s = m.last(); return s == null ? Double.NaN : s.overProposedTotal(); })
+                    .description("Information only: exempt flows outside the watchlist above the proposed 150,000 (not enforced)").register(registry);
+        };
+    }
+
     @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules,
                                  io.openchain.intelligence.IntelligencePipeline intelligence) {
         return registry -> {

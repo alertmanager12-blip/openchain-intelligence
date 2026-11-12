@@ -351,6 +351,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     void setWatchlistService(io.openchain.app.watchlist.WatchlistService w) { this.watchlistService = w; }
 
+    private io.openchain.app.chain.ExemptWorkingSetMonitor exemptMonitor;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setExemptMonitor(io.openchain.app.chain.ExemptWorkingSetMonitor m) { this.exemptMonitor = m; }
+
     /** Bounds the in-memory working set; watched wallets and addresses with loaded history are kept. */
     private void trimWorkingSet() {
         var ing = props.getIngestion();
@@ -362,6 +367,16 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s) {}, {} idle profile(s); kept {} flow(s), {} signal(s), "
                 + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.signalsRemovedBySeverity(),
                 r.profiles(), r.remainingFlows(), r.remainingSignals(), r.remainingProfiles(), r.remainingScoredAddresses(), r.trackedWallets());
+        if (exemptMonitor != null) { // observation only: measures the exempt addresses, changes nothing
+            var x = exemptMonitor.refresh();
+            log.info("exempt working set: {} address(es), {} distinct flow(s) ({} outside the watchlist), measured in {} ms; by category {}; "
+                    + "over the proposed caps (not enforced): {} address(es) above {} flows, {} flow(s) above {} in all",
+                    x.entries().size(), x.distinctExemptFlows(), x.distinctExemptFlowsOutsideWatchlist(), x.millis(),
+                    x.byCategory().entrySet().stream().filter(e -> e.getValue().addresses() > 0)
+                            .map(e -> e.getKey() + "=" + e.getValue().addresses() + "/" + e.getValue().flows() + "f").toList(),
+                    x.addressesOverProposedPerAddressCap(), io.openchain.app.chain.ExemptWorkingSetMonitor.PROPOSED_FLOWS_PER_ADDRESS,
+                    x.overProposedTotal(), io.openchain.app.chain.ExemptWorkingSetMonitor.PROPOSED_EXEMPT_FLOWS_TOTAL);
+        }
     }
 
     private io.openchain.app.journal.JdbcIntelligenceJournal journal;

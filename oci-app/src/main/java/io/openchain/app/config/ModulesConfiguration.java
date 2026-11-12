@@ -76,6 +76,16 @@ public class ModulesConfiguration {
                 scoring, DetectionConfig.defaults(), clock);
     }
 
+    /** Observation of the addresses exempt from the working-set trim (step 2 point 1): changes nothing. */
+    @Bean io.openchain.app.chain.ExemptWorkingSetMonitor exemptWorkingSetMonitor(IntelligencePipeline intelligence,
+            io.openchain.app.history.AddressHistoryService history,
+            org.springframework.beans.factory.ObjectProvider<io.openchain.app.watchlist.WatchlistService> watchlist, Clock clock) {
+        return new io.openchain.app.chain.ExemptWorkingSetMonitor(intelligence, history, () -> {
+            var w = watchlist.getIfAvailable();
+            return w == null ? java.util.List.of() : w.list();
+        }, clock);
+    }
+
     @Bean FieldCatalog fieldCatalog() { return FieldCatalog.defaults(); }
 
     /** On-demand address history (ADR-0020); history events go to the pipeline without rule evaluation. */

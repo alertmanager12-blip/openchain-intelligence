@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (observation — exempt working set, `docs/EXEMPT_METRICS_REPORT.md`)
+
+- **The addresses exempt from the working-set trim are measured, nothing else changes**: per category (watchlist; address history loaded, partial, in progress, empty, failed) the number of addresses, flows and signals in memory, an estimate of their memory, the age of the last consultation and, for information only, how far the proposed caps (10,000 flows per address, 150,000 in all) would be exceeded. Prometheus gauges `oci_exempt_*` (no address label) and `GET /api/v1/admin/working-set/exempt` (permission `keys:admin`) for the per-address detail; one summary line per trim.
+
 ### Fixed (P0 — signal cap, `docs/bench/SIGNAL_CAP_REPORT.md`)
 
 - **The signal store is bounded per wallet and exactly at the global cap**: 64 signals per wallet by default (`OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET`; the most represented signal type gives way first, so every kind of evidence keeps its latest signals; HIGH/CRITICAL only when nothing weaker is left), and the global cap of 150,000 is enforced exactly in four tiers that remove HIGH/CRITICAL last. Every removal is counted (`oci_signals_evicted_total{reason,severity}`, `oci_signals_evicted_by_type_total{reason,type}`) and each trim log line lists the signals removed by severity. Measured on a busy synthetic wallet (203 signals): score unchanged (83).
