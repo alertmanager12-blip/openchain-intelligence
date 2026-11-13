@@ -1,6 +1,6 @@
 # ADR-0024: Persist chain-derived state in PostgreSQL
 
-- Status: accepted (2026-11-09; step 1 implemented; step 2 implemented but off by default, does not scale yet; step 3a implemented, not sufficient on its own: see the 2026-11-10 measurement; step 3b implemented: hard caps and compact accumulators)
+- Status: accepted (2026-11-09; step 1 implemented; step 2 implemented but off by default, does not scale yet; step 3a implemented, not sufficient on its own: see the 2026-11-10 measurement; step 3b implemented: hard caps and compact accumulators; step 3d accepted on 2026-11-12, not implemented yet: restarts through a snapshot of the bounded working set)
 - Date: 2026-11-09
 
 ## Context and problem statement
@@ -64,4 +64,10 @@ implementations for tests and the demo profile. ClickHouse (ADR-0004) is reconsi
     for unwatched wallets. Watch a wallet or load its history to keep its full working set.
 - **Step 3c (needed for the journal):** journal only the watchlist scope plus compact wallet-profile snapshots and the
   latest score per address, so that the reload is proportional to the number of wallets, not to the number of transfers.
+- **Step 3d (accepted 2026-11-12, not implemented yet; replaces step 2 for restarts):** persist a snapshot of the bounded
+  working set (flows, wallet profiles, signals, scores, remembered balances) at orderly shutdown and periodically, tied to
+  the indexer checkpoints in the same transaction; reload it before indexers start. Reload cost is bounded by the step 3b
+  caps, not by traffic. After a crash, indexing rewinds to the snapshot watermark (at most one snapshot period
+  re-indexed). Rule-engine windows and the dry-run event history are not persisted. The step 2 journal stays off by
+  default. Design: `docs/PERSISTENCE_SNAPSHOT_DESIGN.md`.
 
