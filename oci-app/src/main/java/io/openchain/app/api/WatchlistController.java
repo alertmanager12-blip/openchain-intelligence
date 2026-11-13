@@ -41,8 +41,8 @@ public class WatchlistController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> remove(@PathVariable String id) {
-        if (!watchlist.remove(id)) throw ApiException.notFound("no watchlist entry '" + id + "'");
+    public ResponseEntity<Void> remove(@PathVariable String id, Authentication auth) {
+        if (!watchlist.remove(id, auth == null ? null : auth.getName())) throw ApiException.notFound("no watchlist entry '" + id + "'");
         return ResponseEntity.noContent().build();
     }
 }

@@ -227,7 +227,7 @@ triggering event is re-indexed, otherwise these fields stay null.
 |---|---|---|---|
 | POST | `/webhooks` | webhooks:write | Create webhook connector `{ name, url, events[] }` (https only); response includes the signing `secret` **once** and an `id` (`wh-…`, a slug usable as `actions[].connectorId`) |
 | GET | `/webhooks` | webhooks:read | List (secrets never returned) |
-| GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
+| GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag (`indexerLag`, `null` when the chain head is unknown: provider failing; not "no lag"), provider health |
 | GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | investigation:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
 | GET | `/labels?network=&address=&category=` | wallet:read | Labels with source, evidence level, status |
 | GET | `/watchlist` | wallet:read | The organisation's own wallets `[{ id, network, address, name, createdBy, createdAt }]`, oldest first |

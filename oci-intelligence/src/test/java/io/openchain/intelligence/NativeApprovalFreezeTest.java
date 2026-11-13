@@ -124,6 +124,41 @@ class NativeApprovalFreezeTest {
         assertThat(p.scoring().history(frozen)).extracting(io.openchain.core.risk.RiskScore::score).containsSubsequence(60, 0);
     }
 
+    /**
+     * Code review I6 (2026-11-13): a freeze that leaves the canonical chain never happened. The exposure signals it gave
+     * to the counterparties of the frozen address must go with the label, and their scores be recomputed.
+     */
+    @Test void retractedFreezeWithdrawsTheExposureOfCounterparties() {
+        p.onTransfer(transfer("0xpay", 0, me, frozen, "5000", USDT, min(0)));
+        p.onEvent(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), false));
+        assertThat(p.signals().findByAddress(me)).extracting(Signal::type).contains(SignalType.FLAGGED_EXPOSURE);
+        assertThat(p.scoring().latest(me).orElseThrow().score()).isPositive();
+
+        var r = p.retract(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), true));
+        assertThat(r.applied()).isTrue();
+        assertThat(r.removed()).extracting(Signal::type).contains(SignalType.FLAGGED_EXPOSURE);
+        assertThat(p.labels().findByAddress(frozen)).isEmpty();
+        assertThat(p.signals().findByAddress(me)).extracting(Signal::type).doesNotContain(SignalType.FLAGGED_EXPOSURE);
+        assertThat(p.scoring().latest(me).orElseThrow().score()).isZero();
+        assertThat(p.scoring().latest(frozen).orElseThrow().score()).isZero();
+        assertThat(p.retract(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), true)).applied()).isFalse(); // idempotent
+
+        // the new fork includes the freeze again: the exposure comes back
+        var again = p.onEvent(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), false));
+        assertThat(again.newSignals()).filteredOn(s -> s.address().equals(me)).extracting(Signal::type).contains(SignalType.FLAGGED_EXPOSURE);
+    }
+
+    /** A wallet still exposed through another listing of the same address keeps a justified exposure signal. */
+    @Test void retractedFreezeKeepsAnExposureStillJustifiedByAnotherLabel() {
+        p.onTransfer(transfer("0xpay", 0, me, frozen, "5000", USDT, min(0)));
+        p.labels().save(new AddressLabel(frozen, LabelCategory.SANCTIONED, "listed", "ofac", 1.0, min(1), EvidenceLevel.CONFIRMED_BY_SOURCE, "ofac-ref"));
+        p.onEvent(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), false));
+        p.retract(freeze("ethereum:0xfz:4", EventType.STABLECOIN_FREEZE, frozen, min(10), true));
+        assertThat(p.signals().findByAddress(me)).isNotEmpty()
+                .allSatisfy(s -> assertThat(s.evidence()).noneMatch(ev -> "0xfz".equals(ev.reference())));
+        assertThat(p.scoring().latest(me).orElseThrow().score()).isPositive();
+    }
+
     @Test void staleFreezeAfterUnfreezeIsIgnoredAndReorgRetractionRestoresPreviousState() {
         p.onEvent(freeze("ethereum:0xa:0", EventType.STABLECOIN_FREEZE, frozen, min(10), false));
         p.onEvent(freeze("ethereum:0xb:0", EventType.STABLECOIN_UNFREEZE, frozen, min(20), false));

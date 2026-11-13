@@ -278,11 +278,19 @@ export class InvestigationPage {
     if (n) this.expand(n);
   }
 
+  /** The running expansion, cancelled by the next one (and ignored if the graph it was started on was replaced). */
+  private expansion?: { unsubscribe(): void };
+
   expand(n: GraphNode): void {
     this.expanding.set(true);
     this.expandError.set(null);
-    this.api.graph(n.address, { network: n.network, depth: 1, token: this.token() || undefined, ...this.range() }).subscribe({
+    // an answer that arrives after another root, token, date range or depth was loaded belongs to the previous graph:
+    // merging it would mix wallets of two graphs (code review I13)
+    const startedOn = this.graph.value();
+    this.expansion?.unsubscribe();
+    this.expansion = this.api.graph(n.address, { network: n.network, depth: 1, token: this.token() || undefined, ...this.range() }).subscribe({
       next: (g) => {
+        if (this.graph.value() !== startedOn) { this.expanding.set(false); return; }
         const known = new Map(this.nodes().map((x) => [x.id, x]));
         const added = g.nodes.filter((x) => !known.has(x.id)).map((x) => ({ ...x, depth: n.depth + 1 }));
         const keys = new Set(this.edges().map((e) => e.key));
@@ -294,7 +302,7 @@ export class InvestigationPage {
         this.toasts.success('Counterparties expanded', `${added.length} new ${added.length === 1 ? 'wallet' : 'wallets'}, ${newEdges.length} new ${newEdges.length === 1 ? 'transfer' : 'transfers'}`);
       },
       error: (e: ApiError) => {
-        this.expandError.set(e);
+        if (this.graph.value() === startedOn) this.expandError.set(e);
         this.expanding.set(false);
       },
     });

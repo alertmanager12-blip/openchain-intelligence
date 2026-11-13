@@ -27,7 +27,7 @@
               }</dd>
           </div>
           <div class="stat" [class.warn]="health().healthy < health().total"><dt>Networks healthy</dt><dd><span class="stat-v">{{ health().healthy }}</span><span class="stat-of">/ {{ health().total }}</span></dd></div>
-          <div class="stat" [class.warn]="health().maxLag > lagWarn"><dt>Largest indexing lag</dt><dd><span class="stat-v">{{ n(health().maxLag) }}</span><span class="stat-of">blocks</span></dd></div>
+          <div class="stat" [class.warn]="(health().maxLag ?? 0) > lagWarn || health().unknownLag > 0"><dt>Largest indexing lag</dt><dd><span class="stat-v">{{ health().maxLag === null ? 'unknown' : n(health().maxLag!) }}</span><span class="stat-of">{{ health().maxLag === null ? '' : 'blocks' }}{{ health().unknownLag > 0 && health().maxLag !== null ? ' · ' + health().unknownLag + ' unknown' : '' }}</span></dd></div>
           <div class="stat"><dt>Signals, 24 hours</dt><dd><span class="stat-v">{{ d.totals.signals24h ?? '–' }}</span></dd></div>
           <div class="stat"><dt>Rules enabled</dt><dd><a class="stat-v" routerLink="/rules/code">{{ d.totals.rulesEnabled }}</a><span class="stat-of">/ {{ d.totals.rules }}</span></dd></div>
           <div class="stat"><dt>Wallets tracked</dt><dd><span class="stat-v">{{ n(d.totals.walletsTracked) }}</span></dd></div>
@@ -116,7 +116,7 @@
           </ng-container>
           <ng-container matColumnDef="lag">
             <th mat-header-cell *matHeaderCellDef scope="col" class="right">Lag (blocks)</th>
-            <td mat-cell *matCellDef="let x" class="right" [class.warn]="lag(x) > lagWarn">{{ n(lag(x)) }}</td>
+            <td mat-cell *matCellDef="let x" class="right" [class.warn]="lag(x) === null || lag(x)! > lagWarn">{{ lag(x) === null ? 'unknown' : n(lag(x)!) }}</td>
           </ng-container>
           <ng-container matColumnDef="latency">
             <th mat-header-cell *matHeaderCellDef scope="col" class="right">Latency</th>

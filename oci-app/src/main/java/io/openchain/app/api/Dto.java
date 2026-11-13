@@ -92,7 +92,8 @@ public final class Dto {
 
     public record NetworkDto(String network, boolean enabled, long headBlock, long finalizedBlock, boolean healthy,
                              String providerId, long latencyMillis, Instant checkedAt, String detail, long lastIndexedBlock,
-                             long indexerLag, boolean simulated,
+                             /** Blocks behind the head; null when the head is unknown (provider failing): not "no lag". */
+                             Long indexerLag, boolean simulated,
                              /** What this instance cannot see or detect on this network (data-source limits). */
                              List<String> limitations) {}
 

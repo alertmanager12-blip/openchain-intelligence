@@ -5,8 +5,8 @@ Drafts to create on GitHub by the maintainer (none is created yet). First writte
 `good first issue`, the roadmap phase (`docs/strategy/FEATURE_ROADMAP.md`: `phase-1` reliable intelligence core,
 `phase-2` graph intelligence) and an area label.
 
-Status on the working branch (`wip/adr-0024-step-3a`, not merged): issue 7 is fixed there (commit `444e423`); the others
-are open. Check again before creating them.
+Status on the working branch (`wip/adr-0024-step-3a`, not merged) on 2026-11-13: issues 1 and 5 are fixed there, and
+part (a) of issue 7 (commit `444e423`); the others are open. Check again before creating them.
 
 ---
 

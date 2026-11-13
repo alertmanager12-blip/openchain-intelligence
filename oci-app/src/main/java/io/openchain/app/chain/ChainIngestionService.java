@@ -279,6 +279,16 @@ public class ChainIngestionService {
     }
 
     /** Current status (refreshed from the provider; falls back to the last known one). */
+    /**
+     * Blocks between the chain head and the last indexed block, or empty when the head is not known: no status yet, an
+     * unhealthy provider (its head is stale or 0) or a head of 0. "Unknown" must never read as "no lag": the provider
+     * failing is exactly when indexing falls behind.
+     */
+    public static java.util.OptionalLong indexerLag(NetworkStatus status, long lastIndexedBlock) {
+        if (status == null || !status.healthy() || status.headBlock() <= 0) return java.util.OptionalLong.empty();
+        return java.util.OptionalLong.of(lastIndexedBlock < 0 ? status.headBlock() : Math.max(0, status.headBlock() - lastIndexedBlock));
+    }
+
     public NetworkStatus status(NetworkRuntime rt) {
         try {
             NetworkStatus s = rt.provider.getNetworkStatus();
@@ -342,8 +352,8 @@ public class ChainIngestionService {
         if (e.removed()) {
             history.record(e);
             evaluate(e); // the rule engine removes the event's contribution; alerts on it are re-checked
-            if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
-            else applyRetraction(e, intelligence.retract(e));
+            // a reorged freeze/unfreeze also reverts its label state and withdraws the exposure signals citing it
+            applyRetraction(e, intelligence.retract(e));
             return;
         }
         List<Signal> fresh = new ArrayList<>();

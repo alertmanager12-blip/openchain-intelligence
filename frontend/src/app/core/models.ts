@@ -43,7 +43,8 @@ export interface NetworkStatus {
   /** Present on backend responses (NetworkDto); optional so older payloads still type-check. */
   enabled?: boolean;
   lastIndexedBlock?: number;
-  indexerLag?: number;
+  /** Blocks behind the chain head; null when the head is unknown (provider failing), which is not "no lag". */
+  indexerLag?: number | null;
   /** True when the provider is the simulated demo ledger, not a real chain. */
   simulated?: boolean;
   /** What this instance cannot see or detect on this network (data-source limits). */

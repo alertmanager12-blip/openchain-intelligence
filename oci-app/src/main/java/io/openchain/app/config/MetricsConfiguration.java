@@ -79,11 +79,11 @@ public class MetricsConfiguration {
             for (Network n : Network.values()) {
                 String id = n.id();
                 Gauge.builder("oci.indexer.lag.blocks", chains, c -> c.runtime(n).map(rt -> {
-                            var st = rt.lastStatus();
                             long indexed = rt.lastIndexedBlock();
-                            return st == null || indexed < 0 ? Double.NaN : (double) Math.max(0, st.headBlock() - indexed);
+                            var lag = ChainIngestionService.indexerLag(rt.lastStatus(), indexed);
+                            return indexed < 0 || lag.isEmpty() ? Double.NaN : (double) lag.getAsLong();
                         }).orElse(Double.NaN))
-                        .description("Blocks between the chain head and the last indexed block").tag("network", id).register(registry);
+                        .description("Blocks between the chain head and the last indexed block; NaN when the head is unknown (provider failing)").tag("network", id).register(registry);
                 Gauge.builder("oci.indexer.last.block", chains, c -> c.runtime(n).map(rt -> (double) rt.lastIndexedBlock()).orElse(Double.NaN))
                         .tag("network", id).register(registry);
                 FunctionCounter.builder("oci.reorg", chains, c -> c.reorgs(n)).description("Chain reorganisations handled")

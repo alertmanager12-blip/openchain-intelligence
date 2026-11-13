@@ -8,6 +8,20 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, first part)
+
+- **A retracted freeze left the exposure of counterparties** (I6): when a stablecoin freeze leaves the canonical chain, the signals that cite its label are withdrawn (and the alerts on them re-checked), detection is run again for their subjects, and scores are recomputed; an exposure still justified by another label is kept.
+- **Indirect exposure missed when an intermediary paid several times** (I7): the trace kept the oldest payment of each sender, so value that reached the intermediary between two payments was never found; it now follows the latest payment that is not after the next hop.
+- **Indexing lag shown as 0 when the chain head is unknown**: `oci_indexer_lag_blocks` is `NaN` and `indexerLag` of `GET /networks` is `null` when the provider is failing or has no head; the console shows "unknown".
+- **A failed journal reload stopped the address histories and the journal purge** (I23): histories are re-applied anyway and the purge is scheduled first.
+- **Watchlist changes are audited** (I35): `watchlist.add` and `watchlist.remove` lines in the `oci.audit` log, with the actor.
+- **Console: a non-zero amount below the displayed precision was shown as "0"** (I12): it is shown as `<0.000001` (or `<0.01`), so a dust transfer stays visible.
+- **Console: a graph expansion could be merged into another graph** (I13): an answer that arrives after the root, token, dates or depth changed is ignored, and a new expansion cancels the previous one.
+
+### Changed
+
+- `GET /api/v1/networks`: `indexerLag` can be `null` (lag unknown). Clients must not read `null` as 0.
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lots 3 and 4: operations, providers)
 
 - **A lagging node was mistaken for a chain reorganisation** (I10): when the provider does not have a block that was already indexed (failover to a node behind), the indexer now retries later instead of retracting events or stopping with "reorg too deep"; a real reorganisation shows another hash at that height.

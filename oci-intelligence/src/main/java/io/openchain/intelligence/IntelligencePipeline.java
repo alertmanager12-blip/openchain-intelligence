@@ -156,7 +156,10 @@ public final class IntelligencePipeline {
      */
     public Result onEvent(ChainEvent e) {
         boolean freeze = e.type() == ChainEvent.EventType.STABLECOIN_FREEZE || e.type() == ChainEvent.EventType.STABLECOIN_UNFREEZE;
-        if (freeze && e.removed()) return retractFreeze(e);
+        if (freeze && e.removed()) {
+            RetractResult r = retractFreeze(e);
+            return r.applied() ? new Result(false, r.added(), r.detectorErrors(), r.scores()) : Result.DUPLICATE;
+        }
         if (e.removed() && (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER)) {
             RetractResult r = retractFlow(e.eventId());
             return r.applied() ? new Result(false, r.added(), r.detectorErrors(), r.scores()) : Result.DUPLICATE;
@@ -207,19 +210,51 @@ public final class IntelligencePipeline {
         return run(subjects, null, e);
     }
 
-    /** Reorg: the freeze/unfreeze is no longer on the canonical chain; restore the state it replaced. */
-    private synchronized Result retractFreeze(ChainEvent e) {
+    /**
+     * Reorg: the freeze/unfreeze is no longer on the canonical chain. The label state it replaced is restored, and the
+     * signals that cite the withdrawn label (exposure of the counterparties) are removed, then detection is run again for
+     * their subjects: an exposure still justified by another label comes back, the others do not (code review I6).
+     */
+    private synchronized RetractResult retractFreeze(ChainEvent e) {
         Optional<Address> target = EventFields.address(e, EventFields.FREEZE_ADDRESS);
-        if (target.isEmpty()) return Result.DUPLICATE;
-        String key = target.get() + "|" + labelSource(e);
+        if (target.isEmpty()) return RetractResult.none();
+        String source = labelSource(e);
+        String key = target.get() + "|" + source;
         FreezeState st = freezeStates.get(key);
-        if (st == null || !st.eventId().equals(e.eventId())) return Result.DUPLICATE;
+        if (st == null || !st.eventId().equals(e.eventId())) return RetractResult.none();
         seenEvents.remove(e.eventId()); // the new fork may include it again
-        labels.remove(target.get(), LabelCategory.ISSUER_FROZEN, labelSource(e));
+        labels.remove(target.get(), LabelCategory.ISSUER_FROZEN, source);
         FreezeState prev = st.previous();
         if (prev != null && prev.label() != null) labels.save(prev.label());
         if (prev == null) freezeStates.remove(key); else freezeStates.put(key, prev);
-        return new Result(false, List.of(), Map.of(), List.of(scoring.rescore(target.get())));
+
+        List<Signal> dependent = List.of();
+        AddressLabel withdrawn = st.label(); // null for an unfreeze: it created no label, so no signal cites it
+        if (withdrawn != null && withdrawn.reference() != null) {
+            dependent = signals.findByEvidenceReference(withdrawn.reference()).stream()
+                    .filter(x -> x.evidence().stream().anyMatch(ev -> withdrawn.reference().equals(ev.reference()) && source.equals(ev.source())))
+                    .toList();
+        }
+        Set<String> dependentIds = new LinkedHashSet<>();
+        Set<Address> subjects = new LinkedHashSet<>();
+        subjects.add(target.get());
+        for (Signal s : dependent) { signals.remove(s.id()); dependentIds.add(s.id()); subjects.add(s.address()); }
+        List<Signal> fresh = new ArrayList<>();
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (!dependent.isEmpty()) {
+            for (Address a : subjects) { // label-driven detectors run without a trigger
+                DetectionResult r = detection.run(new DetectionContext(a, null, null, profiles.profileOrEmpty(a), flows, labels, config, clock.instant(), balances));
+                fresh.addAll(r.newSignals()); errors.putAll(r.detectorErrors());
+            }
+        }
+        List<Signal> recomputed = fresh.stream().filter(x -> dependentIds.contains(x.id())).toList();
+        List<Signal> added = fresh.stream().filter(x -> !dependentIds.contains(x.id())).toList();
+        Set<String> back = new java.util.HashSet<>(recomputed.stream().map(Signal::id).toList());
+        List<Signal> removed = dependent.stream().filter(x -> !back.contains(x.id())).toList();
+        Set<Address> toScore = new LinkedHashSet<>(subjects);
+        fresh.forEach(x -> toScore.add(x.address()));
+        return new RetractResult(true, null, 0, Set.copyOf(subjects), removed, recomputed, added, errors,
+                toScore.stream().map(scoring::rescore).toList(), false);
     }
 
     // ------------------------------------------------------------ chain reorganisations (docs/P0_REORG_DESIGN.md)
@@ -315,13 +350,14 @@ public final class IntelligencePipeline {
     /**
      * Reverts any retracted event ({@code removed=true}) and reports what changed, for callers that propagate it (rule
      * engine, recent signals): value flows via {@link #retractFlow}, approvals and admin changes via their signals.
-     * Freezes are reverted through {@link #onEvent}. Idempotent.
+     * Freezes restore the previous label state and withdraw the exposure signals that cited the label. Idempotent.
      */
     public RetractResult retract(ChainEvent e) {
         if (!e.removed()) return RetractResult.none();
         return switch (e.type()) {
             case TOKEN_TRANSFER, NATIVE_TRANSFER -> retractFlow(e.eventId());
             case APPROVAL, CONTRACT_ADMIN_CHANGE -> retractEvent(e);
+            case STABLECOIN_FREEZE, STABLECOIN_UNFREEZE -> retractFreeze(e);
             default -> RetractResult.none();
         };
     }

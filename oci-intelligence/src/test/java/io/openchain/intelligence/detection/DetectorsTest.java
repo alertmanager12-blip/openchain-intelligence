@@ -344,6 +344,33 @@ class DetectorsTest {
             assertThat(d.detect(fx.ctx(me, f))).noneMatch(s -> s.type() == SignalType.INDIRECT_EXPOSURE);
         }
 
+        /**
+         * Code review I7 (2026-11-13): when an intermediary paid the wallet several times, the trace kept its OLDEST
+         * payment, so tainted value that reached the intermediary between two payments was never found. The latest
+         * payment not after the downstream hop is the one that admits every time-consistent upstream flow.
+         */
+        @Test void indirectExposureIsFoundWhenTheIntermediaryPaidBeforeAndAfterReceivingTaintedValue() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            Address h1 = a("h1"), h2 = a("h2");
+            fx.flow(h1, me, "100", min(0));                            // an old, clean payment
+            ValueFlow tainted = fx.flow(sanctioned, h1, "1000", min(30));
+            ValueFlow paid = fx.flow(h1, me, "800", min(50));          // paid after receiving the tainted value
+            assertThat(d.detect(fx.ctx(me, paid))).singleElement().satisfies(s -> {
+                assertThat(s.type()).isEqualTo(SignalType.INDIRECT_EXPOSURE);
+                assertThat(s.evidence().stream().filter(e -> e.kind().equals("flow")).map(Signal.Evidence::reference))
+                        .containsExactly(tainted.txHash(), paid.txHash());
+            });
+            // same at the second hop: h2 paid h1 before and after receiving from the listed address
+            Address me2 = a("me2"), k1 = a("k1");
+            fx.flow(h2, k1, "100", min(0));
+            ValueFlow t2 = fx.flow(sanctioned, h2, "1000", min(10));
+            ValueFlow mid = fx.flow(h2, k1, "900", min(20));
+            ValueFlow last = fx.flow(k1, me2, "800", min(40));
+            assertThat(d.detect(fx.ctx(me2, last))).singleElement().satisfies(s ->
+                    assertThat(s.evidence().stream().filter(e -> e.kind().equals("flow")).map(Signal.Evidence::reference))
+                            .containsExactly(t2.txHash(), mid.txHash(), last.txHash()));
+        }
+
         @Test void beyondMaxHopsAndThroughExchangesIsNotPropagated() {
             fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
             Address h1 = a("h1"), h2 = a("h2"), h3 = a("h3");
