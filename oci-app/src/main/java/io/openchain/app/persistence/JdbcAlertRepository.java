@@ -124,6 +124,36 @@ public final class JdbcAlertRepository implements AlertRepository {
 
     @Override public List<Alert> findAll() { return query("order by created_at, id", Map.of()); }
 
+    @Override public List<Alert> findPage(AlertQuery q, int offset, int limit) {
+        StringBuilder where = new StringBuilder("where true");
+        Map<String, Object> p = new HashMap<>();
+        if (q.statuses() != null) {
+            if (q.statuses().isEmpty()) return List.of();
+            where.append(" and status in (:statuses)");
+            p.put("statuses", q.statuses().stream().map(Enum::name).toList());
+        }
+        if (q.severity() != null) { where.append(" and severity = :severity"); p.put("severity", q.severity().name()); }
+        if (q.ruleId() != null) { where.append(" and rule_id = :ruleId"); p.put("ruleId", q.ruleId()); }
+        if (q.network() != null) { where.append(" and network = :network"); p.put("network", q.network().id()); }
+        if (q.from() != null) { where.append(" and created_at >= :from"); p.put("from", Sql.ts(q.from())); }
+        if (q.to() != null) { where.append(" and created_at <= :to"); p.put("to", Sql.ts(q.to())); }
+        if (q.subjectAddress() != null) { where.append(" and lower(subject_address) = lower(:address)"); p.put("address", q.subjectAddress()); }
+        p.put("limit", Math.max(0, limit));
+        p.put("offset", Math.max(0, offset));
+        return query(where + " order by created_at desc, id desc limit :limit offset :offset", p);
+    }
+
+    @Override public List<StatusSeverityCount> countByStatusAndSeverity() {
+        return jdbc.query("select status, severity, count(*) n from alerts group by status, severity order by status, severity", Map.of(),
+                (rs, i) -> new StatusSeverityCount(AlertStatus.valueOf(rs.getString("status")),
+                        io.openchain.core.detection.Severity.valueOf(rs.getString("severity")), rs.getLong("n")));
+    }
+
+    @Override public List<java.time.Instant> createdAtSince(java.time.Instant since) {
+        return jdbc.query("select created_at from alerts where created_at >= :since", Map.of("since", Sql.ts(since)),
+                (rs, i) -> Sql.instant(rs, "created_at"));
+    }
+
     @Override public List<io.openchain.alerting.alert.RuleAlertStats> statsByRule(java.time.Instant since) {
         return jdbc.query("select rule_id, count(*) total, "
                 + "count(*) filter (where status not in ('RESOLVED', 'FALSE_POSITIVE')) open, "

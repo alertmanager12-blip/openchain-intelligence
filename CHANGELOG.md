@@ -8,6 +8,14 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 2: availability)
+
+- **A provider call ran under the service-wide processing lock** (I15): the contract lookup of an approval's spender (retries, rate limiter, back-off) is now made before the lock, so a slow or rate-limited network no longer stalls the others.
+- **Removing a flow scanned every stored flow** (I16): flows are indexed by event id; a retraction now costs the flows of its two parties only.
+- **Background tasks stopped for good after an Error** (I17): the working-set trim, the alert dispatch, the escalation and the polling loops stay scheduled after any failure, which is logged as an error.
+- **One unreachable connector delayed every notification** (I18): connectors are served in parallel (in due order within a connector), and a connector that fails 3 times in a row is left until the next pass; its other deliveries stay pending, untouched. `processDue` reports only the deliveries it attempted.
+- **`GET /alerts` and the dashboard loaded every alert** (I24): filtering, ordering, paging and counts run in the database. The `address` filter of `GET /alerts` uses the address stored with the alert (alerts stored before subjects existed are no longer matched by address); an unknown status, severity or network returns an empty page as before.
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 1: accuracy)
 
 - **Chain reorganisations were not retracted with PostgreSQL persistence** (B1): the indexer reloaded its reorg window from the checkpoint store at every poll, and the PostgreSQL store keeps block references only, so a reorg was detected but no retraction was emitted (orphaned flows, signals and alerts stayed valid). The window now lives in memory and the store is read once at start-up. Events of blocks indexed before a restart are still not retracted (unchanged, documented in ADR-0024).

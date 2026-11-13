@@ -305,21 +305,37 @@ public class ChainIngestionService {
             Optional<ValueFlow> flow = toFlow(e);
             if (flow.isPresent()) balance = realBalanceBefore(flow.get().from(), flow.get().token(), e.blockNumber());
         }
+        // Same rule for the spender of an approval: the contract lookup is a provider call (retries, rate limiter, back-off)
+        // and must never run under the service lock, where a slow or rate-limited network would stall every other network
+        // (code review I15). A failed lookup leaves the field absent; indexing goes on.
+        Optional<Boolean> spenderIsContract = Optional.empty();
+        if (!e.removed() && e.type() == ChainEvent.EventType.APPROVAL) {
+            Optional<Address> spender = address(e, "approval.spender");
+            NetworkRuntime rt = runtimes.get(e.network());
+            if (spender.isPresent() && rt != null) {
+                try {
+                    spenderIsContract = rt.provider().isContract(spender.get(), e.blockNumber());
+                } catch (RuntimeException ex) {
+                    spenderLookupFailures.incrementAndGet();
+                    log.debug("contract lookup of spender {} failed: {}", spender.get(), ex.getMessage());
+                }
+            }
+        }
         long waitFrom = System.nanoTime();
-        process(e, balance, waitFrom);
+        process(e, balance, spenderIsContract, waitFrom);
     }
 
-    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance, long waitFrom) {
+    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance, Optional<Boolean> spenderIsContract, long waitFrom) {
         long start = System.nanoTime();
         add(lockWaitNanos, e.network(), start - waitFrom);
         try {
-            processLocked(e, prefetchedBalance);
+            processLocked(e, prefetchedBalance, spenderIsContract);
         } finally {
             add(processNanos, e.network(), System.nanoTime() - start);
         }
     }
 
-    private void processLocked(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
+    private void processLocked(ChainEvent e, Optional<BigDecimal> prefetchedBalance, Optional<Boolean> spenderIsContract) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (!e.removed() && e.eventTime() != null) observationStart.merge(e.network(), e.eventTime(), (a, b) -> a.isBefore(b) ? a : b);
@@ -367,7 +383,7 @@ public class ChainIngestionService {
         } else if (e.type() == ChainEvent.EventType.APPROVAL) {
             fresh.addAll(intelligence.onEvent(e).newSignals());
             Optional<Address> owner = address(e, "approval.owner"), spender = address(e, "approval.spender");
-            if (owner.isPresent() && spender.isPresent()) enriched = enrichApproval(e, owner.get(), spender.get());
+            if (owner.isPresent() && spender.isPresent()) enriched = enrichApproval(e, owner.get(), spender.get(), spenderIsContract);
         } else {
             fresh.addAll(intelligence.onEvent(e).newSignals());
         }
@@ -874,7 +890,7 @@ public class ChainIngestionService {
     }
 
     /** Owner as {@code wallet.*}, spender as {@code counterparty.*}. */
-    private ChainEvent enrichApproval(ChainEvent e, Address owner, Address spender) {
+    private ChainEvent enrichApproval(ChainEvent e, Address owner, Address spender, Optional<Boolean> spenderIsContract) {
         Map<String, Object> fields = new LinkedHashMap<>(e.fields());
         fields.put("wallet.address", owner.value());
         putRisk(fields, "wallet", owner);
@@ -882,15 +898,7 @@ public class ChainIngestionService {
         fields.put("counterparty.address", spender.value());
         putRisk(fields, "counterparty", spender);
         putLabels(fields, "counterparty", spender);
-        NetworkRuntime rt = runtimes.get(e.network());
-        if (rt != null) {
-            try {
-                rt.provider().isContract(spender, e.blockNumber()).ifPresent(c -> fields.put("approval.spender_is_contract", c));
-            } catch (RuntimeException ex) { // provider down: the field stays absent, indexing goes on
-                spenderLookupFailures.incrementAndGet();
-                log.debug("contract lookup of spender {} failed: {}", spender, ex.getMessage());
-            }
-        }
+        spenderIsContract.ifPresent(c -> fields.put("approval.spender_is_contract", c)); // looked up before the lock (onEvent)
         Instant firstSeen = intelligence.profiles().profileOrEmpty(spender).firstActivity();
         if (firstSeen != null && !intelligence.profiles().startUnknown(spender) && observedLongEnough(e.network(), e.eventTime())) {
             fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));

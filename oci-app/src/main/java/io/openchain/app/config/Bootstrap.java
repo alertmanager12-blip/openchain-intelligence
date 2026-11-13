@@ -327,6 +327,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 more = chains.poll(rt);
             } catch (RuntimeException e) {
                 log.error("poll {} failed: {}", id, e.toString());
+            } catch (Throwable e) { // never lose the polling loop on an Error; rescheduled below
+                log.error("poll {} failed with an error: {}", id, e.toString(), e);
             } finally {
                 if (!scheduler.isShutdown()) schedulePolling(id, rt, everyMillis, more ? 0 : everyMillis);
             }
@@ -497,9 +499,20 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         }
     }
 
-    private static Runnable guard(String name, Runnable r) {
+    /**
+     * Wraps a background task so that no failure cancels its schedule: a periodic task that throws is never run again
+     * by the executor, and an Error (StackOverflowError, LinkageError...) used to escape silently (code review I17),
+     * stopping for good the working-set trim, the alert dispatch or the escalation. Errors are logged as such.
+     */
+    static Runnable guard(String name, Runnable r) {
         return () -> {
-            try { r.run(); } catch (RuntimeException e) { log.warn("background task '{}' failed: {}", name, e.toString()); }
+            try {
+                r.run();
+            } catch (RuntimeException e) {
+                log.warn("background task '{}' failed: {}", name, e.toString());
+            } catch (Throwable e) {
+                log.error("background task '{}' failed with an error, it stays scheduled: {}", name, e.toString(), e);
+            }
         };
     }
 

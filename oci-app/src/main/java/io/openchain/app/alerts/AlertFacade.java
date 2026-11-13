@@ -69,23 +69,45 @@ public class AlertFacade {
         };
     }
 
-    public List<Dto.AlertDto> list(Filter f) {
-        return alerts.repository().findAll().stream()
-                .sorted(Comparator.comparing(Alert::createdAt).thenComparing(Alert::id).reversed())
-                .filter(a -> f.status() == null || f.status().isBlank() || matchesStatus(a, f.status()))
-                .filter(a -> f.severity() == null || f.severity().isBlank() || a.severity().name().equalsIgnoreCase(f.severity()))
-                .filter(a -> f.ruleId() == null || f.ruleId().isBlank() || a.ruleId().equals(f.ruleId()))
-                .filter(a -> f.network() == null || f.network().isBlank() || (a.network() != null && a.network().id().equalsIgnoreCase(f.network())))
-                .filter(a -> f.from() == null || !a.createdAt().isBefore(f.from()))
-                .filter(a -> f.to() == null || !a.createdAt().isAfter(f.to()))
-                .map(this::dto)
-                .filter(d -> f.address() == null || f.address().isBlank() || f.address().equalsIgnoreCase(d.address()))
-                .toList();
+    /**
+     * One page of alerts, newest first, filtered and limited in the repository (the whole table was loaded and paged in
+     * memory at every request, code review I24). The address filter uses the subject stored with the alert.
+     */
+    public List<Dto.AlertDto> list(Filter f, int offset, int limit) {
+        Optional<io.openchain.alerting.alert.AlertRepository.AlertQuery> q = query(f);
+        if (q.isEmpty()) return List.of(); // a filter value that no alert can have (unknown status, severity or network)
+        return alerts.repository().findPage(q.get(), offset, limit).stream().map(this::dto).toList();
     }
 
-    private static boolean matchesStatus(Alert a, String status) {
-        String s = status.trim().toUpperCase(Locale.ROOT);
-        return apiStatus(a.status()).equals(s) || a.status().name().equals(s) || (s.equals("IN_PROGRESS") && a.status() == AlertStatus.INVESTIGATING);
+    /** Every alert matching the filter (tests and small exports); prefer the paged form. */
+    public List<Dto.AlertDto> list(Filter f) { return list(f, 0, Integer.MAX_VALUE); }
+
+    private static boolean blank(String s) { return s == null || s.isBlank(); }
+
+    /** Translates the API filter; empty when a value matches no alert by construction. */
+    static Optional<io.openchain.alerting.alert.AlertRepository.AlertQuery> query(Filter f) {
+        Set<AlertStatus> statuses = null;
+        if (!blank(f.status())) {
+            String s = f.status().trim().toUpperCase(Locale.ROOT);
+            statuses = EnumSet.noneOf(AlertStatus.class);
+            if (s.equals("OPEN")) statuses.addAll(OPEN);
+            else if (s.equals("IN_PROGRESS")) statuses.add(AlertStatus.INVESTIGATING);
+            else {
+                try { statuses.add(AlertStatus.valueOf(s)); } catch (IllegalArgumentException e) { return Optional.empty(); }
+            }
+        }
+        io.openchain.core.detection.Severity severity = null;
+        if (!blank(f.severity())) {
+            try { severity = io.openchain.core.detection.Severity.valueOf(f.severity().trim().toUpperCase(Locale.ROOT)); }
+            catch (IllegalArgumentException e) { return Optional.empty(); }
+        }
+        io.openchain.core.model.Network network = null;
+        if (!blank(f.network())) {
+            try { network = io.openchain.core.model.Network.fromId(f.network().trim().toLowerCase(Locale.ROOT)); }
+            catch (IllegalArgumentException e) { return Optional.empty(); }
+        }
+        return Optional.of(new io.openchain.alerting.alert.AlertRepository.AlertQuery(statuses, severity, blank(f.ruleId()) ? null : f.ruleId(),
+                network, f.from(), f.to(), blank(f.address()) ? null : f.address().trim()));
     }
 
     public Alert get(String id) {

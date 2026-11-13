@@ -273,6 +273,54 @@ class DeliveryAndPipelineTest {
         assertThat(p.dispatch(10)).isEmpty();
     }
 
+    /**
+     * Code review I18 (2026-11-13): deliveries were attempted one after the other, so one unreachable webhook (seconds of
+     * timeout per attempt) delayed every other channel. Connectors are now served in parallel.
+     */
+    @Test void aBlockedConnectorDoesNotDelayTheOthers() throws Exception {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1), fastSent = new java.util.concurrent.CountDownLatch(1);
+        registry.register(new NotificationConnector() {
+            @Override public String id() { return "blackhole"; }
+            @Override public ActionType type() { return ActionType.WEBHOOK; }
+            @Override public DeliveryResult send(Notification n) {
+                try { release.await(10, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return DeliveryResult.retry(0, "timeout");
+            }
+        });
+        registry.register(new NotificationConnector() {
+            @Override public String id() { return "telegram"; }
+            @Override public ActionType type() { return ActionType.TELEGRAM; }
+            @Override public DeliveryResult send(Notification n) { fastSent.countDown(); return DeliveryResult.ok(200); }
+        });
+        delivery.enqueue(alert(), new ActionSpec(ActionType.WEBHOOK, "blackhole", Map.of()));   // due first
+        DeliveryRecord fast = delivery.enqueue(alert(), new ActionSpec(ActionType.TELEGRAM, "telegram", Map.of()));
+        Thread pass = Thread.ofVirtual().start(() -> delivery.processDue(10));
+        try {
+            assertThat(fastSent.await(3, java.util.concurrent.TimeUnit.SECONDS)).as("sent while the other connector is still blocked").isTrue();
+        } finally {
+            release.countDown();
+            pass.join(5_000);
+        }
+        assertThat(store.find(fast.id()).orElseThrow().status()).isEqualTo(DeliveryStatus.DELIVERED);
+    }
+
+    /** A failing connector gets a bounded number of attempts per pass; its other deliveries wait for the next pass, untouched. */
+    @Test void aFailingConnectorIsAttemptedABoundedNumberOfTimesPerPass() {
+        for (int i = 0; i < 6; i++) hook.script.add(DeliveryResult.retry(0, "timeout"));
+        List<DeliveryRecord> queued = new ArrayList<>();
+        for (int i = 0; i < 6; i++) queued.add(delivery.enqueue(alert(), new ActionSpec(ActionType.WEBHOOK, "hook", Map.of())));
+        delivery.processDue(10);
+        assertThat(hook.received).hasSize(DeliveryService.MAX_CONSECUTIVE_FAILURES_PER_PASS);
+        long untouched = queued.stream().map(r -> store.find(r.id()).orElseThrow())
+                .filter(r -> r.attempts() == 0 && r.status() == DeliveryStatus.PENDING).count();
+        assertThat(untouched).isEqualTo(6 - DeliveryService.MAX_CONSECUTIVE_FAILURES_PER_PASS);
+        // nothing is lost: once the connector answers again, a later pass delivers them
+        hook.script.clear();
+        clock.now = clock.now.plus(Duration.ofMinutes(5));
+        delivery.processDue(10);
+        assertThat(queued).allSatisfy(r -> assertThat(store.find(r.id()).orElseThrow().status()).isEqualTo(DeliveryStatus.DELIVERED));
+    }
+
     @Test void deadLetteredDeliveryIsRecordedOnTheAlert() {
         ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
         http.status = 404;

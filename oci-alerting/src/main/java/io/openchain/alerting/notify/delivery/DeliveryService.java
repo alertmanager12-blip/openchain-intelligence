@@ -100,11 +100,55 @@ public final class DeliveryService {
                 null, 0, now, now, null));
     }
 
-    /** Attempts every due delivery (up to {@code limit}); returns the updated records. */
+    /**
+     * Failed attempts in a row after which a connector is left alone until the next pass: an unreachable endpoint costs
+     * seconds per attempt (connect and read timeouts), and its queue must not hold the pass.
+     */
+    public static final int MAX_CONSECUTIVE_FAILURES_PER_PASS = 3;
+
+    /**
+     * Attempts every due delivery (up to {@code limit}); returns the updated records, in due order. Connectors are
+     * served in parallel (one lane per connector, in due order within a lane), so a slow or unreachable connector
+     * delays only its own deliveries. A lane stops after {@link #MAX_CONSECUTIVE_FAILURES_PER_PASS} failed attempts in a
+     * row: its remaining deliveries are left untouched (still PENDING and due, lease released) for the next pass.
+     */
     public synchronized List<DeliveryRecord> processDue(int limit) {
+        List<DeliveryRecord> due = store.findDue(clock.instant(), limit);
+        if (due.isEmpty()) return List.of();
+        java.util.Map<String, List<DeliveryRecord>> lanes = new java.util.LinkedHashMap<>();
+        for (DeliveryRecord r : due) lanes.computeIfAbsent(r.connectorId(), k -> new ArrayList<>()).add(r);
+        java.util.Map<String, DeliveryRecord> done = new java.util.concurrent.ConcurrentHashMap<>();
+        if (lanes.size() == 1) {
+            lane(due, done);
+        } else {
+            List<Thread> threads = new ArrayList<>();
+            for (List<DeliveryRecord> l : lanes.values()) threads.add(Thread.ofVirtual().name("delivery-lane").start(() -> lane(l, done)));
+            for (Thread th : threads) {
+                try { th.join(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+        }
         List<DeliveryRecord> out = new ArrayList<>();
-        for (DeliveryRecord r : store.findDue(clock.instant(), limit)) out.add(attempt(r));
+        for (DeliveryRecord r : due) { DeliveryRecord d = done.get(r.id()); if (d != null) out.add(d); }
         return out;
+    }
+
+    /** One connector's due deliveries, in order; never throws (a failing listener must not stop the lane). */
+    private void lane(List<DeliveryRecord> records, java.util.Map<String, DeliveryRecord> done) {
+        int failures = 0;
+        for (DeliveryRecord r : records) {
+            if (failures >= MAX_CONSECUTIVE_FAILURES_PER_PASS) {
+                try { store.save(r); } catch (RuntimeException e) { /* lease expires on its own */ } // unchanged: releases the claim
+                continue; // not attempted in this pass, not reported
+            }
+            DeliveryRecord out;
+            try {
+                out = attempt(r);
+            } catch (RuntimeException e) { // a delivered/dead-letter listener failed after the attempt was recorded
+                out = store.find(r.id()).orElse(r);
+            }
+            done.put(r.id(), out);
+            failures = out.status() == DeliveryStatus.DELIVERED ? 0 : failures + 1;
+        }
     }
 
     public List<DeliveryRecord> deadLetters() { return store.findByStatus(DeliveryStatus.DEAD_LETTER); }

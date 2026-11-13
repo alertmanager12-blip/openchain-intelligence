@@ -283,6 +283,48 @@ class JdbcRepositoriesPersistenceTest {
 
     // ---- alerts -------------------------------------------------------------------------------------------------
 
+    /**
+     * Code review I24 (2026-11-13): the alert list and the dashboard loaded every alert. Paging, filters and counts now
+     * run in SQL and must give exactly what the reference in-memory implementation gives.
+     */
+    @Test
+    void alertPagesAndCountsMatchTheInMemoryReference() {
+        JdbcAlertRepository repo = new JdbcAlertRepository(jdbc, tx);
+        var reference = new io.openchain.alerting.alert.InMemoryAlertRepository();
+        AlertStatus[] statuses = {AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED, AlertStatus.ACKNOWLEDGED, AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE};
+        Severity[] severities = {Severity.CRITICAL, Severity.HIGH, Severity.LOW};
+        for (int i = 0; i < 23; i++) {
+            Alert a = alert("p" + String.format("%02d", i), "pk" + i, List.of("pe" + i)).toBuilder()
+                    .status(statuses[i % statuses.length]).severity(severities[i % severities.length])
+                    .ruleId(i % 4 == 0 ? "rule-b" : "rule-a").network(i % 5 == 0 ? Network.ETHEREUM : Network.TRON)
+                    .createdAt(T0.plusSeconds(i / 2 * 60L)) // pairs share a creation time: the id breaks the tie
+                    .subject(new io.openchain.alerting.alert.AlertSubject("pe" + i, "TOKEN_TRANSFER", i % 3 == 0 ? "TAddrX" : "TAddrY", null,
+                            "0xtx" + i, 100L + i, T0, Map.of())).build();
+            reference.save(a);
+            repo.save(a);
+        }
+        var Q = io.openchain.alerting.alert.AlertRepository.AlertQuery.class;
+        List<io.openchain.alerting.alert.AlertRepository.AlertQuery> queries = List.of(
+                io.openchain.alerting.alert.AlertRepository.AlertQuery.any(),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(java.util.EnumSet.of(AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED), null, null, null, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, Severity.CRITICAL, "rule-a", null, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, Network.ETHEREUM, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, null, T0.plusSeconds(180), T0.plusSeconds(480), null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, null, null, null, "taddrx"), // case-insensitive
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(java.util.EnumSet.noneOf(AlertStatus.class), null, null, null, null, null, null));
+        assertThat(Q).isNotNull();
+        for (var q : queries) {
+            for (int[] page : new int[][] {{0, 5}, {5, 5}, {20, 10}, {0, 100}, {40, 5}}) {
+                assertThat(repo.findPage(q, page[0], page[1])).extracting(Alert::id).as(q + " offset " + page[0] + " limit " + page[1])
+                        .containsExactlyElementsOf(reference.findPage(q, page[0], page[1]).stream().map(Alert::id).toList());
+            }
+        }
+        // a page carries its history (loaded for the page only)
+        assertThat(repo.findPage(io.openchain.alerting.alert.AlertRepository.AlertQuery.any(), 0, 3)).allSatisfy(a -> assertThat(a.history()).isNotEmpty());
+        assertThat(repo.countByStatusAndSeverity()).containsExactlyInAnyOrderElementsOf(reference.countByStatusAndSeverity());
+        assertThat(repo.createdAtSince(T0.plusSeconds(300))).containsExactlyInAnyOrderElementsOf(reference.createdAtSince(T0.plusSeconds(300)));
+    }
+
     static Alert alert(String id, String dedup, List<String> events) {
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("kind", "AGGREGATION");
