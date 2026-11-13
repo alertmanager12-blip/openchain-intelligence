@@ -8,6 +8,14 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lots 3 and 4: operations, providers)
+
+- **A lagging node was mistaken for a chain reorganisation** (I10): when the provider does not have a block that was already indexed (failover to a node behind), the indexer now retries later instead of retracting events or stopping with "reorg too deep"; a real reorganisation shows another hash at that height.
+- **JSON-RPC rate limits sent with HTTP 200 escaped retry, circuit breaker and failover** (I19): transient JSON-RPC errors (-32005, -32002, 429) are retried and failed over like an HTTP 429; "too many results" (same code) still asks for a smaller range and is not retried.
+- **TRON: receipts, freeze scans and address histories burned the indexing quota** (I20): they read the block reference only, instead of the indexer's block fetch (full transaction infos and prefetch of the next blocks).
+- **Provider responses are bounded** (I21): a body above 64 MB is refused before parsing (permanent error).
+- **`deploy/smoke-test.sh` replaced the images of a real deployment** (I31): the smoke stack builds under its own `:smoke` tags (`deploy/smoke.override.yml`).
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 2: availability)
 
 - **A provider call ran under the service-wide processing lock** (I15): the contract lookup of an approval's spender (retries, rate limiter, back-off) is now made before the lock, so a slow or rate-limited network no longer stalls the others.

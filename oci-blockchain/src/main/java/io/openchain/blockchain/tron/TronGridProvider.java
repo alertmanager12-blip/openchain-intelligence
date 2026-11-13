@@ -164,6 +164,15 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
         return ref;
     }
 
+    /**
+     * The reference of block {@code n} only (number, hash, parent, time): one light call, no transaction infos, no memo,
+     * no prefetch. For callers other than the indexer (receipts, freeze scans, address history): {@link #getBlock} is
+     * tuned for the indexer's getBlock + getBlockActivity pair and would spend several heavy calls of the same quota.
+     */
+    private Optional<BlockRef> blockRefOnly(long n) {
+        return blockRef(post("/wallet/getblockbynum", "num", n));
+    }
+
     /** Starts fetching the next confirmed blocks after {@code n} (see {@link Ahead}); uses the cached head only. */
     private void prefetchAfter(long n) {
         long[] c = cachedHead;
@@ -202,7 +211,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
         JsonNode info = post("/wallet/gettransactioninfobyid", "value", hash);
         if (!present(info) || !present(info.path("blockNumber"))) return Optional.empty();
         long blockNumber = longValue(info, "blockNumber", 0);
-        String blockHash = getBlock(blockNumber).map(BlockRef::hash).orElse(null);
+        String blockHash = blockRefOnly(blockNumber).map(BlockRef::hash).orElse(null);
         ChainTransaction ct = toTransaction(tx, blockNumber, blockHash,
                 Instant.ofEpochMilli(longValue(info, "blockTimeStamp", 0)), BigInteger.valueOf(longValue(info, "fee", 0)),
                 successOf(tx, info));
@@ -397,7 +406,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
                         if (!sameContract(s.contract(), text(ev, "contract_address"))) continue;
                         Optional<String> target = eventAddress(ev);
                         if (target.isEmpty()) continue;
-                        String bh = hashes.computeIfAbsent(bn, b -> getBlock(b).map(BlockRef::hash).orElse(null));
+                        String bh = hashes.computeIfAbsent(bn, b -> blockRefOnly(b).map(BlockRef::hash).orElse(null));
                         out.add(new TokenFreeze(Network.TRON, text(ev, "transaction_id"), (int) longValue(ev, "event_index", 0), bn, bh,
                                 Instant.ofEpochMilli(longValue(ev, "block_timestamp", 0)), new Address(Network.TRON, target.get()),
                                 tokens.resolve(Network.TRON, s.contract()), s.issuer(), action, event));
@@ -410,7 +419,7 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
     }
 
     private long blockTime(long n) {
-        return getBlock(n).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available", true)).timestamp().toEpochMilli();
+        return blockRefOnly(n).orElseThrow(() -> new ProviderException(id + ": block " + n + " not available", true)).timestamp().toEpochMilli();
     }
 
     private static boolean sameContract(String base58, String reported) {

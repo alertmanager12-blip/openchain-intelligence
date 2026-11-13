@@ -10,6 +10,9 @@ set -euo pipefail
 # always in demo mode with real chains off and no provisioned admin key, whatever a local .env holds. It still uses
 # ports 8080/4200, so stop a running deployment first (`docker compose down`, data kept).
 export COMPOSE_PROJECT_NAME=${SMOKE_PROJECT:-oci-smoke}
+# Its images too are its own (tags ':smoke', see deploy/smoke.override.yml): building must never replace the images of a
+# real deployment on the same machine.
+export COMPOSE_FILE=docker-compose.yml:deploy/smoke.override.yml
 export OCI_DEMO_MODE=true OCI_CHAINS_ETHEREUM_ENABLED=false OCI_CHAINS_TRON_ENABLED=false OCI_ADMIN_API_KEY=
 export OCI_SECURITY_API_KEY_PEPPER= OCI_CRYPTO_MASTER_KEY=b2NpLWRldi1vbmx5LW1hc3Rlci1rZXktMDAwMDAwMDA=
 for p in 8080 4200; do

@@ -179,6 +179,42 @@ class BlockIndexerTest {
         assertThat(refsOnly.load("idx-eth").orElseThrow().lastBlock()).isEqualTo(r.lastBlock());
     }
 
+    /**
+     * Code review I10 (2026-11-13): after a failover to a node that lags behind, blocks of the window are simply not
+     * there yet. That is not a reorganisation: nothing may be retracted, and the indexer must not stop with
+     * ReorgTooDeepException; it retries later (retryable provider error) and resumes when the node has caught up.
+     */
+    @Test void aLaggingNodeIsNotMistakenForAReorganisation() {
+        chain.mine(15);
+        long[] visibleUpTo = {Long.MAX_VALUE};
+        io.openchain.core.provider.BlockchainProvider flaky = (io.openchain.core.provider.BlockchainProvider) java.lang.reflect.Proxy.newProxyInstance(
+                getClass().getClassLoader(), new Class<?>[]{io.openchain.core.provider.BlockchainProvider.class}, (proxy, m, args) -> {
+                    if (m.getName().equals("getBlock") && (long) args[0] > visibleUpTo[0]) return Optional.empty();
+                    try { return m.invoke(chain, args); } catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }
+                });
+        BlockIndexer idx = new BlockIndexer(flaky, store, sink::add, new IndexerConfig("idx-lag", 1, 0, 5, 1000));
+        idx.poll();
+        int emitted = sink.size();
+        Checkpoint before = idx.checkpoint();
+
+        visibleUpTo[0] = 12; // the node now serving us is 3 blocks behind our tip
+        assertThatThrownBy(idx::poll).isInstanceOf(ProviderException.class).isNotInstanceOf(ReorgTooDeepException.class)
+                .satisfies(e -> assertThat(((ProviderException) e).retryable()).isTrue());
+        visibleUpTo[0] = 5;  // even behind the whole window
+        assertThatThrownBy(idx::poll).isInstanceOf(ProviderException.class).isNotInstanceOf(ReorgTooDeepException.class)
+                .satisfies(e -> assertThat(((ProviderException) e).retryable()).isTrue());
+        assertThat(sink).hasSize(emitted);                       // nothing retracted, nothing re-emitted
+        assertThat(sink).noneMatch(ChainEvent::removed);
+        assertThat(idx.checkpoint()).isEqualTo(before);          // state untouched
+
+        visibleUpTo[0] = Long.MAX_VALUE;                         // the node caught up: indexing goes on normally
+        chain.mine(2);
+        BlockIndexer.PollResult r = idx.poll();
+        assertThat(r.reorgs()).isZero();
+        assertThat(r.blocksIndexed()).isEqualTo(2);
+        assertThat(live()).isEqualTo(canonical(1, chain.head()));
+    }
+
     @Test void reorgDeeperThanWindowFailsExplicitlyWithoutStateChange() {
         chain.mine(15);
         BlockIndexer idx = indexer(0, 3);

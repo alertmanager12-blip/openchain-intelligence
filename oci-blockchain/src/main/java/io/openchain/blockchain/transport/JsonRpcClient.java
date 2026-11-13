@@ -36,19 +36,29 @@ public final class JsonRpcClient {
                 default -> throw new IllegalArgumentException("unsupported param type " + p.getClass());
             }
         }
-        JsonNode resp = transport.post("", req);
-        JsonNode err = resp == null ? null : resp.path("error");
-        if (Json.present(err)) {
-            int code = err.path("code").asInt(0);
-            String msg = Json.text(err, "message");
-            throw new JsonRpcException(transport.endpoint().name() + ": " + method + " RPC error " + code
-                    + (msg == null ? "" : " " + truncate(msg)), method, code, msg == null ? null : truncate(msg),
-                    RETRYABLE_CODES.contains(code));
-        }
+        // a transient JSON-RPC error (rate limit, resource unavailable) is retried and failed over like an HTTP 429;
+        // "too many results" shares the code -32005 but asks for a smaller range: it is never retried as is
+        JsonNode resp = transport.post("", req, r -> {
+            JsonRpcException e = error(r, method);
+            return e != null && e.retryable() && !e.rangeTooLarge() ? e : null;
+        });
+        JsonRpcException error = error(resp, method);
+        if (error != null) throw error;
         if (resp == null || !resp.has("result")) {
             throw new ProviderException(transport.endpoint().name() + ": " + method + " returned no result", true);
         }
         return resp.get("result");
+    }
+
+    /** The JSON-RPC error of a response, classified, or null when it carries none. */
+    private JsonRpcException error(JsonNode resp, String method) {
+        JsonNode err = resp == null ? null : resp.path("error");
+        if (!Json.present(err)) return null;
+        int code = err.path("code").asInt(0);
+        String msg = Json.text(err, "message");
+        return new JsonRpcException(transport.endpoint().name() + ": " + method + " RPC error " + code
+                + (msg == null ? "" : " " + truncate(msg)), method, code, msg == null ? null : truncate(msg),
+                RETRYABLE_CODES.contains(code));
     }
 
     private static String truncate(String s) { return s.length() > 200 ? s.substring(0, 200) : s; }

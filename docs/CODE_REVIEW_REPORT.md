@@ -26,8 +26,9 @@ lignes de specs.
 |---|---|---|
 | 1 — Exactitude | B1, B2, B3, I1, I2, I11 | **corrigé**, commit `444e423` (570 tests Java, 145 frontend) |
 | 2 — Disponibilité | I15, I16, I17, I18, I24 | **corrigé** le 2026-11-13 (voir CHANGELOG) |
-| 3 — Sécurité et exploitation | I27 à I32, I29 | à faire |
-| 4 — Fournisseurs | I10, I19 à I22 | à faire |
+| 2 (commit) | — | commit `2719814` (577 tests Java) |
+| 3 — Sécurité et exploitation | I31 | **corrigé** le 2026-11-13 ; I27, I28, I29, I30 attendent une décision ; I32 (SHA des actions CI) à faire par Dependabot |
+| 4 — Fournisseurs | I10, I19, I20, I21 | **corrigé** le 2026-11-13 ; I22 (HTTP 403 de TronGrid) non traité : comportement à vérifier à la source |
 | 5 — Reste | autres importants, mineurs | à faire |
 
 Rien n'est déployé : la production tourne sur `299db4f`.
