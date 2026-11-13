@@ -147,6 +147,38 @@ class BlockIndexerTest {
         assertThat(idx.checkpoint().window().getLast().block()).isEqualTo(chain.getBlock(chain.head()).orElseThrow());
     }
 
+    /**
+     * Like JdbcCheckpointStore (production with PostgreSQL): only block references are persisted, never the events of
+     * the window. Regression (code review B1, 2026-11-13): the indexer reloaded its window from the store at every poll,
+     * so a reorg detected on a later poll retracted nothing.
+     */
+    static final class RefsOnlyCheckpointStore implements CheckpointStore {
+        final java.util.Map<String, Checkpoint> saved = new java.util.HashMap<>();
+        @Override public Optional<Checkpoint> load(String id) { return Optional.ofNullable(saved.get(id)); }
+        @Override public void save(String id, Checkpoint c) {
+            List<IndexedBlock> refs = c.window().stream().map(ib -> new IndexedBlock(ib.block(), List.of())).toList();
+            saved.put(id, new Checkpoint(c.network(), c.lastBlock(), refs));
+        }
+    }
+
+    @Test void reorgOnALaterPollIsRetractedWithAStoreThatKeepsOnlyBlockReferences() {
+        RefsOnlyCheckpointStore refsOnly = new RefsOnlyCheckpointStore();
+        chain.mine(15);
+        BlockIndexer idx = new BlockIndexer(chain, refsOnly, sink::add, new IndexerConfig("idx-eth", 1, 0, 5, 1000));
+        idx.poll();
+        long orphanedEvents = eventsInBlocks(13, 15);
+        assertThat(orphanedEvents).isPositive();
+
+        chain.reorg(3, 4);
+        BlockIndexer.PollResult r = idx.poll();
+
+        assertThat(r.reorgs()).isEqualTo(1);
+        assertThat(r.eventsRetracted()).isEqualTo(orphanedEvents);
+        assertThat(live()).isEqualTo(canonical(1, chain.head()));
+        // the durable checkpoint still follows every block (resume after a restart)
+        assertThat(refsOnly.load("idx-eth").orElseThrow().lastBlock()).isEqualTo(r.lastBlock());
+    }
+
     @Test void reorgDeeperThanWindowFailsExplicitlyWithoutStateChange() {
         chain.mine(15);
         BlockIndexer idx = indexer(0, 3);

@@ -139,6 +139,23 @@ public class ChainIngestionService {
      */
     public void setAgeWarmup(Duration warmup) { this.ageWarmup = warmup == null ? Duration.ZERO : warmup; }
 
+    /**
+     * Every address seen in a flow since start-up, independent of the bounded working set (code review B3): an address
+     * without a profile is either never seen (genuinely new, age 0) or seen before with its profile evicted (age unknown,
+     * the age fields are then absent). Fixed memory; guarded by the processing lock.
+     */
+    private volatile io.openchain.intelligence.memory.SeenAddresses seenAddresses =
+            new io.openchain.intelligence.memory.SeenAddresses(1L << 24); // 2 MB until configured (tests, demo)
+
+    /** Size of the seen-address filter in bits (OCI_INGESTION_SEEN_ADDRESSES_BITS); call before indexing starts. */
+    public void setSeenAddressesBits(long bits) { this.seenAddresses = new io.openchain.intelligence.memory.SeenAddresses(bits); }
+
+    /** Fill ratio (0..1), estimated error rate and distinct addresses of the seen-address filter (metrics). */
+    public synchronized double[] seenAddressesStats() {
+        var s = seenAddresses;
+        return new double[] {s.fillRatio(), s.falsePositiveRate(), s.inserted(), s.sizeBytes()};
+    }
+
     /** Days the network has been observed so far (event time span), 0 when nothing was seen. */
     public long observedDays(Network n) {
         Instant start = observationStart.get(n);
@@ -321,7 +338,14 @@ public class ChainIngestionService {
                 ValueFlow f = flow.get();
                 transfersIndexed.incrementAndGet();
                 track(f);
+                // before this flow: was each party ever seen, and does the receiver still have a profile? (age fields)
+                boolean senderSeen = seenAddresses.add(f.from());
+                boolean receiverHadProfile = intelligence.profiles().has(f.to());
+                boolean receiverSeen = f.to().equals(f.from()) ? senderSeen : seenAddresses.add(f.to());
                 WalletProfile senderBefore = intelligence.profiles().profileOrEmpty(f.from());
+                // age known: from a profile covering the address since it was first seen, or a never-seen address (0)
+                boolean senderAgeKnown = senderBefore.firstActivity() != null ? !intelligence.profiles().startUnknown(f.from()) : !senderSeen;
+                boolean receiverAgeKnown = receiverHadProfile ? !intelligence.profiles().startUnknown(f.to()) : !receiverSeen;
                 Optional<BigDecimal> realBalance = Optional.empty();
                 boolean real = intelligence.balances().authoritative(e.network());
                 if (real) {
@@ -330,7 +354,10 @@ public class ChainIngestionService {
                 }
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
                 fresh.addAll(r.newSignals());
-                enriched = enrich(e, f, senderBefore, real, realBalance);
+                // a profile just re-created for an address seen earlier does not know when the address really started
+                if (senderSeen && senderBefore.firstActivity() == null) intelligence.profiles().markStartUnknown(f.from());
+                if (receiverSeen && !receiverHadProfile) intelligence.profiles().markStartUnknown(f.to());
+                enriched = enrich(e, f, senderBefore, real, realBalance, senderAgeKnown, receiverAgeKnown);
             }
         } else if (isFreeze(e)) {
             Optional<Address> target = address(e, "freeze.address");
@@ -493,6 +520,8 @@ public class ChainIngestionService {
                     if (intelligence.flows().add(f)) {
                         intelligence.profiles().ingest(f);
                         track(f);
+                        seenAddresses.add(f.from());
+                        seenAddresses.add(f.to());
                     }
                 }
             });
@@ -521,6 +550,8 @@ public class ChainIngestionService {
                 Optional<ValueFlow> f = toFlow(e);
                 if (f.isEmpty()) continue;
                 track(f.get());
+                seenAddresses.add(f.get().from());
+                seenAddresses.add(f.get().to());
                 r = intelligence.onFlow(f.get());
             } else if (e.type() == ChainEvent.EventType.APPROVAL) {
                 r = intelligence.onEvent(e);
@@ -861,7 +892,7 @@ public class ChainIngestionService {
             }
         }
         Instant firstSeen = intelligence.profiles().profileOrEmpty(spender).firstActivity();
-        if (firstSeen != null && observedLongEnough(e.network(), e.eventTime())) {
+        if (firstSeen != null && !intelligence.profiles().startUnknown(spender) && observedLongEnough(e.network(), e.eventTime())) {
             fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
         }
         putWatchlist(fields, owner, null); // wallet.watchlisted = the owner who granted the allowance
@@ -870,7 +901,8 @@ public class ChainIngestionService {
     }
 
     /** Adds the wallet (sender) and counterparty (recipient) catalog fields. */
-    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore, boolean real, Optional<BigDecimal> realBalance) {
+    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore, boolean real, Optional<BigDecimal> realBalance,
+                              boolean senderAgeKnown, boolean receiverAgeKnown) {
         Map<String, Object> fields = new LinkedHashMap<>(e.fields());
         fields.put("wallet.address", f.from().value());
         if (real) {
@@ -883,7 +915,10 @@ public class ChainIngestionService {
             fields.put("wallet.balance", stats == null ? BigDecimal.ZERO : stats.balanceEstimate()); // demo ledger: exact
         }
         boolean aged = observedLongEnough(e.network(), e.eventTime());
-        if (aged) {
+        // Age and activity are measured only when known: from the wallet's profile, or 0 for an address never seen before.
+        // An address seen before whose profile left the bounded working set has an unknown age: no field (a 0 would make
+        // an old wallet look new and fire "young wallet" rules).
+        if (aged && senderAgeKnown) {
             fields.put("wallet.tx_count", senderBefore.transactionCount());
             fields.put("wallet.age_days", ageDays(senderBefore.firstActivity(), e.eventTime()));
         }
@@ -893,7 +928,8 @@ public class ChainIngestionService {
         putRisk(fields, "counterparty", f.to());
         putLabels(fields, "counterparty", f.to());
         WalletProfile cp = intelligence.profiles().profileOrEmpty(f.to());
-        if (aged) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
+        // same rule: the receiver's profile (as it was before this flow), or a never-seen receiver (age 0)
+        if (aged && receiverAgeKnown) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
         putWatchlist(fields, f.from(), f.to());
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);

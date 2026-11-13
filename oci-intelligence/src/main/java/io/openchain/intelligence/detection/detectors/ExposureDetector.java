@@ -40,6 +40,9 @@ import java.util.Set;
 public final class ExposureDetector extends AbstractDetector {
     public ExposureDetector() { super("exposure", 1); }
 
+    /** Sees unverified-token flows to record them as zero-weight DUSTING; they never create exposure (see counts()). */
+    @Override public boolean readsUnverifiedTokenFlows() { return true; }
+
     private record Node(Address address, List<ValueFlow> path) {} // path[0] = flow leaving the source ... path[last] = flow into subject
 
     @Override public List<Signal> detect(DetectionContext ctx) {

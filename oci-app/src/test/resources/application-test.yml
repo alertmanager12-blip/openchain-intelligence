@@ -17,6 +17,7 @@ oci:
         scopes: [wallet:read, transaction:read, risk:read, investigation:read, alerts:read, alerts:write, rules:read, rules:write]
   ingestion:
     dispatch-interval: 1h
+    seen-addresses-bits: 1048576   # 128 kB per test context instead of the 32 MB default
 logging:
   level:
     root: WARN

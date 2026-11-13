@@ -183,6 +183,14 @@ public final class WalletProfileAccumulator {
         for (int i = COUNTERPARTY_CAP; i < all.size(); i++) counterparties.remove(all.get(i).getKey());
     }
 
+    /**
+     * True when this profile was created for an address already seen earlier (its previous profile left the bounded
+     * working set): first activity, age and transaction count are then lower bounds, not measurements. Callers synchronise.
+     */
+    private boolean startUnknown;
+    void markStartUnknown() { startUnknown = true; }
+    boolean startUnknown() { return startUnknown; }
+
     /** The address this profile describes (the canonical instance shared with stored flows, see CanonicalInstances). */
     public Address address() { return address; }
 

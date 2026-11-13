@@ -237,6 +237,42 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().status()).isEqualTo(AlertStatus.NOTIFIED); // kept, status unchanged
     }
 
+    /**
+     * Code review I1 (2026-11-13): after a restart the rule engine's dedup cache is empty, so the engine ignores the
+     * retraction of an event indexed before the restart. The stored alert must still have its evidence withdrawn and
+     * alert.retracted must still go out.
+     */
+    @Test void retractionAfterARestartStillWithdrawsTheStoredAlert() {
+        ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
+        byte[] secret = "pipeline-secret-pipeline-secret-!!".getBytes(StandardCharsets.UTF_8);
+        ConnectorRegistry reg = new ConnectorRegistry()
+                .register(new WebhookConnector("default-webhook", URI.create("https://hooks.example.com/oc"), secret, http, clock));
+        DeliveryService ds = new DeliveryService(new InMemoryDeliveryStore(), reg, BACKOFF, clock);
+        String rule = header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: default-webhook } ]
+                """;
+        RuleEngine before = new RuleEngine(EngineConfig.defaults());
+        before.register(Fx.rule(rule));
+        Alert a = new AlertingPipeline(before, alerts, ds).onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+
+        // restart: a new engine (empty dedup cache), the same persisted alerts and outbox
+        RuleEngine after = new RuleEngine(EngineConfig.defaults());
+        after.register(Fx.rule(rule));
+        AlertingPipeline p = new AlertingPipeline(after, alerts, ds);
+        p.dispatch(10);
+        int sent = http.calls.size();
+
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED));
+        assertThat(http.calls).hasSize(sent + 1);
+
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000"))); // repeated notice: idempotent
+        assertThat(p.dispatch(10)).isEmpty();
+    }
+
     @Test void deadLetteredDeliveryIsRecordedOnTheAlert() {
         ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
         http.status = 404;

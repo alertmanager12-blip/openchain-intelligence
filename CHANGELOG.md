@@ -8,6 +8,15 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 1: accuracy)
+
+- **Chain reorganisations were not retracted with PostgreSQL persistence** (B1): the indexer reloaded its reorg window from the checkpoint store at every poll, and the PostgreSQL store keeps block references only, so a reorg was detected but no retraction was emitted (orphaned flows, signals and alerts stayed valid). The window now lives in memory and the store is read once at start-up. Events of blocks indexed before a restart are still not retracted (unchanged, documented in ADR-0024).
+- **Transfers of unverified tokens no longer drive behavioural detectors** (B2): anyone can deploy a contract emitting `Transfer(from = victim, …)`; such flows raised fast-forwarding, circular-flow, unusual-amount, fan-out and estimated rapid-drain signals against third parties. Detectors now see verified tokens only; the exposure detector still records unverified transfers from listed addresses as zero-weight `DUSTING`.
+- **Age and activity of wallets whose profile left the working set** (B3): `wallet.age_days`, `wallet.tx_count`, `counterparty.age_days` and `approval.spender_age_days` were 0 (or counted from the re-created profile) for old wallets evicted by the caps, so "young wallet" conditions could match old wallets. A fixed-size filter of every address seen since start-up (`OCI_INGESTION_SEEN_ADDRESSES_BITS`, default 2^28 bits = 32 MB of heap; gauges `oci_seen_addresses_fill_ratio`, `oci_seen_addresses_false_positive_rate`, `oci_seen_addresses`) tells a never-seen address (age 0, emitted) from one seen before (age unknown: the fields are absent, so conditions on them do not match).
+- **Alert retraction after a restart** (I1): the rule engine ignores the retraction of an event it no longer remembers (in-memory dedup cache); stored alerts citing the event now have their evidence withdrawn anyway, and `alert.retracted` is delivered.
+- **Retraction through the internal connector** (I2): an `alert.retracted` notification reached correlation rules as a new signal; it is now a removed event with the same id.
+- **Fund flow graph kept stale transfers** (I11): changing the token, the dates or the depth on the same root only added elements; elements that no longer match are now removed.
+
 ### Changed (memory — shared instances, `docs/KEY_COMPACTION_IMPLEMENTATION_REPORT.md`)
 
 - **Stored flows share one instance per equal token and per address** instead of a new token and new addresses per decoded event. Tokens are shared on their full identity (network, contract, symbol, decimals: two tokens with the same symbol stay distinct) in a bounded table (4,096, least recently used forgotten first); addresses reuse the instance held by the wallet's profile, so no table of their own and no reference outlives the profile. Native coin descriptors are now one per network. Equality, identification, deduplication, retractions and re-inclusions are unchanged (differential tests, forced hash collisions).

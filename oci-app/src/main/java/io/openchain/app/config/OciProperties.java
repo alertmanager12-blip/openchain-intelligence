@@ -150,6 +150,16 @@ public class OciProperties {
         public Duration getAgeWarmup() { return ageWarmup; }
         public void setAgeWarmup(Duration ageWarmup) { this.ageWarmup = ageWarmup; }
 
+        /**
+         * Size in bits of the "address already seen" filter (OCI_INGESTION_SEEN_ADDRESSES_BITS, default 2^28 = 32 MB of
+         * heap, about 28 million addresses at a 1 % error rate). It tells a genuinely new wallet (age 0) from an old one
+         * whose profile left the bounded working set (age unknown, age fields absent). When it fills up, more new wallets
+         * are reported with an unknown age (never a wrong one): watch oci_seen_addresses_fill_ratio and raise it.
+         */
+        private long seenAddressesBits = 1L << 28;
+        public long getSeenAddressesBits() { return seenAddressesBits; }
+        public void setSeenAddressesBits(long v) { this.seenAddressesBits = v; }
+
         public Duration getPollInterval() { return pollInterval; }
         public void setPollInterval(Duration pollInterval) { this.pollInterval = pollInterval; }
         public Duration getDispatchInterval() { return dispatchInterval; }

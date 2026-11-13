@@ -42,9 +42,17 @@ public final class DetectionEngine {
         List<Signal> fresh = new ArrayList<>();
         Map<String, String> errors = new LinkedHashMap<>();
         int dup = 0;
+        boolean unverifiedTrigger = ctx.trigger() != null && ctx.trigger().token().isUnverified();
+        DetectionContext verifiedOnly = null; // built once, only if a detector needs it
         for (Detector d : detectors) {
+            DetectionContext c = ctx;
+            if (!d.readsUnverifiedTokenFlows()) {
+                if (unverifiedTrigger) continue; // a spoofable flow never triggers behavioural detection
+                if (verifiedOnly == null) verifiedOnly = ctx.withFlows(new VerifiedFlows(ctx.flows()));
+                c = verifiedOnly;
+            }
             List<Signal> out;
-            try { out = d.detect(ctx); }
+            try { out = d.detect(c); }
             catch (RuntimeException e) { errors.put(d.qualifiedId(), e.getClass().getSimpleName() + ": " + e.getMessage()); continue; }
             for (Signal s : out) {
                 if (repository.saveIfAbsent(s)) fresh.add(s); else dup++;

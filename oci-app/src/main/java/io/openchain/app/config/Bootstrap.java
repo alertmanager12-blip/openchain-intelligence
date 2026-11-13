@@ -118,6 +118,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         boolean demo = props.getDemo().isEnabled();
         refuseRealChainsInDemoMode(demo);
         chains.setAgeWarmup(props.getIngestion().getAgeWarmup());
+        chains.setSeenAddressesBits(props.getIngestion().getSeenAddressesBits());
         // internal bus: INTERNAL_EVENT actions feed derived events back to the rule engine (hop-limited by the engine)
         connectors.register(new InternalEventConnector("internal-bus", chains::publishInternal, clock));
         if (demo) {

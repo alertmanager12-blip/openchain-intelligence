@@ -57,8 +57,18 @@ public final class BlockIndexer {
         this.clock = clock;
     }
 
-    public Checkpoint checkpoint() {
-        return store.load(config.indexerId()).orElse(new Checkpoint(provider.network(), config.startBlock() - 1, List.of()));
+    /**
+     * Live state (window with its events), kept in memory: the store is read once (first poll, i.e. after a restart)
+     * and written after each block. A store may persist block references only (JdbcCheckpointStore): reloading it at
+     * every poll would forget the events of the window, and a reorg detected on a later poll would retract nothing.
+     */
+    private Checkpoint current;
+
+    public synchronized Checkpoint checkpoint() {
+        if (current == null) {
+            current = store.load(config.indexerId()).orElse(new Checkpoint(provider.network(), config.startBlock() - 1, List.of()));
+        }
+        return current;
     }
 
     /** One bounded indexing step. Provider failures propagate as {@link ProviderException}; state stays consistent. */
@@ -192,6 +202,8 @@ public final class BlockIndexer {
     }
 
     private void save(long last, Deque<IndexedBlock> window) {
-        store.save(config.indexerId(), new Checkpoint(provider.network(), last, List.copyOf(window)));
+        Checkpoint c = new Checkpoint(provider.network(), last, List.copyOf(window));
+        store.save(config.indexerId(), c);
+        current = c;
     }
 }

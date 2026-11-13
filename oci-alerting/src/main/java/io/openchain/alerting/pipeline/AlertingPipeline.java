@@ -36,10 +36,14 @@ public final class AlertingPipeline {
 
     public Outcome onEvent(ChainEvent event) {
         EngineResult r = engine.process(event);
-        if (r.retractedEventId() != null) {
+        // Stored alerts are withdrawn for every removed event, even when the engine ignored it: its dedup cache lives in
+        // memory, so after a restart (or an eviction) it no longer knows events matched earlier, while the alerts citing
+        // them are persisted. onRetraction is idempotent (an event already withdrawn changes nothing).
+        String retracted = r.retractedEventId() != null ? r.retractedEventId() : event.removed() ? event.eventId() : null;
+        if (retracted != null) {
             // an alert whose last valid evidence just left the canonical chain is announced on the channels of its rule
             // (same routing as its opening), once per withdrawal, through the delivery outbox (retries, dead letters)
-            for (AlertService.EvidenceChange c : alerts.onRetraction(r.retractedEventId())) {
+            for (AlertService.EvidenceChange c : alerts.onRetraction(retracted)) {
                 if (!c.becameWithdrawn()) continue;
                 Rule rule = engine.rule(c.alert().ruleId()).map(x -> x.rule()).orElse(null);
                 if (rule != null) for (Rule.ActionSpec action : rule.actions()) delivery.enqueueRetraction(c.alert(), action);

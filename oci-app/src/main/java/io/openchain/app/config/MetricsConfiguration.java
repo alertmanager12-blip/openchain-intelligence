@@ -106,6 +106,13 @@ public class MetricsConfiguration {
             Gauge.builder("oci.working.set.trim.millis", chains, c -> c.lastTrim() == null ? Double.NaN : c.lastTrim().millis())
                     .description("Duration of the last working-set trim").register(registry);
             FunctionCounter.builder("oci.events.retracted", chains, ChainIngestionService::eventsRetracted).register(registry);
+            // seen-address filter (age of evicted wallets, code review B3): fill and estimated error rate
+            Gauge.builder("oci.seen.addresses.fill.ratio", chains, c -> c.seenAddressesStats()[0])
+                    .description("Share of bits set in the seen-address filter; above 0.5 raise OCI_INGESTION_SEEN_ADDRESSES_BITS").register(registry);
+            Gauge.builder("oci.seen.addresses.false.positive.rate", chains, c -> c.seenAddressesStats()[1])
+                    .description("Estimated share of new addresses reported as already seen (their age is then withheld)").register(registry);
+            Gauge.builder("oci.seen.addresses", chains, c -> c.seenAddressesStats()[2])
+                    .description("Distinct addresses recorded since start-up").register(registry);
             // signal removals (P0 item 3): nothing is removed silently
             var signalStore = intelligence.signals();
             for (var reason : io.openchain.intelligence.detection.SignalRepository.EvictionReason.values()) {

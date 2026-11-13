@@ -117,6 +117,22 @@ public final class WalletProfileService {
     public int size() { return accumulators.size(); }
 
     /**
+     * Marks the profile of {@code a} as created after an eviction: its first activity, age and transaction count are
+     * lower bounds (see {@link #startUnknown}). No effect when the address has no profile.
+     */
+    public void markStartUnknown(Address a) {
+        WalletProfileAccumulator acc = accumulators.get(a);
+        if (acc != null) synchronized (acc) { acc.markStartUnknown(); }
+    }
+
+    /** True when the profile of {@code a} does not cover the address since it was first seen (re-created after eviction). */
+    public boolean startUnknown(Address a) {
+        WalletProfileAccumulator acc = accumulators.get(a);
+        if (acc == null) return false;
+        synchronized (acc) { return acc.startUnknown(); }
+    }
+
+    /**
      * The instance of {@code a} held by its profile, or {@code a} itself when it has no profile (CanonicalInstances: flows
      * then share the profile's instance; it lives as long as the profile, nothing else retains it).
      */

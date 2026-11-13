@@ -131,6 +131,13 @@ it). Only object identity changes. Gauges: `oci_canonical_tokens`, `oci_canonica
 `oci_canonical_addresses_shared`. Diagnostic of dedup keys kept by profiles after their flow left memory, computed only
 on request: `GET /api/v1/admin/working-set/profile-keys` (permission `keys:admin`).
 
+**Age of wallets that left the working set.** A fixed-size filter remembers every address seen in a flow since
+start-up (`OCI_INGESTION_SEEN_ADDRESSES_BITS`, default 268,435,456 bits = 32 MB of heap, about 28 million addresses at a
+1 % error rate; not persisted). An address without a profile that was never seen is new (`wallet.age_days` = 0); one seen
+before has an unknown age and the age and activity fields are absent, so rule conditions on them do not match. When
+`oci_seen_addresses_fill_ratio` exceeds about 0.5, raise the size (more new wallets would otherwise be reported with an
+unknown age, never with a wrong one). With Docker Compose, add the variable to the `app` service environment.
+
 **Very active wallets (step 3b).** A wallet profile no longer grows with its number of transfers: duplicate detection
 remembers the latest 4,096 event ids and transaction hashes, activity times are exact for the latest 2,048 instants
 (older ones are folded, first activity stays exact), the 1,024 counterparties with the most transfers are kept and
