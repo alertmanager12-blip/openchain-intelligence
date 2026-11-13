@@ -31,11 +31,20 @@ final class SlidingWindow {
     boolean isEmpty() { return entries.isEmpty(); }
 
     /** @return true if the oldest entry had to be dropped to respect {@code maxEntries} */
-    boolean add(Entry e, int maxEntries) {
+    boolean add(Entry e, int maxEntries) { return add(e, maxEntries, null); }
+
+    /** Same; {@code undo} (nullable) receives the compensation. */
+    boolean add(Entry e, int maxEntries, UndoLog undo) {
         int idx = upperBound(e.time());
         entries.add(idx, e);
-        if (entries.size() > maxEntries) { lost(entries.removeFirst().time()); return true; }
-        return false;
+        Instant priorLost = lostUpTo;
+        Entry dropped = null;
+        if (entries.size() > maxEntries) { dropped = entries.removeFirst(); lost(dropped.time()); }
+        if (undo != null) {
+            Entry d = dropped;
+            undo.push(() -> { entries.remove(e); if (d != null) entries.addFirst(d); lostUpTo = priorLost; });
+        }
+        return dropped != null;
     }
 
     /**
@@ -80,10 +89,17 @@ final class SlidingWindow {
     boolean remove(String eventId) { return entries.removeIf(e -> e.eventId().equals(eventId)); }
 
     /** Drops entries with time {@code <= limit}: they can no longer belong to a window touched by an accepted event. */
-    void evictUpTo(Instant limit) {
+    void evictUpTo(Instant limit) { evictUpTo(limit, null); }
+
+    void evictUpTo(Instant limit, UndoLog undo) {
         int n = 0;
         while (n < entries.size() && !entries.get(n).time().isAfter(limit)) n++;
-        if (n > 0) { lost(entries.get(n - 1).time()); entries.subList(0, n).clear(); }
+        if (n == 0) return;
+        Instant priorLost = lostUpTo;
+        List<Entry> removed = new ArrayList<>(entries.subList(0, n));
+        lost(entries.get(n - 1).time());
+        entries.subList(0, n).clear();
+        if (undo != null) undo.push(() -> { entries.addAll(0, removed); lostUpTo = priorLost; });
     }
 
     Instant newest() { return entries.isEmpty() ? null : entries.getLast().time(); }

@@ -195,7 +195,20 @@ public class ChainIngestionService {
         this.tokens = tokens;
         this.clock = clock;
         this.backfillMapper = new TransferEventMapper(tokens);
+        this.evaluations = new EvaluationRetryQueue(this::evaluateInTransaction, id -> alerting.engine().undoLast(id),
+                EvaluationRetryQueue.DEFAULT_CAPACITY);
     }
+
+    private final EvaluationRetryQueue evaluations;
+
+    /** Re-evaluates the events whose evaluation failed (scheduled). Serialised with ingestion. Code review I5. */
+    public synchronized int retryPendingEvaluations() { return evaluations.retryPending(); }
+
+    public int pendingEvaluations() { return evaluations.pending(); }
+    public long evaluationFailures() { return evaluations.failed(); }
+    public long evaluationsRetried() { return evaluations.retried(); }
+    public long evaluationsDroppedLate() { return evaluations.droppedLate(); }
+    public long evaluationsDroppedQueueFull() { return evaluations.droppedFull(); }
 
     // ---- registration -----------------------------------------------------------------------------------------
 
@@ -484,8 +497,12 @@ public class ChainIngestionService {
      * global order (monitor, then rows) and rules out a monitor/row-lock deadlock.
      */
     private void evaluate(ChainEvent e) {
+        evaluations.evaluate(e); // a failed transaction undoes the engine state and queues the event (code review I5)
+    }
+
+    private io.openchain.alerting.engine.EngineResult.Disposition evaluateInTransaction(ChainEvent e) {
         synchronized (alertService) {
-            tx.run(() -> alerting.onEvent(e));
+            return tx.inTransaction(() -> alerting.onEvent(e)).engine().disposition();
         }
     }
 

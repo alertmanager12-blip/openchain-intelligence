@@ -152,6 +152,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);
         scheduler.scheduleWithFixedDelay(guard("escalation", alertService::escalateOverdue), 60, 60, TimeUnit.SECONDS);
+        // events whose rule evaluation failed (transaction error) are retried even when no new event arrives (review I5)
+        scheduler.scheduleWithFixedDelay(guard("evaluation retry", chains::retryPendingEvaluations), 30, 30, TimeUnit.SECONDS);
         var ing = props.getIngestion();
         long trim = ing.getWorkingSetTrimInterval().toMillis();
         if (trim > 0) {

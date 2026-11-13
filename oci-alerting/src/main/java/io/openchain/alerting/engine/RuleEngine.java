@@ -91,7 +91,33 @@ public final class RuleEngine {
 
     public synchronized Optional<Instant> watermark(Network n) { return Optional.ofNullable(watermarkOf(n)); }
 
+    /** Compensations of the last {@link #process} call (null when it changed nothing undoable). Code review I5. */
+    private UndoLog undo;
+    private String undoEventId;
+
+    private void record(Runnable compensation) { if (undo != null) undo.push(compensation); }
+
+    /**
+     * Restores the engine state to what it was before the last {@link #process} call, if that call was for
+     * {@code eventId}: dedup state, latest event time, window and sequence entries (added, dropped, evicted, consumed by a
+     * completed sequence), group keys created or evicted. For the caller whose transaction storing the outcome failed:
+     * the event can then be evaluated again instead of being taken for a duplicate (code review I5). Counters are not
+     * reverted; entries expired by a periodic sweep during the call stay expired. Returns false when there is nothing to
+     * undo for this event (another event was processed since, or it was a retraction).
+     */
+    public synchronized boolean undoLast(String eventId) {
+        if (undo == null || eventId == null || !eventId.equals(undoEventId)) return false;
+        UndoLog u = undo;
+        undo = null;
+        undoEventId = null;
+        u.run();
+        metrics.undone.incrementAndGet();
+        return true;
+    }
+
     public synchronized EngineResult process(ChainEvent e) {
+        undo = null;
+        undoEventId = null;
         metrics.eventsReceived.incrementAndGet();
         if (e == null || e.eventId() == null || e.eventTime() == null || e.network() == null || e.type() == null) {
             metrics.invalidEvents.incrementAndGet();
@@ -110,10 +136,20 @@ public final class RuleEngine {
         }
         Instant max = maxEventTime.get(e.network());
         if (max != null && e.eventTime().isBefore(max)) metrics.lateAccepted.incrementAndGet();
+        undo = new UndoLog();
+        undoEventId = e.eventId();
+        Network net = e.network();
+        String id = e.eventId();
+        record(() -> { if (max == null) maxEventTime.remove(net); else maxEventTime.put(net, max); });
         if (max == null || e.eventTime().isAfter(max)) maxEventTime.put(e.network(), e.eventTime());
+        EventDedupCache.State priorDedup = dedup.get(id); // null or RETRACTED here
+        record(() -> { if (priorDedup == null) dedup.remove(id); else dedup.put(id, priorDedup); });
         dedup.put(e.eventId(), EventDedupCache.State.ACTIVE);
         metrics.eventsProcessed.incrementAndGet();
+        UndoLog recording = undo;
+        undo = null; // a periodic sweep only drops expired state: it is not undone (and must not restore discardedUpTo)
         maybeSweep();
+        undo = recording;
 
         // loop protection for events emitted by INTERNAL_EVENT actions
         int hop = hopOf(e);
@@ -126,8 +162,12 @@ public final class RuleEngine {
         List<RuleMatch> matches = new ArrayList<>();
         for (Runtime rt : rules.values()) {
             Rule r = rt.rule.rule();
-            if (!r.enabled() && !rt.evaluateWhenDisabled) { rt.observingSince.remove(e.network()); continue; } // a gap in what it saw
-            rt.observingSince.putIfAbsent(e.network(), e.eventTime());
+            if (!r.enabled() && !rt.evaluateWhenDisabled) { // a gap in what it saw
+                Instant was = rt.observingSince.remove(net);
+                if (was != null) record(() -> rt.observingSince.put(net, was));
+                continue;
+            }
+            if (rt.observingSince.putIfAbsent(net, e.eventTime()) == null) record(() -> rt.observingSince.remove(net));
             if (!rt.rule.inScope(e)) continue;
             if (origin.contains(r.id())) { metrics.loopSuppressed.incrementAndGet(); continue; }
             RuleMatch m = switch (rt.rule.kind()) {
@@ -256,9 +296,15 @@ public final class RuleEngine {
                 distinct = Values.display(norm);
             }
         }
-        SlidingWindow w = rt.windows.computeIfAbsent(key, k -> new SlidingWindow());
-        if (watermark != null) w.evictUpTo(watermark.minus(a.window()));
-        if (w.add(new SlidingWindow.Entry(e.eventId(), e.eventTime(), seq++, value, distinct, balance), config.maxEntriesPerKey()))
+        SlidingWindow w = rt.windows.get(key);
+        if (w == null) {
+            SlidingWindow created = new SlidingWindow();
+            rt.windows.put(key, created); // may evict the least recently used key (recorded by the map)
+            record(() -> { if (rt.windows.get(key) == created) rt.windows.remove(key); });
+            w = created;
+        }
+        if (watermark != null) w.evictUpTo(watermark.minus(a.window()), undo);
+        if (w.add(new SlidingWindow.Entry(e.eventId(), e.eventTime(), seq++, value, distinct, balance), config.maxEntriesPerKey(), undo))
             metrics.windowEntriesDropped.incrementAndGet();
         SlidingWindow.Hit hit = w.evaluate(e.eventTime(), a.window(), a.function(), a.operator(), a.threshold(), config.maxEvidenceEvents());
         if (hit == null) return null;
@@ -287,15 +333,25 @@ public final class RuleEngine {
         if (count == 0) return null;
         String key = groupKey(e, List.of(s.key()));
         if (key == null) { metrics.missingGroupKey.incrementAndGet(); return null; }
-        SequenceState st = rt.sequences.computeIfAbsent(key, k -> new SequenceState(s.steps().size()));
-        if (watermark != null) st.evictUpTo(watermark.minus(s.within()));
+        SequenceState st = rt.sequences.get(key);
+        if (st == null) {
+            SequenceState created = new SequenceState(s.steps().size());
+            rt.sequences.put(key, created);
+            record(() -> { if (rt.sequences.get(key) == created) rt.sequences.remove(key); });
+            st = created;
+        }
+        if (watermark != null) st.evictUpTo(watermark.minus(s.within()), undo);
         SequenceState.Entry entry = new SequenceState.Entry(e.eventId(), e.eventTime());
         int perStep = Math.max(1, config.maxEntriesPerKey() / s.steps().size());
-        for (int k = 0; k < count; k++) if (st.add(matching[k], entry, perStep)) metrics.windowEntriesDropped.incrementAndGet();
+        for (int k = 0; k < count; k++) if (st.add(matching[k], entry, perStep, undo)) metrics.windowEntriesDropped.incrementAndGet();
         for (int k = 0; k < count; k++) {
-            List<SequenceState.Entry> chain = st.completeWith(matching[k], entry, s.within());
+            List<SequenceState.Entry> chain = st.completeWith(matching[k], entry, s.within(), undo);
             if (chain == null) continue;
-            if (st.isEmpty()) rt.sequences.remove(key);
+            if (st.isEmpty()) {
+                SequenceState emptied = st;
+                rt.sequences.remove(key);
+                record(() -> rt.sequences.put(key, emptied));
+            }
             Map<String, Object> ev = new LinkedHashMap<>();
             ev.put("kind", "SEQUENCE");
             ev.put("key", s.key());
@@ -388,6 +444,8 @@ public final class RuleEngine {
         Instant discardedUpTo;
 
         void discarded(SlidingWindow w) {
+            Instant prior = discardedUpTo;
+            record(() -> discardedUpTo = prior);
             for (Instant t : new Instant[]{w.lostUpTo(), w.newest()})
                 if (t != null && (discardedUpTo == null || t.isAfter(discardedUpTo))) discardedUpTo = t;
         }
@@ -402,7 +460,10 @@ public final class RuleEngine {
             return new LinkedHashMap<>(16, 0.75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, V> eldest) {
                     if (size() > max) {
-                        if (eldest.getValue() instanceof SlidingWindow sw) discarded(sw);
+                        String k = eldest.getKey();
+                        V v = eldest.getValue();
+                        record(() -> put(k, v)); // undo: the evicted key comes back (the new one is removed first)
+                        if (v instanceof SlidingWindow sw) discarded(sw);
                         metrics.groupKeysEvicted.incrementAndGet();
                         return true;
                     }

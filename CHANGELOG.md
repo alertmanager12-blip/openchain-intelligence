@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, I5)
+
+- **An alert could be lost when the transaction storing it failed** (I5): the rule engine runs inside that transaction, and its state (dedup, windows, consumed sequence steps) was not rolled back with the database, so a later evaluation of the event was taken for a duplicate. The alerts of the signals derived from that event were lost too (the intelligence pipeline does not derive them twice). Now the engine state of the event is undone (`RuleEngine.undoLast`) and the event is queued (in memory, at most 10,000) and retried before the next events and every 30 s, in order. A retry older than the engine's allowed lateness (2 min) is dropped and counted, not forced through (decision of 2026-11-13). Metrics `oci_alerting_evaluation_failed_total`, `_retried_total`, `_dropped_total{reason}`, `oci_alerting_evaluation_pending`.
+
 ### Added (code review of 2026-11-13, I4)
 
 - **Notification `alert.reinstated`**: an alert announced as withdrawn (`alert.retracted`) that has valid evidence again (events back on the canonical chain, or a new match grouped into it) is announced to the same channels, once per transition. Webhook receivers must accept or ignore this new event type (`docs/api/README.md`).

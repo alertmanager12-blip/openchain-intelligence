@@ -73,6 +73,22 @@ public class MetricsConfiguration {
         };
     }
 
+    /** Rule evaluations whose transaction failed, retried, or dropped (code review I5). */
+    @Bean MeterBinder evaluationRetryMetrics(ChainIngestionService chains) {
+        return registry -> {
+            FunctionCounter.builder("oci.alerting.evaluation.failed", chains, c -> c.evaluationFailures())
+                    .description("Rule evaluations whose transaction failed (engine state undone, event queued)").register(registry);
+            FunctionCounter.builder("oci.alerting.evaluation.retried", chains, c -> c.evaluationsRetried())
+                    .description("Queued rule evaluations that succeeded on retry").register(registry);
+            FunctionCounter.builder("oci.alerting.evaluation.dropped", chains, c -> c.evaluationsDroppedLate()).tag("reason", "late")
+                    .description("Queued rule evaluations given up (alerts possibly lost)").register(registry);
+            FunctionCounter.builder("oci.alerting.evaluation.dropped", chains, c -> c.evaluationsDroppedQueueFull()).tag("reason", "queue_full")
+                    .register(registry);
+            Gauge.builder("oci.alerting.evaluation.pending", chains, c -> c.pendingEvaluations())
+                    .description("Rule evaluations waiting for retry").register(registry);
+        };
+    }
+
     /** Aggregation alerts re-evaluated after a reorganisation, by verdict (code review I3). */
     @Bean MeterBinder alertThresholdRecheckMetrics(io.openchain.alerting.alert.AlertService alerts) {
         return registry -> {

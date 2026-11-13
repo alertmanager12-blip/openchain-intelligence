@@ -50,6 +50,23 @@ class SequenceAndLoopTest {
         return e;
     }
 
+    /**
+     * Code review I5: when storing the outcome of the event that completed a sequence fails, undoLast gives back the
+     * consumed steps, so the same event, evaluated again, completes the sequence again (instead of a lost alert).
+     */
+    @Test void undoLastRestoresTheStepsConsumedByACompletedSequence() {
+        RuleEngine e = engine(Duration.ofMinutes(2), APPROVE_THEN_DRAIN);
+        e.process(approval("a1", 0, "0xw"));
+        assertThat(e.process(drain("d1", 300, "0xw")).matches()).hasSize(1); // consumes a1
+        assertThat(e.undoLast("d1")).isTrue();
+        assertThat(e.undoLast("d1")).isFalse(); // once
+        assertThat(e.process(drain("d1", 300, "0xw")).matches()).singleElement()
+                .satisfies(m -> assertThat(m.matchedEventIds()).containsExactly("a1", "d1"));
+        assertThat(e.metrics().undone()).isEqualTo(1);
+        // without undo the same event is a duplicate, and the steps stay consumed
+        assertThat(e.process(drain("d1", 300, "0xw")).disposition()).isEqualTo(Disposition.DUPLICATE);
+    }
+
     @Test void aThenBWithinTSameKeyTriggers() {
         RuleEngine e = engine(Duration.ofMinutes(2), APPROVE_THEN_DRAIN);
         assertThat(e.process(approval("a1", 0, "0xw")).matches()).isEmpty();

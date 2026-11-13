@@ -34,6 +34,8 @@ public final class AlertingPipeline {
                 "delivery via " + d.connectorId() + " failed permanently after " + d.attempts() + " attempt(s): " + d.lastError())));
     }
 
+    public RuleEngine engine() { return engine; }
+
     public Outcome onEvent(ChainEvent event) {
         EngineResult r = engine.process(event);
         // Stored alerts are withdrawn for every removed event, even when the engine ignored it: its dedup cache lives in

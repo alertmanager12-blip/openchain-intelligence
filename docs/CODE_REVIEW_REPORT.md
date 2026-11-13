@@ -37,7 +37,9 @@ lignes de specs.
 | 5 — I3 | réévaluation du seuil des alertes d'agrégation après un retrait (conception validée le 2026-11-13) | **corrigé** le 2026-11-13 (voir CHANGELOG et `P0_REORG_DESIGN.md` § 3.3) |
 | 5 (commit I3) | — | commit `6f8fd07` (599 tests Java) |
 | 5 — I4 | notification `alert.reinstated` (conception validée le 2026-11-13) ; en plus : nouvelle détection regroupée dans une alerte retirée, message Telegram de retrait trompeur ; constaté : la liste `events` des webhooks n'est pas appliquée (documenté) | **corrigé** le 2026-11-13 |
-| 5 — Reste, suite | I5, I8, I9, I14, I25, I26, I34, I36, autres mineurs | à faire. Conception nécessaire : I5, I8, I9, I25, I34 (marqueur de mode en base). I14 se règle avec l'étape 3d de l'ADR-0024 (instantané). Décision : I26, I36 |
+| 5 (commit I4) | — | commit `a75513d` (602 tests Java) |
+| 5 — I5 | annulation de l'état du moteur et file de réessai bornée (conception validée le 2026-11-13, option A : le délai de retard n'est pas contourné) ; constaté en plus : les signaux dérivés de l'événement étaient perdus aussi | **corrigé** le 2026-11-13 |
+| 5 — Reste, suite | I8, I9, I14, I25, I26, I34, I36, autres mineurs | à faire. Conception nécessaire : I8, I9, I25, I34 (marqueur de mode en base). I14 se règle avec l'étape 3d de l'ADR-0024 (instantané). Décision : I26, I36 |
 
 Rien n'est déployé : la production tourne sur `299db4f`.
 
