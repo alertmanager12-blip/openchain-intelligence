@@ -16,6 +16,8 @@ public final class EngineMetrics implements CompiledCondition.EvalStats {
     final AtomicLong retractionsIgnored = new AtomicLong();
     /** Events whose engine state was undone because storing their outcome failed (code review I5). */
     final AtomicLong undone = new AtomicLong();
+    /** Events already counted in an aggregation window, ignored there (code review I8). */
+    final AtomicLong windowDuplicates = new AtomicLong();
     final AtomicLong loopSuppressed = new AtomicLong();
     final AtomicLong invalidEvents = new AtomicLong();
     final AtomicLong missingGroupKey = new AtomicLong();
@@ -34,6 +36,7 @@ public final class EngineMetrics implements CompiledCondition.EvalStats {
     public long lateDropped() { return lateDropped.get(); }
     public long retractions() { return retractions.get(); }
     public long undone() { return undone.get(); }
+    public long windowDuplicates() { return windowDuplicates.get(); }
     public long loopSuppressed() { return loopSuppressed.get(); }
     public long groupKeysEvicted() { return groupKeysEvicted.get(); }
     public long windowEntriesDropped() { return windowEntriesDropped.get(); }
@@ -52,6 +55,7 @@ public final class EngineMetrics implements CompiledCondition.EvalStats {
         m.put("events.retractions", retractions.get());
         m.put("events.retractions.ignored", retractionsIgnored.get());
         m.put("events.undone", undone.get());
+        m.put("window.duplicates", windowDuplicates.get());
         m.put("events.loop.suppressed", loopSuppressed.get());
         m.put("events.invalid", invalidEvents.get());
         m.put("groupkey.missing", missingGroupKey.get());

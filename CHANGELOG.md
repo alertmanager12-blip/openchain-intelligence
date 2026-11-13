@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, I8)
+
+- **An event processed again could be counted twice by an aggregation rule** (I8, verified by a test before the fix): once the engine's dedup cache (200,000 ids, about 50 minutes at chain-wide volume) has forgotten an event id, the same event (a signal evicted from memory and detected again, a block re-indexed after a failure) was added a second time to the window, and could fake a threshold. A window now counts each event id once (`window.duplicates` counter). Verified as not affected: stateless rules such as the shipped `sanctioned-exposure-signal` (the alert service recognises a trigger already used). Not fixed: a signal re-emitted after its first occurrence left the window counts in a later window, and the "signals in 24 h" figure counts it as new.
+
 ### Fixed (code review of 2026-11-13, I5)
 
 - **An alert could be lost when the transaction storing it failed** (I5): the rule engine runs inside that transaction, and its state (dedup, windows, consumed sequence steps) was not rolled back with the database, so a later evaluation of the event was taken for a duplicate. The alerts of the signals derived from that event were lost too (the intelligence pipeline does not derive them twice). Now the engine state of the event is undone (`RuleEngine.undoLast`) and the event is queued (in memory, at most 10,000) and retried before the next events and every 30 s, in order. A retry older than the engine's allowed lateness (2 min) is dropped and counted, not forced through (decision of 2026-11-13). Metrics `oci_alerting_evaluation_failed_total`, `_retried_total`, `_dropped_total{reason}`, `oci_alerting_evaluation_pending`.

@@ -304,6 +304,12 @@ public final class RuleEngine {
             w = created;
         }
         if (watermark != null) w.evictUpTo(watermark.minus(a.window()), undo);
+        if (w.contains(e.eventId())) {
+            // already counted in this window: the event was processed again after the dedup cache forgot it (a signal
+            // evicted then detected again, a block re-indexed after a failure). Counting it twice would fake a threshold.
+            metrics.windowDuplicates.incrementAndGet();
+            return null;
+        }
         if (w.add(new SlidingWindow.Entry(e.eventId(), e.eventTime(), seq++, value, distinct, balance), config.maxEntriesPerKey(), undo))
             metrics.windowEntriesDropped.incrementAndGet();
         SlidingWindow.Hit hit = w.evaluate(e.eventTime(), a.window(), a.function(), a.operator(), a.threshold(), config.maxEvidenceEvents());

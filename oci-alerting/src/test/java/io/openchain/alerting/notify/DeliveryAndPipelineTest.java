@@ -198,6 +198,59 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().comments()).anyMatch(c -> c.author().equals("system:reorg"));
     }
 
+    // ---- code review I8 (2026-11-13), verification: a signal evicted from memory and detected again is re-emitted with
+    // the same id ("signal:<id>"); the engine's dedup cache (200,000 ids, ~50 min at chain-wide volume) has forgotten it.
+
+    static ChainEvent signal(String id, long sec, String wallet) {
+        return Fx.event("signal:" + id, io.openchain.core.model.Network.TRON, ChainEvent.EventType.DETECTION_SIGNAL, T0.plusSeconds(sec),
+                Map.of("signal.type", "INDIRECT_EXPOSURE", "signal.confidence", new java.math.BigDecimal("0.5"), "wallet.address", wallet));
+    }
+
+    /** Engine whose dedup cache keeps one id only: the re-emitted signal is no longer known as a duplicate. */
+    static RuleEngine forgetfulEngine() { return new RuleEngine(EngineConfig.defaults().withDedup(1, Duration.ofHours(24))); }
+
+    @Test void reEmittedSignalDoesNotDuplicateAStatelessAlert() {
+        RuleEngine engine = forgetfulEngine();
+        engine.register(Fx.rule(header("exposure") + """
+                scope: { eventTypes: [DETECTION_SIGNAL] }
+                conditions: { logic: AND, rules: [ { field: signal.type, operator: IN, value: [SANCTIONED_EXPOSURE, INDIRECT_EXPOSURE] } ] }
+                cooldown: 6h
+                dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, delivery);
+        p.onEvent(signal("x", 0, "TW"));
+        p.onEvent(Fx.transfer("other", T0.plusSeconds(1), "TA", "TB", "1")); // pushes signal:x out of the dedup cache
+        p.dispatch(10);
+        int sent = hook.received.size();
+        var again = p.onEvent(signal("x", 3600, "TW")); // same signal, detected again one hour later
+        assertThat(again.created()).isEmpty();
+        assertThat(alerts.repository().findAll()).hasSize(1);
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(hook.received).hasSize(sent);
+    }
+
+    @Test void reEmittedSignalIsNotCountedTwiceByAnAggregation() {
+        RuleEngine engine = forgetfulEngine();
+        engine.register(Fx.rule(header("many-signals") + """
+                scope: { eventTypes: [DETECTION_SIGNAL] }
+                conditions: { logic: AND, rules: [ { field: signal.type, operator: EQUALS, value: INDIRECT_EXPOSURE } ] }
+                aggregation: { window: 24h, groupBy: wallet.address, function: COUNT, operator: GREATER_THAN, threshold: 2 }
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, delivery);
+        p.onEvent(signal("s1", 0, "TW"));
+        p.onEvent(signal("s2", 60, "TW"));
+        p.onEvent(Fx.transfer("other", T0.plusSeconds(61), "TA", "TB", "1"));
+        // two distinct signals only: s1 re-emitted must not make three
+        assertThat(p.onEvent(signal("s1", 120, "TW")).created()).isEmpty();
+        assertThat(alerts.repository().findAll()).isEmpty();
+        assertThat(engine.metrics().windowDuplicates()).isEqualTo(1);
+        // a genuinely new third signal still triggers
+        assertThat(p.onEvent(signal("s3", 180, "TW")).created()).singleElement()
+                .satisfies(a -> assertThat(a.matchedEventIds()).containsExactly("signal:s1", "signal:s2", "signal:s3"));
+    }
+
     // ---- code review I4 (2026-11-13): an alert announced as withdrawn that has valid evidence again is announced too
 
     AlertingPipeline bigPipeline() {

@@ -25,6 +25,10 @@ final class SlidingWindow {
     record Hit(Instant start, Instant end, BigDecimal value, int count, List<String> eventIds) {}
 
     private final List<Entry> entries = new ArrayList<>();
+    /** Ids of the entries: an event is counted at most once per window, even when processed again (code review I8). */
+    private final java.util.Set<String> ids = new java.util.HashSet<>();
+
+    boolean contains(String eventId) { return ids.contains(eventId); }
 
     int size() { return entries.size(); }
 
@@ -37,12 +41,18 @@ final class SlidingWindow {
     boolean add(Entry e, int maxEntries, UndoLog undo) {
         int idx = upperBound(e.time());
         entries.add(idx, e);
+        ids.add(e.eventId());
         Instant priorLost = lostUpTo;
         Entry dropped = null;
-        if (entries.size() > maxEntries) { dropped = entries.removeFirst(); lost(dropped.time()); }
+        if (entries.size() > maxEntries) { dropped = entries.removeFirst(); ids.remove(dropped.eventId()); lost(dropped.time()); }
         if (undo != null) {
             Entry d = dropped;
-            undo.push(() -> { entries.remove(e); if (d != null) entries.addFirst(d); lostUpTo = priorLost; });
+            undo.push(() -> {
+                entries.remove(e);
+                ids.remove(e.eventId());
+                if (d != null) { entries.addFirst(d); ids.add(d.eventId()); }
+                lostUpTo = priorLost;
+            });
         }
         return dropped != null;
     }
@@ -86,7 +96,7 @@ final class SlidingWindow {
         return new Recheck(false, b > a ? last.value(entries.get(a)) : null, b - a);
     }
 
-    boolean remove(String eventId) { return entries.removeIf(e -> e.eventId().equals(eventId)); }
+    boolean remove(String eventId) { ids.remove(eventId); return entries.removeIf(e -> e.eventId().equals(eventId)); }
 
     /** Drops entries with time {@code <= limit}: they can no longer belong to a window touched by an accepted event. */
     void evictUpTo(Instant limit) { evictUpTo(limit, null); }
@@ -99,7 +109,8 @@ final class SlidingWindow {
         List<Entry> removed = new ArrayList<>(entries.subList(0, n));
         lost(entries.get(n - 1).time());
         entries.subList(0, n).clear();
-        if (undo != null) undo.push(() -> { entries.addAll(0, removed); lostUpTo = priorLost; });
+        for (Entry x : removed) ids.remove(x.eventId());
+        if (undo != null) undo.push(() -> { entries.addAll(0, removed); for (Entry x : removed) ids.add(x.eventId()); lostUpTo = priorLost; });
     }
 
     Instant newest() { return entries.isEmpty() ? null : entries.getLast().time(); }
