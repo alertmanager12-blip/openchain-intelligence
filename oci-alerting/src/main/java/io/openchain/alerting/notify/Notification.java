@@ -27,6 +27,8 @@ public record Notification(String deliveryId, ActionType actionType, String conn
     public static final String EVENT_OPENED = "alert.opened";
     /** Every valid piece of evidence of the alert left the canonical chain (reorganisation); the alert itself is kept. */
     public static final String EVENT_RETRACTED = "alert.retracted";
+    /** The alert had been announced as withdrawn and has valid evidence again (re-inclusion, new match). Code review I4. */
+    public static final String EVENT_REINSTATED = "alert.reinstated";
 
     /** An "opened" notification (deliveries stored before the event was carried, tests). */
     public Notification(String deliveryId, ActionType actionType, String connectorId, String alertId, String ruleId,
@@ -77,5 +79,16 @@ public record Notification(String deliveryId, ActionType actionType, String conn
                 a.originChain(), a.hop(), now, a.subject(), EVENT_RETRACTED);
     }
 
+    /** Snapshot telling a channel that an alert announced as withdrawn has valid evidence again (alert.reinstated). */
+    public static Notification reinstatement(String deliveryId, ActionType type, String connectorId, Map<String, String> params,
+                                             Alert a, Instant now) {
+        return new Notification(deliveryId, type, connectorId, a.id(), a.ruleId(), a.ruleVersion(), a.title(),
+                a.severity(), a.priority(), a.evidenceLevel(), a.network(), a.groupKey(), a.dedupKey(),
+                a.occurrenceCount(), a.firstSeen(), a.lastSeen(), a.matchedEventIds(), a.evidence(), params,
+                a.originChain(), a.hop(), now, a.subject(), EVENT_REINSTATED);
+    }
+
     public boolean retracted() { return EVENT_RETRACTED.equals(event); }
+
+    public boolean reinstated() { return EVENT_REINSTATED.equals(event); }
 }

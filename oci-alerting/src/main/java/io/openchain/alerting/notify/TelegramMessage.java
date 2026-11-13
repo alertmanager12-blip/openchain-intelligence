@@ -34,6 +34,11 @@ public final class TelegramMessage {
         Map<String, Object> f = s == null ? Map.of() : s.fields();
         String who = who(s, f);
         StringBuilder sb = new StringBuilder();
+        // a follow-up on an alert already sent must not read as a new alert (code review I4)
+        if (n.retracted()) sb.append("⚠️ PREUVE RETIRÉE — les transactions à l'origine de cette alerte ont quitté la chaîne canonique "
+                + "(réorganisation). L'alerte est conservée ; revérifiez-la avant d'agir.\n\n");
+        if (n.reinstated()) sb.append("✅ PREUVE RÉTABLIE — cette alerte, annoncée comme retirée, a de nouveau une preuve valide "
+                + "(transactions revenues dans la chaîne canonique, ou nouvelle détection).\n\n");
         sb.append(emoji(n)).append(" ALERTE ").append(level(n)).append(" — ").append(title(n)).append("\n\n");
 
         String why = explain(n, f, who);

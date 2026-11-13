@@ -37,6 +37,20 @@ class TelegramMessageTest {
                 Map.of("transaction.amount", new BigDecimal("11.4"), "transaction.token.symbol", "ETH", "wallet.address", WALLET));
     }
 
+    /** Code review I4: a retraction or a reinstatement says so first; it must not read as a new alert. */
+    @Test void retractionAndReinstatementAreNotMistakenForANewAlert() {
+        Notification opened = drain(null);
+        Alert a = Alert.builder().id(opened.alertId()).ruleId(opened.ruleId()).ruleVersion(opened.ruleVersion()).title(opened.title())
+                .severity(opened.severity()).priority(opened.priority()).evidenceLevel(opened.evidenceLevel()).network(opened.network())
+                .groupKey(opened.groupKey()).dedupKey(opened.dedupKey()).firstSeen(T0).lastSeen(T0).occurrenceCount(1)
+                .addEventIds(List.of("e1")).createdAt(T0).updatedAt(T0).evidence(opened.evidence()).build();
+        assertThat(TelegramMessage.format(opened, null, 4000)).doesNotContain("PREUVE");
+        assertThat(TelegramMessage.format(Notification.retraction("d-2", ActionType.TELEGRAM, "tg", Map.of(), a, T0), null, 4000))
+                .startsWith("⚠️ PREUVE RETIRÉE").contains("ALERTE");
+        assertThat(TelegramMessage.format(Notification.reinstatement("d-3", ActionType.TELEGRAM, "tg", Map.of(), a, T0), null, 4000))
+                .startsWith("✅ PREUVE RÉTABLIE").contains("ALERTE");
+    }
+
     @Test void detailedFrenchMessageWithExplorerAndConsoleLinks() {
         String m = TelegramMessage.format(drain(ethSweep()), "https://cs.example.com/", 4000);
         assertThat(m).startsWith("🔴 ALERTE HAUTE — Portefeuille vidé\n\n")

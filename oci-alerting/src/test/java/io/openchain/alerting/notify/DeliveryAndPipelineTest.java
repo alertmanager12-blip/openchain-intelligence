@@ -198,6 +198,54 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().comments()).anyMatch(c -> c.author().equals("system:reorg"));
     }
 
+    // ---- code review I4 (2026-11-13): an alert announced as withdrawn that has valid evidence again is announced too
+
+    AlertingPipeline bigPipeline() {
+        RuleEngine engine = new RuleEngine(EngineConfig.defaults());
+        engine.register(Fx.rule(header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        return new AlertingPipeline(engine, alerts, delivery);
+    }
+
+    static List<String> events(List<DeliveryRecord> ds) { return ds.stream().map(d -> d.notification().event()).toList(); }
+
+    @Test void reincludedEvidenceOfAWithdrawnAlertIsAnnouncedOnce() {
+        AlertingPipeline p = bigPipeline();
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_OPENED);
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_RETRACTED);
+
+        p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")); // back on the canonical chain
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.VALID);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> {
+            assertThat(d.notification().event()).isEqualTo(Notification.EVENT_REINSTATED);
+            assertThat(d.notification().alertId()).isEqualTo(a.id());
+            assertThat(NotificationFormatter.text(d.notification(), 4000)).startsWith("EVIDENCE REINSTATED");
+        });
+        p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")); // repeated: already valid, nothing announced
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(alerts.repository().findAll()).hasSize(1);
+    }
+
+    @Test void newMatchGroupedIntoAWithdrawnAlertMakesItValidAgainAndIsAnnounced() {
+        AlertingPipeline p = bigPipeline();
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        p.dispatch(10);
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+
+        var o = p.onEvent(Fx.transfer("e2", T0.plusSeconds(60), "TA", "TB", "7000")); // same sender, within the cooldown
+        assertThat(o.created()).isEmpty();
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN); // e1 withdrawn, e2 valid
+        assertThat(after.history().getLast().reason()).contains("valid evidence again");
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_REINSTATED);
+    }
+
     // ---- code review I3 (2026-11-13): aggregation alerts re-evaluate their threshold after a retraction
 
     static final String VOLUME = """

@@ -8,6 +8,15 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (code review of 2026-11-13, I4)
+
+- **Notification `alert.reinstated`**: an alert announced as withdrawn (`alert.retracted`) that has valid evidence again (events back on the canonical chain, or a new match grouped into it) is announced to the same channels, once per transition. Webhook receivers must accept or ignore this new event type (`docs/api/README.md`).
+
+### Fixed (code review of 2026-11-13, I4)
+
+- **A new valid match grouped into a withdrawn alert left it withdrawn**: its evidence state is recomputed.
+- **Telegram: a retraction read like a new alert** (the message had no mention of the withdrawal): retractions and reinstatements now start with « PREUVE RETIRÉE » / « PREUVE RÉTABLIE ».
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, I3)
 
 - **Aggregation alerts kept their evidence state after a reorganisation, whatever the remaining total** (I3): after a retraction, the threshold is re-evaluated on the events the engine still holds. Still met: the alert stays `VALID`, with the new value in its history. No longer met: `WITHDRAWN` even if cited events remain, and `alert.retracted` is sent. When the engine state is incomplete (restart, other rule version, discarded window), nothing is concluded and the history says "threshold not re-verifiable". Metric `oci_alert_threshold_recheck_total{verdict}`.

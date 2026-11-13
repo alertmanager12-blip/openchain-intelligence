@@ -57,7 +57,12 @@ public final class AlertingPipeline {
             Rule rule = engine.rule(m.ruleId()).map(c -> c.rule()).orElse(null);
             if (rule == null) continue; // unregistered concurrently
             AlertService.MatchOutcome o = alerts.onMatch(m, rule.cooldown());
-            if (!o.created()) { grouped.add(o.alert()); continue; }
+            if (!o.created()) {
+                grouped.add(o.alert());
+                // announced as withdrawn, valid again: the same channels are told, once (code review I4)
+                if (o.reinstated()) for (Rule.ActionSpec action : rule.actions()) enqueued.add(delivery.enqueueReinstatement(o.alert(), action));
+                continue;
+            }
             Alert a = o.alert();
             if (!rule.actions().isEmpty()) {
                 a = alerts.transition(a.id(), AlertStatus.PENDING, AlertService.SYSTEM,

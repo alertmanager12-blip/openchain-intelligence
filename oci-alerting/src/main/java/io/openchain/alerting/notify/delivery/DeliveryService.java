@@ -70,12 +70,15 @@ public final class DeliveryService {
 
     public String defaultConnector() { return defaultConnectorId; }
 
-    public DeliveryRecord enqueue(Alert alert, ActionSpec action) { return enqueue(alert, action, false); }
+    public DeliveryRecord enqueue(Alert alert, ActionSpec action) { return enqueue(alert, action, Notification.EVENT_OPENED); }
 
     /** Tells the channel of {@code action} that every valid piece of evidence of the alert was withdrawn (alert.retracted). */
-    public DeliveryRecord enqueueRetraction(Alert alert, ActionSpec action) { return enqueue(alert, action, true); }
+    public DeliveryRecord enqueueRetraction(Alert alert, ActionSpec action) { return enqueue(alert, action, Notification.EVENT_RETRACTED); }
 
-    private DeliveryRecord enqueue(Alert alert, ActionSpec action, boolean retraction) {
+    /** Tells the channel of {@code action} that an alert announced as withdrawn has valid evidence again (alert.reinstated). */
+    public DeliveryRecord enqueueReinstatement(Alert alert, ActionSpec action) { return enqueue(alert, action, Notification.EVENT_REINSTATED); }
+
+    private DeliveryRecord enqueue(Alert alert, ActionSpec action, String event) {
         Instant now = clock.instant();
         String id = ids.get();
         String target = action.connectorId();
@@ -87,8 +90,11 @@ public final class DeliveryService {
                 type = def.get().type(); // the pack says WEBHOOK; the operator's default channel may be Telegram, Slack...
             }
         }
-        Notification n = retraction ? Notification.retraction(id, type, target, action.params(), alert, now)
-                : Notification.of(id, type, target, action.params(), alert, now);
+        Notification n = switch (event) {
+            case Notification.EVENT_RETRACTED -> Notification.retraction(id, type, target, action.params(), alert, now);
+            case Notification.EVENT_REINSTATED -> Notification.reinstatement(id, type, target, action.params(), alert, now);
+            default -> Notification.of(id, type, target, action.params(), alert, now);
+        };
         if (connectors.find(target).isEmpty()) {
             String why = PLACEHOLDERS.contains(target)
                     ? "no notification channel configured: set OCI_DEFAULT_CONNECTOR or route the rule to a connector"

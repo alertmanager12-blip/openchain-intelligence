@@ -22,8 +22,17 @@ public final class AlertService {
 
     public enum Outcome { CREATED, GROUPED }
 
-    public record MatchOutcome(Outcome outcome, Alert alert) {
+    /** @param before evidence state of the alert before this match (null for a created alert) */
+    public record MatchOutcome(Outcome outcome, Alert alert, Alert.EvidenceState before) {
+        public MatchOutcome(Outcome outcome, Alert alert) { this(outcome, alert, null); }
         public boolean created() { return outcome == Outcome.CREATED; }
+        /**
+         * The alert had been announced as withdrawn (alert.retracted) and has valid evidence again: re-included events or
+         * a new match. The channels are told (alert.reinstated). Code review I4.
+         */
+        public boolean reinstated() {
+            return before == Alert.EvidenceState.WITHDRAWN && alert.evidenceState() != Alert.EvidenceState.WITHDRAWN;
+        }
     }
 
     public static final String SYSTEM = "system";
@@ -60,21 +69,30 @@ public final class AlertService {
                         : r.matchedEventIds().getLast())) {
                     r = repository.save(r.toBuilder().subject(m.subject()).build());
                 }
-                return new MatchOutcome(Outcome.GROUPED, r);
+                return new MatchOutcome(Outcome.GROUPED, r, replay.get().evidenceState());
             }
         }
         Optional<Alert> open = repository.findOpenByDedupKey(m.ruleId(), m.dedupKey());
         if (open.isPresent() && withinCooldown(open.get(), m.eventTime(), cooldown)) {
             Alert a = reinstate(open.get(), m.matchedEventIds(), now);
-            Alert grouped = a.toBuilder()
+            Alert.Builder b = a.toBuilder()
                     .occurrenceCount(a.occurrenceCount() + 1)
                     .addEventIds(m.matchedEventIds())
                     .firstSeen(min(a.firstSeen(), m.eventTime()))
                     .lastSeen(max(a.lastSeen(), m.eventTime()))
                     .subject(m.subject() != null && !m.eventTime().isBefore(a.lastSeen()) ? m.subject() : a.subject())
-                    .updatedAt(now)
-                    .build();
-            return new MatchOutcome(Outcome.GROUPED, repository.save(grouped));
+                    .updatedAt(now);
+            if (a.evidenceState() == Alert.EvidenceState.WITHDRAWN) {
+                // a new, valid match grouped into an alert whose evidence had all been withdrawn: it is evidence again
+                Alert probe = b.build();
+                Alert.EvidenceState state = evidenceState(probe.matchedEventIds(), probe.withdrawnEventIds());
+                if (state != Alert.EvidenceState.WITHDRAWN) {
+                    evidenceReinstated.incrementAndGet();
+                    b = probe.toBuilder().evidenceState(state).addHistory(new HistoryEntry(a.status(), a.status(), SYSTEM, now,
+                            "new match " + m.triggeringEventId() + " of rule " + m.ruleId() + ": the alert has valid evidence again"));
+                }
+            }
+            return new MatchOutcome(Outcome.GROUPED, repository.save(b.build()), open.get().evidenceState());
         }
         Alert created = Alert.builder()
                 .id(ids.get())

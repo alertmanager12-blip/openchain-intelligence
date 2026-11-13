@@ -95,6 +95,11 @@ entre le premier et le dernier déclenchement de l'alerte (`RuleEngine.recheckAg
 
 Métrique : `oci_alert_threshold_recheck_total{verdict}`.
 
+**Rétablissement (revue de code I4, 2026-11-13).** Une alerte annoncée par `alert.retracted` qui retrouve une preuve
+valide (événements réinclus dans la chaîne canonique, ou nouvelle détection regroupée dans l'alerte) est annoncée aux
+mêmes canaux par `alert.reinstated`, une fois par transition. Telegram préfixe ces deux suivis (« PREUVE RETIRÉE »,
+« PREUVE RÉTABLIE ») pour qu'ils ne se lisent pas comme une nouvelle alerte.
+
 Migration : une colonne `evidence_withdrawn` sur `alerts` (V10). Le traitement complet du cycle de vie des alertes
 reste du ressort de la politique de routage (item 6) ; ici, seulement la cohérence avec la preuve.
 
