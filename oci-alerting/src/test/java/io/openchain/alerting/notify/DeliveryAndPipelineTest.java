@@ -198,6 +198,68 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().comments()).anyMatch(c -> c.author().equals("system:reorg"));
     }
 
+    // ---- code review I3 (2026-11-13): aggregation alerts re-evaluate their threshold after a retraction
+
+    static final String VOLUME = """
+            conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 0 } ] }
+            aggregation: { window: 1h, groupBy: transaction.from, function: SUM, field: transaction.amount, operator: GREATER_THAN, threshold: "100000" }
+            actions: [ { type: WEBHOOK, connectorId: hook } ]
+            """;
+
+    AlertingPipeline volumePipeline(RuleEngine engine) {
+        engine.register(Fx.rule(header("volume") + VOLUME));
+        return new AlertingPipeline(engine, alerts, delivery);
+    }
+
+    /** The remaining events no longer reach the threshold: the alert has no valid evidence, and the channels are told. */
+    @Test void aggregationAlertWhoseThresholdIsNoLongerMetIsWithdrawn() {
+        AlertingPipeline p = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p.onEvent(Fx.transfer("a", T0, "TA", "TB", "60000"));
+        Alert a = p.onEvent(Fx.transfer("b", T0.plusSeconds(1800), "TA", "TB", "50000")).created().getFirst();
+        p.dispatch(10);
+        int sent = hook.received.size();
+
+        p.onEvent(Fx.removed(Fx.transfer("a", T0, "TA", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN); // b remains, but 50000 is not > 100000
+        assertThat(after.withdrawnEventIds()).containsExactly("a");
+        assertThat(after.history().getLast().reason()).contains("no longer met", "SUM 50000 over 1 event(s)", "threshold GREATER_THAN 100000");
+        assertThat(alerts.thresholdNoLongerMet()).isEqualTo(1);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED));
+        assertThat(hook.received).hasSize(sent + 1);
+    }
+
+    /** Cited events were withdrawn but the remaining ones still pass: the alert stays valid, with the new value. */
+    @Test void aggregationAlertWhoseThresholdIsStillMetStaysValid() {
+        AlertingPipeline p = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p.onEvent(Fx.transfer("a", T0, "TA", "TB", "60000"));
+        Alert a = p.onEvent(Fx.transfer("b", T0.plusSeconds(1800), "TA", "TB", "50000")).created().getFirst();
+        p.onEvent(Fx.transfer("c", T0.plusSeconds(2400), "TA", "TB", "70000")); // grouped into the same alert
+        p.dispatch(10);
+
+        p.onEvent(Fx.removed(Fx.transfer("a", T0, "TA", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.VALID); // b + c = 120000 > 100000
+        assertThat(after.withdrawnEventIds()).containsExactly("a");
+        assertThat(after.history().getLast().reason()).contains("still met", "SUM 120000 over 2 event(s)");
+        assertThat(p.dispatch(10)).isEmpty();
+    }
+
+    /** After a restart the engine no longer holds the windows: nothing is concluded, and the history says so. */
+    @Test void aggregationAlertAfterARestartIsNotReverifiedAndSaysSo() {
+        AlertingPipeline p1 = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p1.onEvent(Fx.transfer("x", T0, "TX", "TB", "60000"));
+        Alert a = p1.onEvent(Fx.transfer("y", T0.plusSeconds(1800), "TX", "TB", "50000")).created().getFirst();
+
+        AlertingPipeline p2 = volumePipeline(new RuleEngine(EngineConfig.defaults())); // restarted: empty engine state
+        p2.onEvent(Fx.removed(Fx.transfer("x", T0, "TX", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN); // count rule, as before
+        assertThat(after.history().getLast().reason()).contains("1 of 2 matched event(s) remain", "threshold not re-verifiable");
+        assertThat(alerts.thresholdUnverifiable()).isEqualTo(1);
+        assertThat(alerts.thresholdNoLongerMet()).isZero();
+    }
+
     /** P0 reorg: alert.retracted goes out once, when the last valid evidence is withdrawn, through the outbox. */
     @Test void alertRetractedIsDeliveredOnceWhenNoValidEvidenceRemains() {
         ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();

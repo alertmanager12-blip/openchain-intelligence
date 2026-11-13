@@ -34,8 +34,47 @@ final class SlidingWindow {
     boolean add(Entry e, int maxEntries) {
         int idx = upperBound(e.time());
         entries.add(idx, e);
-        if (entries.size() > maxEntries) { entries.removeFirst(); return true; }
+        if (entries.size() > maxEntries) { lost(entries.removeFirst().time()); return true; }
         return false;
+    }
+
+    /**
+     * Event time up to which entries were discarded (expiry or size cap), null when none was: a window that starts at or
+     * after it is still held in full. Used to tell "the threshold is no longer met" from "cannot be re-verified".
+     */
+    private Instant lostUpTo;
+
+    Instant lostUpTo() { return lostUpTo; }
+
+    private void lost(Instant t) { if (lostUpTo == null || t.isAfter(lostUpTo)) lostUpTo = t; }
+
+    /** Result of {@link #recheck}: the passing window if any, else the window ending at the end of the range. */
+    record Recheck(boolean passes, BigDecimal value, int count) {}
+
+    /**
+     * Is there a window ending at an entry time within {@code [from, to]} that passes the threshold? Same windows and
+     * arithmetic as {@link #evaluate}; nothing is modified.
+     */
+    Recheck recheck(Instant from, Instant to, Duration w, AggregationFunction fn, Operator op, BigDecimal threshold) {
+        Accumulator acc = Accumulator.of(fn);
+        int n = entries.size();
+        int i = lowerBound(from);
+        int l = upperBound(from.minus(w)), r = l;
+        while (i < n) {
+            Instant end = entries.get(i).time();
+            if (end.isAfter(to)) break;
+            while (r < n && !entries.get(r).time().isAfter(end)) acc.add(entries.get(r++));
+            Instant startExclusive = end.minus(w);
+            while (l < r && !entries.get(l).time().isAfter(startExclusive)) acc.remove(entries.get(l++));
+            BigDecimal value = acc.value(entries.get(l));
+            if (value != null && passes(value, op, threshold)) return new Recheck(true, value, r - l);
+            i = r;
+        }
+        // nothing passes: report the window ending at the end of the range, (to - W, to]
+        Accumulator last = Accumulator.of(fn);
+        int a = upperBound(to.minus(w)), b = upperBound(to);
+        for (int k = a; k < b; k++) last.add(entries.get(k));
+        return new Recheck(false, b > a ? last.value(entries.get(a)) : null, b - a);
     }
 
     boolean remove(String eventId) { return entries.removeIf(e -> e.eventId().equals(eventId)); }
@@ -44,7 +83,7 @@ final class SlidingWindow {
     void evictUpTo(Instant limit) {
         int n = 0;
         while (n < entries.size() && !entries.get(n).time().isAfter(limit)) n++;
-        if (n > 0) entries.subList(0, n).clear();
+        if (n > 0) { lost(entries.get(n - 1).time()); entries.subList(0, n).clear(); }
     }
 
     Instant newest() { return entries.isEmpty() ? null : entries.getLast().time(); }

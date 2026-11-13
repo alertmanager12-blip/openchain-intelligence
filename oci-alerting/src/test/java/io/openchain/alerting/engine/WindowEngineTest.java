@@ -207,6 +207,34 @@ class WindowEngineTest {
         assertThat(e.metrics().retractions()).isEqualTo(1);
     }
 
+    /**
+     * Code review I3: the threshold re-check after a retraction concludes "no longer met" only on a complete state; a
+     * discarded group key or another rule version gives UNVERIFIABLE, never a false verification.
+     */
+    @Test void thresholdRecheckIsUnverifiableWhenTheStateIsIncomplete() {
+        RuleEngine e = new RuleEngine(EngineConfig.defaults().withMaxGroupKeysPerRule(1));
+        CompiledRule r = countRule("1h", 1);
+        e.register(r);
+        e.process(transfer("a", T0, "TA", "TB", "1"));
+        assertThat(e.process(transfer("b", T0.plusSeconds(60), "TA", "TB", "1")).matches()).hasSize(1);
+        e.process(Fx.removed(transfer("a", T0, "TA", "TB", "1")));
+        Network n = Network.TRON;
+        String v = r.rule().version();
+        // complete state: only b is left, COUNT 1 is not > 1
+        assertThat(e.recheckAggregation("count", v, n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60))).hasValueSatisfying(c -> {
+            assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.NO_LONGER_MET);
+            assertThat(c.value()).isEqualByComparingTo("1");
+            assertThat(c.eventCount()).isEqualTo(1);
+        });
+        assertThat(e.recheckAggregation("count", "0.0.0-other", n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60)))
+                .hasValueSatisfying(c -> assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.UNVERIFIABLE));
+        // another key evicts TA (one key per rule): its state is gone, nothing can be concluded
+        e.process(transfer("z", T0.plusSeconds(90), "TZ", "TB", "1"));
+        assertThat(e.recheckAggregation("count", v, n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60)))
+                .hasValueSatisfying(c -> assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.UNVERIFIABLE));
+        assertThat(e.recheckAggregation("unknown-rule", v, n, "tron|TA", T0, T0)).isEmpty();
+    }
+
     // ---------------------------------------------------------------- bounded memory
 
     @Test void groupByCardinalityIsBoundedWithLruEviction() {

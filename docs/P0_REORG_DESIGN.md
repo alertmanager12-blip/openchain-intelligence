@@ -80,6 +80,21 @@ d'origine (`subject_event_id = signal:<id>`) est retiré :
   revoir » dans la console ; notification `alert.retracted` aux connecteurs qui y sont abonnés (aujourd'hui acceptée à
   l'abonnement mais jamais envoyée, `WebhookConnector.java:47`).
 
+**Alertes d'agrégation (revue de code I3, 2026-11-13).** Pour une règle d'agrégation, compter les identifiants retirés
+ne suffit pas : l'alerte ne cite qu'une partie des événements de la fenêtre, et la somme restante peut être sous le seuil
+alors que des preuves citées restent. Après chaque retrait, le moteur réévalue le seuil sur les fenêtres qui se terminent
+entre le premier et le dernier déclenchement de l'alerte (`RuleEngine.recheckAggregation`) :
+
+- **seuil toujours franchi** : état de preuve `VALID` ; l'événement retiré reste noté, la nouvelle valeur est dans
+  l'historique ;
+- **seuil plus franchi** : état `WITHDRAWN`, même s'il reste des preuves citées, avec la valeur restante et le seuil ;
+  `alert.retracted` est envoyé ;
+- **non revérifiable** : la règle des identifiants s'applique comme avant, et l'historique dit « threshold not
+  re-verifiable ». C'est le cas quand l'état du moteur n'est plus complet : redémarrage, autre version de la règle, règle
+  désactivée entre-temps, clé ou événements écartés de la mémoire. Ce cas n'est jamais présenté comme une vérification.
+
+Métrique : `oci_alert_threshold_recheck_total{verdict}`.
+
 Migration : une colonne `evidence_withdrawn` sur `alerts` (V10). Le traitement complet du cycle de vie des alertes
 reste du ressort de la politique de routage (item 6) ; ici, seulement la cohérence avec la preuve.
 

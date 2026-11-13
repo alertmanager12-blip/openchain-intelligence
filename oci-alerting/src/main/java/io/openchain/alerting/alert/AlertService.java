@@ -148,13 +148,34 @@ public final class AlertService {
     public long evidenceWithdrawn() { return evidenceWithdrawn.get(); }
     public long evidenceReinstated() { return evidenceReinstated.get(); }
 
+    private final java.util.concurrent.atomic.AtomicLong thresholdStillMet = new java.util.concurrent.atomic.AtomicLong(),
+            thresholdNoLongerMet = new java.util.concurrent.atomic.AtomicLong(), thresholdUnverifiable = new java.util.concurrent.atomic.AtomicLong();
+
+    /** Aggregation alerts re-evaluated after a retraction, by verdict (code review I3). */
+    public long thresholdStillMet() { return thresholdStillMet.get(); }
+    public long thresholdNoLongerMet() { return thresholdNoLongerMet.get(); }
+    public long thresholdUnverifiable() { return thresholdUnverifiable.get(); }
+
     /**
      * An event matched by alerts left the canonical chain (reorganisation; the rule engine reports each retraction once).
      * The alert is never deleted: the event joins its withdrawn evidence and the evidence state is recomputed (some evidence
      * left: PARTIALLY_WITHDRAWN; none: WITHDRAWN), with a history entry. Idempotent: an event already withdrawn changes
      * nothing. See docs/P0_REORG_DESIGN.md § 3.3.
      */
-    public synchronized List<EvidenceChange> onRetraction(String eventId) {
+    public synchronized List<EvidenceChange> onRetraction(String eventId) { return onRetraction(eventId, a -> Optional.empty()); }
+
+    /**
+     * Same, with the threshold of aggregation alerts re-evaluated (code review I3): the remaining events may no longer
+     * reach the threshold, or still reach it although cited events were withdrawn. {@code recheck} answers for an alert
+     * (empty: not an aggregation alert, or no engine state).
+     * <ul>
+     *   <li>STILL_MET: evidence state VALID, the withdrawn event is still recorded, the new value is in the history;</li>
+     *   <li>NO_LONGER_MET: WITHDRAWN even if cited events remain, with the remaining value and the threshold;</li>
+     *   <li>UNVERIFIABLE: the event-count rule as before, and the history says the threshold could not be re-verified.</li>
+     * </ul>
+     */
+    public synchronized List<EvidenceChange> onRetraction(String eventId,
+                                                          java.util.function.Function<Alert, Optional<io.openchain.alerting.engine.ThresholdCheck>> recheck) {
         Instant now = clock.instant();
         List<EvidenceChange> out = new ArrayList<>();
         for (Alert a : repository.findByMatchedEventId(eventId)) {
@@ -166,6 +187,31 @@ public final class AlertService {
             String reason = "event " + eventId + " left the canonical chain (reorganisation): "
                     + (remaining == 0 ? "no valid evidence remains, re-check the alert before acting"
                     : remaining + " of " + a.matchedEventIds().size() + " matched event(s) remain");
+            Optional<io.openchain.alerting.engine.ThresholdCheck> check = "AGGREGATION".equals(a.evidence().get("kind"))
+                    ? recheck.apply(a) : Optional.empty();
+            if (check.isPresent()) {
+                var c = check.get();
+                String measured = c.function() + " " + (c.value() == null ? "n/a" : c.value().stripTrailingZeros().toPlainString())
+                        + " over " + c.eventCount() + " event(s), threshold " + c.operator() + " " + c.threshold().stripTrailingZeros().toPlainString();
+                switch (c.verdict()) {
+                    case STILL_MET -> {
+                        state = Alert.EvidenceState.VALID;
+                        reason = "event " + eventId + " left the canonical chain (reorganisation); threshold re-evaluated on the "
+                                + "remaining events and still met: " + measured;
+                        thresholdStillMet.incrementAndGet();
+                    }
+                    case NO_LONGER_MET -> {
+                        state = Alert.EvidenceState.WITHDRAWN;
+                        reason = "event " + eventId + " left the canonical chain (reorganisation); threshold re-evaluated on the "
+                                + "remaining events and no longer met: " + measured + ". Re-check the alert before acting";
+                        thresholdNoLongerMet.incrementAndGet();
+                    }
+                    case UNVERIFIABLE -> {
+                        reason += "; threshold not re-verifiable (rule changed, engine restarted or window state discarded)";
+                        thresholdUnverifiable.incrementAndGet();
+                    }
+                }
+            }
             Alert saved = repository.save(a.toBuilder().updatedAt(now).withdrawnEventIds(withdrawn).evidenceState(state)
                     .addHistory(new HistoryEntry(a.status(), a.status(), SYSTEM + ":reorg", now, reason))
                     .addComment(new Comment(SYSTEM + ":reorg", now, reason)).build());

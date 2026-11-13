@@ -43,7 +43,9 @@ public final class AlertingPipeline {
         if (retracted != null) {
             // an alert whose last valid evidence just left the canonical chain is announced on the channels of its rule
             // (same routing as its opening), once per withdrawal, through the delivery outbox (retries, dead letters)
-            for (AlertService.EvidenceChange c : alerts.onRetraction(retracted)) {
+            // aggregation alerts: the threshold is re-evaluated on the events the engine still holds (code review I3)
+            for (AlertService.EvidenceChange c : alerts.onRetraction(retracted, a -> engine.recheckAggregation(
+                    a.ruleId(), a.ruleVersion(), a.network(), a.groupKey(), a.firstSeen(), a.lastSeen()))) {
                 if (!c.becameWithdrawn()) continue;
                 Rule rule = engine.rule(c.alert().ruleId()).map(x -> x.rule()).orElse(null);
                 if (rule != null) for (Rule.ActionSpec action : rule.actions()) delivery.enqueueRetraction(c.alert(), action);

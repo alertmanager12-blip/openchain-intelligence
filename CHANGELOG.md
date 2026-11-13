@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, I3)
+
+- **Aggregation alerts kept their evidence state after a reorganisation, whatever the remaining total** (I3): after a retraction, the threshold is re-evaluated on the events the engine still holds. Still met: the alert stays `VALID`, with the new value in its history. No longer met: `WITHDRAWN` even if cited events remain, and `alert.retracted` is sent. When the engine state is incomplete (restart, other rule version, discarded window), nothing is concluded and the history says "threshold not re-verifiable". Metric `oci_alert_threshold_recheck_total{verdict}`.
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, second part)
 
 - **`Authorization: Bearer oci_…` was refused when OIDC is enabled** (I33): the API key was sent to the JWT decoder; it is now left to the API-key filter, in both forms (`X-API-Key` and `Bearer`).

@@ -73,6 +73,16 @@ public class MetricsConfiguration {
         };
     }
 
+    /** Aggregation alerts re-evaluated after a reorganisation, by verdict (code review I3). */
+    @Bean MeterBinder alertThresholdRecheckMetrics(io.openchain.alerting.alert.AlertService alerts) {
+        return registry -> {
+            FunctionCounter.builder("oci.alert.threshold.recheck", alerts, a -> a.thresholdStillMet()).tag("verdict", "still_met")
+                    .description("Aggregation alerts whose threshold was re-evaluated after a retraction").register(registry);
+            FunctionCounter.builder("oci.alert.threshold.recheck", alerts, a -> a.thresholdNoLongerMet()).tag("verdict", "no_longer_met").register(registry);
+            FunctionCounter.builder("oci.alert.threshold.recheck", alerts, a -> a.thresholdUnverifiable()).tag("verdict", "unverifiable").register(registry);
+        };
+    }
+
     @Bean MeterBinder ociMetrics(ChainIngestionService chains, DeliveryService delivery, RuleEngine engine, RuleRegistry rules,
                                  io.openchain.intelligence.IntelligencePipeline intelligence) {
         return registry -> {

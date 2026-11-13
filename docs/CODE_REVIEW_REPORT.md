@@ -33,7 +33,9 @@ lignes de specs.
 | 5 — Reste, première partie | I6, I7, I12, I13, I23, I35, jauge de retard (tête inconnue) | **corrigé** le 2026-11-13 (voir CHANGELOG) |
 | 5 (commit, première partie) | — | commit `aab3f8a` (589 tests Java, 146 console) |
 | 5 — Reste, deuxième partie | I33 (confirmé par un test, puis corrigé) ; mineurs : disjoncteur bloqué en HALF_OPEN, rattrapage des gels bloqué en RUNNING, audit de la création et de la mise à jour des règles | **corrigé** le 2026-11-13 (voir CHANGELOG) |
-| 5 — Reste, suite | I3, I4, I5, I8, I9, I14, I25, I26, I34, I36, autres mineurs | à faire. Conception nécessaire : I3, I4 (nouvel événement `alert.reinstated`), I5, I8, I9, I25, I34 (marqueur de mode en base). I14 se règle avec l'étape 3d de l'ADR-0024 (instantané). Décision : I26, I36 |
+| 5 (commit, deuxième partie) | — | commit `c0cd18f` (595 tests Java) |
+| 5 — I3 | réévaluation du seuil des alertes d'agrégation après un retrait (conception validée le 2026-11-13) | **corrigé** le 2026-11-13 (voir CHANGELOG et `P0_REORG_DESIGN.md` § 3.3) |
+| 5 — Reste, suite | I4, I5, I8, I9, I14, I25, I26, I34, I36, autres mineurs | à faire. Conception nécessaire : I4 (nouvel événement `alert.reinstated`), I5, I8, I9, I25, I34 (marqueur de mode en base). I14 se règle avec l'étape 3d de l'ADR-0024 (instantané). Décision : I26, I36 |
 
 Rien n'est déployé : la production tourne sur `299db4f`.
 
