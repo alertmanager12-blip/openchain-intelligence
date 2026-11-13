@@ -95,6 +95,19 @@ class ResiliencePrimitivesTest {
         assertThat(cb.state()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 
+    /** Code review (minor, 2026-11-13): a probe that ends with an Error must not leave the breaker half-open for ever. */
+    @Test void circuitBreakerRecoversAfterAProbeThatEndedWithAnError() {
+        MutableClock clock = new MutableClock();
+        CircuitBreaker cb = new CircuitBreaker("ep", 1, Duration.ofSeconds(10), clock);
+        assertThatThrownBy(() -> cb.execute(() -> { throw new ProviderException("5xx", true); }));
+        clock.advance(Duration.ofSeconds(10));
+        assertThatThrownBy(() -> cb.execute(() -> { throw new OutOfMemoryError("simulated"); })).isInstanceOf(OutOfMemoryError.class);
+        assertThat(cb.state()).isEqualTo(CircuitBreaker.State.OPEN);
+        clock.advance(Duration.ofSeconds(10));
+        assertThat(cb.execute(() -> "probe")).isEqualTo("probe"); // a new probe is allowed
+        assertThat(cb.state()).isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
     @Test void retryDoesNotSpinOnOpenCircuit() {
         RecordingSleeper rec = new RecordingSleeper();
         RetryPolicy retry = new RetryPolicy(new ResilienceConfig(5, Duration.ofMillis(100), Duration.ofSeconds(1), 0, 0, 1, 5, Duration.ofSeconds(1)), rec);

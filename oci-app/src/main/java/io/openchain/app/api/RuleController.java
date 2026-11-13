@@ -202,20 +202,27 @@ public class RuleController {
 
     @PostMapping
     public ResponseEntity<Dto.RuleDto> create(@RequestBody(required = false) String body,
-                                              @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
+                                              @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
+                                              Authentication auth) {
         Source s = source(body, contentType);
         RuleRegistry.StoredRule r = registry.create(s.text(), s.format());
+        ApiKeyService.AUDIT.info("rule.create id={} version={} actor={}", r.id(), r.current().number(), actor(auth));
         return ResponseEntity.status(HttpStatus.CREATED).header(HttpHeaders.LOCATION, "/api/v1/rules/" + r.id()).body(dto(r));
     }
 
     /** New immutable version. TODO(concurrency): require If-Match (412 on mismatch). */
     @PutMapping("/{id}")
     public Dto.RuleDto update(@PathVariable String id, @RequestBody(required = false) String body,
-                              @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
+                              @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
+                              Authentication auth) {
         registry.get(id);
         Source s = source(body, contentType);
-        return dto(registry.update(id, s.text(), s.format()));
+        RuleRegistry.StoredRule r = registry.update(id, s.text(), s.format());
+        ApiKeyService.AUDIT.info("rule.update id={} version={} actor={}", id, r.current().number(), actor(auth));
+        return dto(r);
     }
+
+    private static String actor(Authentication auth) { return auth == null ? null : auth.getName(); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id, Authentication auth) {
@@ -241,7 +248,8 @@ public class RuleController {
     /** One or many YAML documents ({@code ---} separated). All-or-nothing: any invalid document rejects the import. */
     @PostMapping("/import")
     public List<Dto.RuleDto> importRules(@RequestBody(required = false) String body,
-                                         @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
+                                         @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType,
+                                         Authentication auth) {
         String text = body;
         if (contentType != null && contentType.toLowerCase(Locale.ROOT).contains("json")) text = source(body, contentType).text();
         if (text == null || text.isBlank()) throw ApiException.badRequest("empty import");
@@ -255,7 +263,11 @@ public class RuleController {
         }
         if (!errors.isEmpty()) throw ApiException.validation("import rejected: invalid document(s), nothing was imported", errors);
         List<Dto.RuleDto> out = new ArrayList<>();
-        for (String d : docs) out.add(dto(registry.upsert(d, Format.YAML)));
+        for (String d : docs) {
+            RuleRegistry.StoredRule r = registry.upsert(d, Format.YAML);
+            ApiKeyService.AUDIT.info("rule.import id={} version={} actor={}", r.id(), r.current().number(), actor(auth));
+            out.add(dto(r));
+        }
         return out;
     }
 

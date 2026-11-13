@@ -8,6 +8,14 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, second part)
+
+- **`Authorization: Bearer oci_…` was refused when OIDC is enabled** (I33): the API key was sent to the JWT decoder; it is now left to the API-key filter, in both forms (`X-API-Key` and `Bearer`).
+- **Circuit breaker stuck half-open** after a probe that ended with an `Error`: the endpoint was refused for ever.
+- **Freeze backfill stuck in `RUNNING`** after an `Error`: it is marked `FAILED` and can be triggered again.
+- **CI: a run on `main` is no longer cancelled by the next push**, so every commit of `main` keeps its own result.
+- **Rule creation, update and import are audited** (`rule.create`, `rule.update`, `rule.import` in the `oci.audit` log), like enabling and deleting.
+
 ### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, first part)
 
 - **A retracted freeze left the exposure of counterparties** (I6): when a stablecoin freeze leaves the canonical chain, the signals that cite its label are withdrawn (and the alerts on them re-checked), detection is run again for their subjects, and scores are recomputed; an exposure still justified by another label is kept.

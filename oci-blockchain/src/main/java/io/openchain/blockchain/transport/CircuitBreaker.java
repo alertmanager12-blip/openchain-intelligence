@@ -44,7 +44,9 @@ public final class CircuitBreaker {
         } catch (ProviderException e) {
             if (e.retryable()) onFailure(); else onSuccess();
             throw e;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
+            // an Error too (OutOfMemoryError while reading a response): otherwise a half-open probe that dies this way
+            // leaves probeInFlight set, and the endpoint is refused for ever
             onFailure();
             throw e;
         }

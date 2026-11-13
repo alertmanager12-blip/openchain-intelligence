@@ -121,6 +121,10 @@ public class FreezeBackfillService implements DisposableBean {
             e.lastError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
             log.warn("freeze backfill {} stopped (progress kept, resumable): {}", e.network.id(), e.lastError);
         } finally {
+            if (e.state == State.RUNNING) { // ended with an Error: not left RUNNING, or it could never be triggered again
+                e.state = State.FAILED;
+                e.lastError = "stopped by an error (see the application log)";
+            }
             e.finishedAt = clock.instant();
         }
     }

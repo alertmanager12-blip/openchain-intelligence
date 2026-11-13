@@ -31,7 +31,9 @@ lignes de specs.
 | 4 — Fournisseurs | I10, I19, I20, I21 | **corrigé** le 2026-11-13 ; I22 (HTTP 403 de TronGrid) non traité : comportement à vérifier à la source |
 | 3 et 4 (commit) | — | commit `3580931` (583 tests Java) |
 | 5 — Reste, première partie | I6, I7, I12, I13, I23, I35, jauge de retard (tête inconnue) | **corrigé** le 2026-11-13 (voir CHANGELOG) |
-| 5 — Reste, suite | I3, I4, I5, I8, I9, I14, I25, I26, I33, I34, I36, mineurs | à faire ; I3, I5, I8, I9 et I25 demandent une conception, I26 et I36 une décision, I33 une vérification |
+| 5 (commit, première partie) | — | commit `aab3f8a` (589 tests Java, 146 console) |
+| 5 — Reste, deuxième partie | I33 (confirmé par un test, puis corrigé) ; mineurs : disjoncteur bloqué en HALF_OPEN, rattrapage des gels bloqué en RUNNING, audit de la création et de la mise à jour des règles | **corrigé** le 2026-11-13 (voir CHANGELOG) |
+| 5 — Reste, suite | I3, I4, I5, I8, I9, I14, I25, I26, I34, I36, autres mineurs | à faire. Conception nécessaire : I3, I4 (nouvel événement `alert.reinstated`), I5, I8, I9, I25, I34 (marqueur de mode en base). I14 se règle avec l'étape 3d de l'ADR-0024 (instantané). Décision : I26, I36 |
 
 Rien n'est déployé : la production tourne sur `299db4f`.
 
