@@ -29,6 +29,41 @@ public class MetricsConfiguration {
         };
     }
 
+    /**
+     * Working-set snapshot (ADR-0024 step 3d, design § 4.6), only when it is enabled. Durations and size are NaN until a
+     * restore or a write happened; with snapshots written at shutdown only, the write values are visible in the logs of
+     * the stopping application, and after a restart these metrics describe the restore.
+     */
+    @Bean MeterBinder workingSetSnapshotMetrics(org.springframework.beans.factory.ObjectProvider<io.openchain.app.persistence.WorkingSetSnapshotService> snapshots) {
+        return registry -> {
+            var s = snapshots.getIfAvailable();
+            if (s == null) return;
+            java.util.function.ToDoubleFunction<Long> nan = v -> v < 0 ? Double.NaN : v;
+            Gauge.builder("oci.snapshot.restore.seconds", s, x -> nan.applyAsDouble(x.lastRestoreMillis()) / 1000.0)
+                    .description("Duration of the last restore attempt at start-up").register(registry);
+            Gauge.builder("oci.snapshot.write.seconds", s, x -> nan.applyAsDouble(x.lastWriteMillis()) / 1000.0)
+                    .description("Duration of the last completed snapshot write").register(registry);
+            Gauge.builder("oci.snapshot.bytes", s, x -> nan.applyAsDouble(x.lastWriteBytes()))
+                    .description("Size of the last completed snapshot").register(registry);
+            Gauge.builder("oci.snapshot.age.seconds", s, x -> x.ageSeconds())
+                    .description("Time since the snapshot last restored or written was taken").register(registry);
+            for (var o : io.openchain.app.persistence.WorkingSetSnapshotService.Outcome.values()) {
+                Gauge.builder("oci.snapshot.restore.outcome", s, x -> x.lastRestore() == o ? 1 : 0).tag("outcome", o.name().toLowerCase())
+                        .description("1 for the outcome of the restore attempt at start-up").register(registry);
+            }
+            java.util.Map<String, java.util.function.ToIntFunction<io.openchain.intelligence.snapshot.WorkingSetSnapshot.Counts>> kinds =
+                    java.util.Map.of("profiles", c -> c.profiles(), "flows", c -> c.flows(), "signals", c -> c.signals(),
+                            "scores", c -> c.scores(), "balances", c -> c.balances());
+            kinds.forEach((kind, f) -> Gauge.builder("oci.snapshot.restored.items", s, x -> {
+                var c = x.lastRestored();
+                return c == null ? Double.NaN : f.applyAsInt(c);
+            }).tag("kind", kind).description("Items installed by the last restore").register(registry));
+            FunctionCounter.builder("oci.snapshot.failures", s, x -> x.restoreFailures()).tag("phase", "restore")
+                    .description("Snapshot restores or writes that failed (nothing partial is ever installed)").register(registry);
+            FunctionCounter.builder("oci.snapshot.failures", s, x -> x.writeFailures()).tag("phase", "write").register(registry);
+        };
+    }
+
     /** Exempt working set, by category (step 2 point 1, observation only). No address label: the per-address detail is in
      *  {@code GET /api/v1/admin/working-set/exempt} (permission keys:admin), not in Prometheus. */
     @Bean MeterBinder exemptWorkingSetMetrics(io.openchain.app.chain.ExemptWorkingSetMonitor monitor) {

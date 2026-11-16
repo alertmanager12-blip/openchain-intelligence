@@ -186,6 +186,8 @@ Fait, testé :
 | Sérialisation exacte et versionnée : accumulateur de profil (clés récentes dans leur ordre, activité exacte et repliée, contreparties, contrats, marque « début inconnu »), flux, signaux, scores, soldes | `WalletProfileAccumulator.writeTo/readFrom`, `snapshot/RecordCodecs`, `snapshot/WorkingSetSnapshot` | `WalletProfileSnapshotTest` (4), `WorkingSetSnapshotTest` (4) : aller-retour exact et octets identiques, **même comportement après rechargement** pour les mêmes nouveaux événements, instances partagées, refus d'un format inconnu ou de données tronquées |
 | Stockage PostgreSQL par génération, en morceaux de 1 Mo, visible seulement une fois terminé, avec copie des points de reprise | `V11__working_set_snapshot`, `JdbcWorkingSetSnapshotStore` | `WorkingSetSnapshotServiceTest` (5, PostgreSQL 17) |
 | Arrêt ordonné : plus de nouvelle relève, relèves en cours attendues (`OCI_PERSISTENCE_SNAPSHOT_SHUTDOWN_TIMEOUT`), écriture sous le verrou d'ingestion ; rechargement avant les indexeurs | `Bootstrap.destroy/restoreWorkingSet`, `WorkingSetSnapshotService` | idem |
+| Redémarrage de bout en bout : l'application réelle indexe les blocs 1 à 40 d'un nœud Ethereum simulé, s'arrête, une deuxième application sur la même base reprend au bloc 41 **sans relire un bloc déjà indexé** ; après le bloc 80, flux, profils, signaux et scores sont identiques à ceux d'une troisième application qui a tout indexé sans arrêt. Le trafic traverse le redémarrage (fonds reçus avant, transférés après) | — | `WorkingSetRestartTest` (PostgreSQL 17) ; vérifié qu'il échoue quand l'instantané est supprimé avant le redémarrage. Seules les valeurs d'horloge murale (instant de calcul des scores, âge affiché) sont exclues de la comparaison |
+| Métriques (§ 4.6) : `oci_snapshot_restore_seconds`, `oci_snapshot_write_seconds`, `oci_snapshot_bytes`, `oci_snapshot_age_seconds`, `oci_snapshot_restore_outcome{outcome}`, `oci_snapshot_restored_items{kind}`, `oci_snapshot_failures_total{phase}` ; NaN tant qu'aucune mesure n'existe (les valeurs d'écriture ne sont visibles qu'avec des instantanés périodiques) | `MetricsConfiguration.workingSetSnapshotMetrics` | `WorkingSetRestartTest` |
 | Contrôle CI « 0 test sauté » | `.github/workflows/ci.yml`, étape « No skipped test » | vérifié en local |
 
 Écarts assumés par rapport au § 4 :
@@ -201,9 +203,6 @@ Fait, testé :
 
 Reste à faire :
 
-1. Test de redémarrage de bout en bout (deux contextes d'application, chaîne scénarisée) : reprise au bloc suivant **sans
-   ré-indexation** et mêmes résultats qu'une exécution sans redémarrage (§ 5, points 1 à 5).
-2. Instantanés périodiques avec copie cohérente et retour au filigrane après un crash (§ 4.3 et 4.4, variante crash du § 5).
-3. Métriques `oci_snapshot_*` (§ 4.6) ; aujourd'hui : journaux et compteurs internes du service.
-4. Mesure à volume réel (§ 6), avec ton accord : durée d'écriture et de rechargement, taille, mémoire.
-5. `stop_grace_period` dans `docker-compose.yml` et activation par défaut : décisions à prendre.
+1. Instantanés périodiques avec copie cohérente et retour au filigrane après un crash (§ 4.3 et 4.4, variante crash du § 5).
+2. Mesure à volume réel (§ 6), avec ton accord : durée d'écriture et de rechargement, taille, mémoire.
+3. `stop_grace_period` dans `docker-compose.yml` et activation par défaut : décisions à prendre.

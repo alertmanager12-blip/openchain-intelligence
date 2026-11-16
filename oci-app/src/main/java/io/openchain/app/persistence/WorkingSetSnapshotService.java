@@ -44,6 +44,8 @@ public final class WorkingSetSnapshotService {
     private final AtomicLong writeFailures = new AtomicLong(), restoreFailures = new AtomicLong();
     private volatile long lastWriteMillis = -1, lastWriteBytes = -1, lastRestoreMillis = -1;
     private volatile WorkingSetSnapshot.Counts lastRestored;
+    /** When the snapshot last restored or written was taken; null before either. */
+    private volatile java.time.Instant lastSnapshotAt;
 
     public WorkingSetSnapshotService(JdbcWorkingSetSnapshotStore store, IntelligencePipeline intelligence, ChainIngestionService chains,
                                      String appVersion, Clock clock) {
@@ -86,6 +88,7 @@ public final class WorkingSetSnapshotService {
             underIngestionLock.accept(() -> installed[0] = WorkingSetSnapshot.install(c, intelligence));
             WorkingSetSnapshot.Counts n = installed[0];
             lastRestored = n;
+            lastSnapshotAt = c.header().createdAt();
             lastRestoreMillis = (System.nanoTime() - t0) / 1_000_000;
             log.info("working-set snapshot restored in {} ms (generation {}, written by {} at {}): {} profile(s), {} flow(s), "
                     + "{} signal(s), {} score(s), {} balance(s); indexing resumes at the next block",
@@ -118,8 +121,9 @@ public final class WorkingSetSnapshotService {
             WorkingSetSnapshot.Counts[] written = new WorkingSetSnapshot.Counts[1];
             underIngestionLock.accept(() -> {
                 try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(raw, 1 << 16))) {
-                    written[0] = WorkingSetSnapshot.write(out, intelligence,
-                            new WorkingSetSnapshot.Header(appVersion, clock.instant(), Map.of()));
+                    java.time.Instant at = clock.instant();
+                    written[0] = WorkingSetSnapshot.write(out, intelligence, new WorkingSetSnapshot.Header(appVersion, at, Map.of()));
+                    lastSnapshotAt = at;
                     out.flush();
                     size[0] = out.size(); // DataOutputStream stops counting at Integer.MAX_VALUE (2 GB)
                 } catch (IOException e) {
@@ -155,4 +159,10 @@ public final class WorkingSetSnapshotService {
     public long lastWriteBytes() { return lastWriteBytes; }
     public long writeFailures() { return writeFailures.get(); }
     public long restoreFailures() { return restoreFailures.get(); }
+    /** Seconds since the snapshot last restored or written was taken (after a restore: how old the restored state was
+     *  when the application stopped, plus the time since); NaN before either. */
+    public double ageSeconds() {
+        java.time.Instant at = lastSnapshotAt;
+        return at == null ? Double.NaN : java.time.Duration.between(at, clock.instant()).toMillis() / 1000.0;
+    }
 }
