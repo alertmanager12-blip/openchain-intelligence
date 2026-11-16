@@ -79,11 +79,100 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_DEFAULT_CONNECTOR` | — | Connector id receiving the alerts of rules routed to the pack placeholder `default-webhook`; unset = those alerts are recorded as not notified (delivery `SKIPPED`), never dead-lettered |
 | `OCI_INGESTION_AGE_WARMUP` | `30d` | Observation time a real chain needs before "first seen by the platform" fields (`wallet.age_days`, `wallet.tx_count`, `counterparty.age_days`, `approval.spender_age_days`) are emitted; before that every address would look new |
 | `OCI_API_DOCS_ENABLED` | demo mode | Serve `/v3/api-docs` and Swagger UI |
+| `OCI_INGESTION_WORKING_SET_FLOW_RETENTION` | `24h` | Value flows kept in memory, measured against the latest flow time of their network |
+| `OCI_INGESTION_WORKING_SET_PROFILE_IDLE` | `7d` | Wallet profiles (and their risk scores) dropped after this long without a flow |
+| `OCI_INGESTION_WORKING_SET_SIGNAL_RETENTION` | `48h` | Signals older than this are dropped once their wallet left the working set (HIGH/CRITICAL kept) |
+| `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL` | `10m` | How often the working set is trimmed; `0` disables the trim (memory then grows with uptime) |
+| `OCI_PERSISTENCE_WORKING_SET_SNAPSHOT` | `false` | Write the bounded working set (flows, wallet profiles, signals, scores, remembered balances) to PostgreSQL at an orderly shutdown and periodically, and reload it at start-up before the indexers (after a crash, the blocks indexed since the snapshot are indexed again; ADR-0024 step 3d, see "Persistence"). Needs a container stop grace period above `OCI_PERSISTENCE_SNAPSHOT_SHUTDOWN_TIMEOUT` plus the write time; incompatible with the journal below |
+| `OCI_PERSISTENCE_SNAPSHOT_SHUTDOWN_TIMEOUT` | `20s` | Time an orderly shutdown gives indexer polls in progress before writing the snapshot |
+| `OCI_PERSISTENCE_SNAPSHOT_INTERVAL` | `30m` | Interval of the snapshots taken while indexing (`0` = at shutdown only); after a crash at most this much indexing is done again |
 | `OCI_PERSISTENCE_INTELLIGENCE_JOURNAL` | `false` | Journal flows, signals and risk scores in PostgreSQL and reload them at start-up (does not scale to chain-wide indexing yet, see "Persistence") |
 | `OCI_PERSISTENCE_INTELLIGENCE_RETENTION` | `7d` | How long flows, signals and risk scores are kept in PostgreSQL and reloaded at start-up |
 | `OCI_APP_MEMORY_LIMIT` | `4g` (Compose) | Memory limit of the app container; the JVM heap is 75% of it. Without a limit the heap is sized from the whole Docker host and the kernel may kill the app under memory pressure |
 
 Live providers are implemented but have not been validated against production nodes yet.
+
+### In-memory working set (ADR-0024 steps 3a and 3b)
+
+Detectors, profiles, risk scores and the console read an in-memory working set. Without bounds it grows with the chain:
+about 4.8 million flows and 950,000 signals per day were measured on 2026-11-09 with Ethereum mainnet and TRON indexed at
+the head. A background trim runs every `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL` (default 10 minutes):
+
+| Data | Removed when | Always kept |
+|---|---|---|
+| Value flows | older than 24 h, measured against the latest flow time of **their network** (event time, not the clock: a catch-up after downtime keeps what it just indexed; a stalled network does not block the others) | flows touching a watched wallet or an address whose history was loaded |
+| Wallet profiles, their risk scores and the "tracked wallets" count | no flow for 7 days (same reference) | watched wallets, loaded histories |
+| Signals | older than 48 h **and** their wallet no longer has a profile (a risk score is computed from the stored signals of the wallet, so they stay while the wallet is active) | HIGH and CRITICAL signals, watched wallets, loaded histories |
+
+**Hard caps (step 3b).** At chain-wide volume the time windows alone do not bound memory (measured on 2026-11-10: with
+2-hour windows the old generation still reached 2.9 GB of a 3 GB heap after 3 hours). After the time windows, the trim
+enforces caps: `OCI_INGESTION_WORKING_SET_MAX_FLOWS` (default 400,000), `OCI_INGESTION_WORKING_SET_MAX_PROFILES` (300,000)
+and `OCI_INGESTION_WORKING_SET_MAX_SIGNALS` (150,000). Beyond a cap the oldest flows and the least recently active
+profiles (with their scores and tracking) are removed. Signals are bounded twice: per wallet
+(`OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET`, 64: the most represented signal type gives way first, so every kind
+of evidence keeps its latest signals, and HIGH/CRITICAL go only when nothing weaker is left) and globally, exactly at the
+cap, in this order: INFO..MEDIUM of wallets without a profile, INFO..MEDIUM of profiled wallets, HIGH/CRITICAL of wallets
+without a profile, HIGH/CRITICAL of profiled wallets (alerts already raised are stored in PostgreSQL and stay). Every
+removal is counted: `oci_signals_evicted_total{reason,severity}` and `oci_signals_evicted_by_type_total{reason,type}`, and
+each trim log line lists the signals removed by severity. Watched wallets and loaded histories are
+never removed and are not counted. The defaults are sized for the 3 GB heap of the 4 GB container of `docker-compose.yml`;
+raise them with the heap. When a cap is the binding limit, the effective windows are shorter than 24 h / 7 days / 48 h:
+the trim log line shows how much was removed.
+
+**Exempt addresses (observation).** Watched wallets and every address whose history row exists (any wallet whose page,
+transactions or risk were consulted) are never trimmed. Their footprint is measured after each trim, by category
+(`watchlist`, `history_loaded`, `history_partial`, `history_in_progress`, `history_empty`, `history_failed`):
+`oci_exempt_addresses`, `oci_exempt_flows`, `oci_exempt_signals`, `oci_exempt_memory_estimate_bytes` (flows × 703 B +
+signals × 1,057 B, lab costs), `oci_exempt_max_flows_per_address`, `oci_exempt_oldest_view_age_seconds`,
+`oci_exempt_not_viewed_since_start`, `oci_exempt_flows_distinct`, and, for information only (nothing is enforced),
+`oci_exempt_proposed_cap_addresses_over` and `oci_exempt_proposed_cap_flows_over`. Per address:
+`GET /api/v1/admin/working-set/exempt` (permission `keys:admin`); addresses are deliberately not Prometheus labels.
+
+**Shared instances (step 3).** Stored flows share one instance per equal token (bounded table of 4,096 tokens, least
+recently used forgotten first) and per address (the instance already held by the wallet's profile; nothing else retains
+it). Only object identity changes. Gauges: `oci_canonical_tokens`, `oci_canonical_token_lookups{result}`,
+`oci_canonical_addresses_shared`. Diagnostic of dedup keys kept by profiles after their flow left memory, computed only
+on request: `GET /api/v1/admin/working-set/profile-keys` (permission `keys:admin`).
+
+**Age of wallets that left the working set.** A fixed-size filter remembers every address seen in a flow since
+start-up (`OCI_INGESTION_SEEN_ADDRESSES_BITS`, default 268,435,456 bits = 32 MB of heap, about 28 million addresses at a
+1 % error rate; kept across an orderly restart by the working-set snapshot, together with the observation start, when
+the snapshot is enabled and the size is unchanged; otherwise it restarts empty and ages are withheld during the warm-up). An address without a profile that was never seen is new (`wallet.age_days` = 0); one seen
+before has an unknown age and the age and activity fields are absent, so rule conditions on them do not match. When
+`oci_seen_addresses_fill_ratio` exceeds about 0.5, raise the size (more new wallets would otherwise be reported with an
+unknown age, never with a wrong one). With Docker Compose, add the variable to the `app` service environment.
+
+**Very active wallets (step 3b).** A wallet profile no longer grows with its number of transfers: duplicate detection
+remembers the latest 4,096 event ids and transaction hashes, activity times are exact for the latest 2,048 instants
+(older ones are folded, first activity stays exact), the 1,024 counterparties with the most transfers are kept and
+distinct contracts are counted up to 1,024. Token totals and transfer counts stay exact.
+
+Not affected: alerts, deliveries, rules, labels and the watchlist (PostgreSQL); rule-engine windows (bounded by their own
+rule windows); the recent-events buffer (`OCI_INGESTION_EVENT_HISTORY_SIZE`); indexer checkpoints (restart without gap).
+Non-transfer event ids used for de-duplication are capped at 500,000.
+
+**Functional consequences for wallets that are neither watched nor have a loaded history** (by design, not measured on
+real detections yet):
+
+- detectors only see the last 24 h of flows: `circular-flow` (7-day window) only finds cycles within 24 h; `unusual-amount`
+  compares with a 24-hour baseline; indirect exposure (`exposure`) only follows flows of the last 24 h;
+  `dormant-reactivation` (180-day threshold) cannot fire, as before in practice (the platform never held 180 days of flows
+  without a loaded history). `structuring` (24 h, used by the `fund-splitting` rule), `rapid-drain`, `fan-out` (1 h) and `fast-forwarding`
+  (30 min) are within the retention;
+- a wallet idle for 7 days starts a fresh profile when it reappears: platform-observed fields (`wallet.age_days`,
+  `wallet.tx_count`, `counterparty.age_days`, ...) restart from zero, and its risk score no longer includes its
+  LOW/MEDIUM signals older than 48 h;
+- the wallet page and investigations show flows of the last 24 h only.
+
+Watch a wallet (Watchlist) or load its history to keep its full working set.
+
+**Diagnostics.** Every trim logs one line (`working set trimmed in N ms: removed ...; kept ...`). Metrics on
+`/actuator/prometheus`: `oci_working_set_size{kind="flows|signals|profiles|scored_addresses|tracked_wallets"}` (after the
+last trim), `oci_working_set_trim_millis`, and the JVM gauges `jvm_memory_used_bytes{area="heap"}`,
+`jvm_gc_pause_seconds`, `jvm_gc_live_data_size_bytes` (heap after GC). A stable `jvm_gc_live_data_size_bytes` over a day
+is the sign that the working set is bounded; a steady rise means something else grows, or that the caps are too high for
+the heap. Rollback without a new image: `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0` (no trim at all) or caps set to
+`2147483647` (time windows only, as in step 3a).
 
 ### Address history (on demand, ADR-0020)
 
@@ -127,7 +216,7 @@ like live data. **History never raises alerts** (rules are not evaluated for it)
 
 ### Current limitations
 
-- **Operator state is persisted** in PostgreSQL (API keys, connectors, rules and their versions, alerts with history and comments, the delivery outbox with retries and dead letters, label reports, users/roles) when `SPRING_DATASOURCE_URL` is set. **Indexer checkpoints of real chains are persisted** (`indexer_checkpoints`, V8): after a restart indexing resumes after the last processed block, without gap, unless that block is more than `OCI_CHAINS_<NETWORK>_MAX_RESUME_GAP` blocks (default 7200) behind the start position computed from the head; then it restarts there and logs the skipped range as a warning. The reorg window is persisted as block references only: a reorg of blocks indexed before the restart is detected but their events are not retracted (blocks are indexed after 12 to 19 confirmations). **Flows, signals and risk scores can be journaled** (ADR-0024 step 2, `V9__intelligence_journal`, **off by default**: `OCI_PERSISTENCE_INTELLIGENCE_JOURNAL=true`). Measured on 2026-11-09 with Ethereum mainnet + TRON indexed at the head: about 4.8 million flows and 950,000 signals per day, and the start-up reload took 316 s for 50,000 flows, so a chain-wide journal does not scale to the 7-day retention yet (follow-up: journal the watchlist scope and wallet-profile snapshots instead of raw flows). When enabled, every new one is written behind the processing hot path (batches, queue of `oci.persistence.journal-capacity` records; a full queue drops and counts them: metric `oci_journal_dropped_total`, warning in the log) and the last `OCI_PERSISTENCE_INTELLIGENCE_RETENTION` (default `7d`) are reloaded in the background at start-up: flows rebuild the wallet profiles (no detection, no rules), then signals and scores. Older rows are purged daily. Not persisted: the event history behind rule dry-runs (in memory, 100,000 events) and the rule engine's windows. The in-memory working set is not trimmed to the retention yet: memory grows with uptime (bounded by `OCI_APP_MEMORY_LIMIT`; a restart reloads only the retention window). Re-indexing does not duplicate alerts: an event that already raised an alert for a rule is recognised. Alert details (address, counterparty, transaction hash, block, matched fields) are stored with each alert (migration V3) and survive restarts; for alerts created before V3 they are filled by the migration where the grouping key is the wallet, or when the triggering event is re-indexed, and stay empty otherwise.
+- **Operator state is persisted** in PostgreSQL (API keys, connectors, rules and their versions, alerts with history and comments, the delivery outbox with retries and dead letters, label reports, users/roles) when `SPRING_DATASOURCE_URL` is set. **Indexer checkpoints of real chains are persisted** (`indexer_checkpoints`, V8): after a restart indexing resumes after the last processed block, without gap, unless that block is more than `OCI_CHAINS_<NETWORK>_MAX_RESUME_GAP` blocks (default 7200) behind the start position computed from the head; then it restarts there and logs the skipped range as a warning. The reorg window is persisted as block references only: a reorg of blocks indexed before the restart is detected but their events are not retracted (blocks are indexed after 12 to 19 confirmations). **Flows, signals and risk scores can be journaled** (ADR-0024 step 2, `V9__intelligence_journal`, **off by default**: `OCI_PERSISTENCE_INTELLIGENCE_JOURNAL=true`). Measured on 2026-11-09 with Ethereum mainnet + TRON indexed at the head: about 4.8 million flows and 950,000 signals per day, and the start-up reload took 316 s for 50,000 flows, so a chain-wide journal does not scale to the 7-day retention yet (follow-up: journal the watchlist scope and wallet-profile snapshots instead of raw flows). When enabled, every new one is written behind the processing hot path (batches, queue of `oci.persistence.journal-capacity` records; a full queue drops and counts them: metric `oci_journal_dropped_total`, warning in the log) and the last `OCI_PERSISTENCE_INTELLIGENCE_RETENTION` (default `7d`) are reloaded in the background at start-up: flows rebuild the wallet profiles (no detection, no rules), then signals and scores. Older rows are purged daily. Not persisted: the event history behind rule dry-runs (in memory, 100,000 events) and the rule engine's windows. **Working-set snapshot** (ADR-0024 step 3d, `V11__working_set_snapshot`, **off by default**: `OCI_PERSISTENCE_WORKING_SET_SNAPSHOT=true`, PostgreSQL mode and real chains only): at an orderly shutdown (`docker compose stop`, SIGTERM) the polls in progress get `OCI_PERSISTENCE_SNAPSHOT_SHUTDOWN_TIMEOUT` to finish, then the bounded working set is written while nothing is indexed, together with a copy of the indexer checkpoints. It is also written every `OCI_PERSISTENCE_SNAPSHOT_INTERVAL` (default `30m`, `0` = at shutdown only) while indexing: the state is copied at a block boundary of every network into a temporary file (indexing waits during the copy, metric `oci_snapshot_pause_seconds`; the file needs free space of the snapshot's size in the temporary directory), then stored while indexing goes on. At the next start the last snapshot is reloaded before the indexers. After an orderly shutdown they resume at the next block. After a crash the indexer checkpoints are put back to those of the snapshot and the blocks indexed since are indexed again (at most one interval; alerts already raised are recognised, not duplicated; beyond `MAX_RESUME_GAP` the usual skip applies). A newer format or corrupted data: nothing is restored and the working set is rebuilt from new blocks, the log says why. Never a partial state. Docker stops a container after 10 s by default: set `stop_grace_period` (for example `60s`) on the `app` service before enabling it, or the write is cut short (an unfinished snapshot is ignored). The snapshot also holds the seen-address filter and the observation start (adds `OCI_INGESTION_SEEN_ADDRESSES_BITS` / 8 bytes, 32 MB by default), so a restart does not restart the age warm-up. Not in the snapshot: rule-engine windows, dry-run history, freeze labels (re-applied from the freeze backfill store). The in-memory working set is **trimmed** (ADR-0024 step 3a, see "In-memory working set" below). Re-indexing does not duplicate alerts: an event that already raised an alert for a rule is recognised. Alert details (address, counterparty, transaction hash, block, matched fields) are stored with each alert (migration V3) and survive restarts; for alerts created before V3 they are filled by the migration where the grouping key is the wallet, or when the triggering event is re-indexed, and stay empty otherwise.
 - **Balances on real chains:** `wallet.balance` (used by `wallet-draining` through `RATIO_OF_BALANCE`) and the rapid drain detector use the balance reported by the provider at the end of the block before the transfer: EVM `eth_getBalance` (native) or `eth_call balanceOf` (tokens) at that block, one call per (sender, token, block), cached (LRU 10 000) — size the provider rate limit accordingly (about one extra call per indexed transfer sender). Your node must still have that block's state (any full node keeps the recent ~128 blocks; the indexer works near the head). Lookups are **budgeted** so they never stall indexing: none while the indexer catches up more than `OCI_CHAINS_<NETWORK>_REAL_BALANCE_MAX_LAG` blocks (default 32) behind the head, and at most `OCI_CHAINS_<NETWORK>_REAL_BALANCE_MAX_LOOKUPS_PER_BLOCK` (default 5) per block — the lookups of a block run concurrently (virtual threads) but each is a provider request, so a high value hits public endpoints' rate limits; beyond that the field is absent. Each real chain is indexed on its own thread, `OCI_CHAINS_<NETWORK>_MAX_BLOCKS_PER_POLL` blocks per pass (default 10), and is polled again immediately while it is behind the head (after `OCI_INGESTION_POLL_INTERVAL` once caught up). TRON blocks are fetched ahead in parallel (4 confirmed blocks). With a busy chain such as Ethereum mainnet and a rate-limited endpoint, balance-based rules therefore only see part of the transfers. When the balance is unavailable (error, rate limit, pruned state, budget) the field is **absent** and balance-based rules and the drain detector do not fire for that transfer — never an estimate. **TRON:** TronGrid exposes no historical balance, so on real TRON `wallet.balance` is absent and `wallet-draining` does not fire (demo chains are unaffected). Known noise on mainnet: `fund-splitting` (more than 30 distinct recipients in 3 minutes since 1.2.0) still fires on routers, exchanges and payout wallets; exclude them with labels/lists in your copy of the rule.
 - Single instance: rules and connectors are loaded in memory at startup; outbox claiming is multi-instance safe (`FOR UPDATE SKIP LOCKED` + lease), but running several app instances is not supported yet.
 - No rate limiting, idempotency keys or `If-Match` concurrency control yet.

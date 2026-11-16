@@ -54,6 +54,28 @@ class IntelligencePipelineTest {
         assertThat(p.onEvent(e).duplicate()).isTrue();
     }
 
+    /**
+     * Code review B2 (2026-11-13): anyone can deploy a contract emitting Transfer(from = victim, ...). Flows of such
+     * unverified tokens must not drive behavioural detectors (fast forwarding, circular flow, unusual amount, ...)
+     * against a third party; the same round trip in a verified token still does (control).
+     */
+    @Test void spoofedRoundTripInAnUnverifiedTokenRaisesNoBehaviouralSignal() {
+        var fake = new io.openchain.core.model.Token(NET, "0xfa4e000000000000000000000000000000000000", io.openchain.core.model.Token.UNKNOWN_SYMBOL, 0);
+        Address victim = a("71c7"), x = a("0x5e");
+        var in = p.onTransfer(transfer("0xf1", 0, x, victim, "1000000", fake, min(0)));
+        var out = p.onTransfer(transfer("0xf2", 0, victim, x, "999000", fake, min(1)));
+        assertThat(in.newSignals()).isEmpty();
+        assertThat(out.newSignals()).isEmpty();
+        assertThat(p.signals().findByAddress(victim)).isEmpty();
+        assertThat(p.scoring().rescore(victim).score()).isZero();
+
+        // control: the same round trip in USDT is behaviour worth reporting
+        Address victim2 = a("71c8"), y = a("0x5f");
+        p.onTransfer(transfer("0xf3", 0, y, victim2, "1000000", USDT, min(0)));
+        var control = p.onTransfer(transfer("0xf4", 0, victim2, y, "999000", USDT, min(1)));
+        assertThat(control.newSignals()).extracting(Signal::type).contains(SignalType.FAST_FORWARDING);
+    }
+
     /** Audit probes 1 and 2, end to end: dust or fake-token transfers from a sanctioned address no longer score the victim. */
     @Test void dustingAndSpoofedTransfersDoNotRaiseTheVictimsScore() throws Exception {
         p.labels().saveAll(LabelFileLoader.fromClasspath("labels/demo-labels.csv"));

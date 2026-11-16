@@ -21,18 +21,45 @@ public record DetectionConfig(
         int maxEvidenceItems) {
 
     /** Robust z-score = 0.6745 * (x - median) / MAD over the wallet's own history of the same token. */
-    public record UnusualAmount(int minHistory, double zThreshold) {}
+    /**
+     * @param minHistory  earlier transfers of the same token <b>in the same direction</b> needed for a baseline
+     * @param zThreshold  robust z from which an amount is unusual
+     * @param minRatioWithoutDispersion when the baseline has no dispersion (constant amounts), the amount must be at least
+     *                    this multiple of the median: a z-score cannot be computed and must not be taken as infinite
+     */
+    /** USD stablecoins (symbols as indexed, upper case): a USD reporting threshold is meaningful for them. */
+    public static final java.util.Set<String> USD_STABLECOINS = java.util.Set.of(
+            "USDT", "USDC", "USDT0", "USDC.E", "DAI", "BUSD", "FDUSD", "TUSD", "PYUSD", "USDD", "USDP");
 
-    /** {@code minCount} outgoing transfers in [threshold*(1-marginRatio), threshold) within {@code window}. */
+    static Map<String, BigDecimal> usdStablecoinThresholds(BigDecimal threshold) {
+        Map<String, BigDecimal> m = new java.util.HashMap<>();
+        for (String sym : USD_STABLECOINS) m.put(sym, threshold);
+        return Map.copyOf(m);
+    }
+
+    public record UnusualAmount(int minHistory, double zThreshold, double minRatioWithoutDispersion) {}
+
+    /**
+     * {@code minCount} outgoing transfers in [threshold*(1-marginRatio), threshold) within {@code window}.
+     * Reporting thresholds are amounts in a fiat currency: they apply only to the symbols listed (USD stablecoins).
+     * {@code defaultThreshold} null = no structuring check for other assets (before: 10,000 applied to ETH, TRX and
+     * unknown tokens, where 9,500 units means nothing).
+     */
     public record Structuring(Map<String, BigDecimal> thresholdsBySymbol, BigDecimal defaultThreshold,
                               double marginRatio, int minCount, Duration window) {
+        /** @return the threshold for this symbol, or null when no reporting threshold applies to it */
         public BigDecimal thresholdFor(String symbol) {
             return thresholdsBySymbol.getOrDefault(symbol == null ? "" : symbol.toUpperCase(), defaultThreshold);
         }
     }
 
     /** Outflow >= minRatio of inflow received within {@code window} before the outflow. */
-    public record FastForwarding(double minRatio, Duration window, BigDecimal minInflow) {}
+    /**
+     * @param minRatio share of the received amount forwarded within the window
+     * @param minInflowShareOfOutflow the receipts must explain the forwarding: received ≥ this share of the amount sent
+     *        (a funded wallet that receives 1 USDT and then pays 1,000 is not passing funds through)
+     */
+    public record FastForwarding(double minRatio, Duration window, BigDecimal minInflow, double minInflowShareOfOutflow) {}
 
     /** Outgoing activity after at least {@code minDormancy} without any activity. */
     public record Dormancy(Duration minDormancy) {}
@@ -68,10 +95,10 @@ public record DetectionConfig(
 
     public static DetectionConfig defaults() {
         return new DetectionConfig(
-                new UnusualAmount(10, 3.5),
-                new Structuring(Map.of("USDT", new BigDecimal("10000"), "USDC", new BigDecimal("10000")),
-                        new BigDecimal("10000"), 0.10, 3, Duration.ofHours(24)),
-                new FastForwarding(0.90, Duration.ofMinutes(30), BigDecimal.ZERO),
+                new UnusualAmount(10, 3.5, 3.0),
+                new Structuring(usdStablecoinThresholds(new BigDecimal("10000")),
+                        null, 0.10, 3, Duration.ofHours(24)),
+                new FastForwarding(0.90, Duration.ofMinutes(30), BigDecimal.ZERO, 0.5),
                 new Dormancy(Duration.ofDays(180)),
                 new RapidDrain(0.80, Duration.ofHours(1), BigDecimal.ZERO),
                 new FanOut(20, Duration.ofHours(1)),

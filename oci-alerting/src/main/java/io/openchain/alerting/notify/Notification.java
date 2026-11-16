@@ -21,7 +21,26 @@ public record Notification(String deliveryId, ActionType actionType, String conn
                            EvidenceLevel evidenceLevel, Network network, String groupKey, String dedupKey,
                            long occurrenceCount, Instant firstSeen, Instant lastSeen, List<String> matchedEventIds,
                            Map<String, Object> evidence, Map<String, String> params, List<String> originChain, int hop,
-                           Instant createdAt, io.openchain.alerting.alert.AlertSubject subject) {
+                           Instant createdAt, io.openchain.alerting.alert.AlertSubject subject, String event) {
+
+    /** The alert was opened (every delivery enqueued when a rule matched). */
+    public static final String EVENT_OPENED = "alert.opened";
+    /** Every valid piece of evidence of the alert left the canonical chain (reorganisation); the alert itself is kept. */
+    public static final String EVENT_RETRACTED = "alert.retracted";
+    /** The alert had been announced as withdrawn and has valid evidence again (re-inclusion, new match). Code review I4. */
+    public static final String EVENT_REINSTATED = "alert.reinstated";
+
+    /** An "opened" notification (deliveries stored before the event was carried, tests). */
+    public Notification(String deliveryId, ActionType actionType, String connectorId, String alertId, String ruleId,
+                        String ruleVersion, String title, Severity severity, Priority priority,
+                        EvidenceLevel evidenceLevel, Network network, String groupKey, String dedupKey,
+                        long occurrenceCount, Instant firstSeen, Instant lastSeen, List<String> matchedEventIds,
+                        Map<String, Object> evidence, Map<String, String> params, List<String> originChain, int hop,
+                        Instant createdAt, io.openchain.alerting.alert.AlertSubject subject) {
+        this(deliveryId, actionType, connectorId, alertId, ruleId, ruleVersion, title, severity, priority, evidenceLevel, network,
+                groupKey, dedupKey, occurrenceCount, firstSeen, lastSeen, matchedEventIds, evidence, params, originChain, hop,
+                createdAt, subject, EVENT_OPENED);
+    }
 
     /** Without subject (deliveries stored before the subject was carried, tests). */
     public Notification(String deliveryId, ActionType actionType, String connectorId, String alertId, String ruleId,
@@ -36,6 +55,7 @@ public record Notification(String deliveryId, ActionType actionType, String conn
     }
 
     public Notification {
+        event = event == null ? EVENT_OPENED : event;
         matchedEventIds = List.copyOf(matchedEventIds);
         evidence = Collections.unmodifiableMap(new LinkedHashMap<>(evidence));
         params = Map.copyOf(params);
@@ -47,6 +67,28 @@ public record Notification(String deliveryId, ActionType actionType, String conn
         return new Notification(deliveryId, type, connectorId, a.id(), a.ruleId(), a.ruleVersion(), a.title(),
                 a.severity(), a.priority(), a.evidenceLevel(), a.network(), a.groupKey(), a.dedupKey(),
                 a.occurrenceCount(), a.firstSeen(), a.lastSeen(), a.matchedEventIds(), a.evidence(), params,
-                a.originChain(), a.hop(), now, a.subject());
+                a.originChain(), a.hop(), now, a.subject(), EVENT_OPENED);
     }
+
+    /** Snapshot telling a channel that every valid piece of evidence of this alert was withdrawn by a reorganisation. */
+    public static Notification retraction(String deliveryId, ActionType type, String connectorId, Map<String, String> params,
+                                          Alert a, Instant now) {
+        return new Notification(deliveryId, type, connectorId, a.id(), a.ruleId(), a.ruleVersion(), a.title(),
+                a.severity(), a.priority(), a.evidenceLevel(), a.network(), a.groupKey(), a.dedupKey(),
+                a.occurrenceCount(), a.firstSeen(), a.lastSeen(), a.matchedEventIds(), a.evidence(), params,
+                a.originChain(), a.hop(), now, a.subject(), EVENT_RETRACTED);
+    }
+
+    /** Snapshot telling a channel that an alert announced as withdrawn has valid evidence again (alert.reinstated). */
+    public static Notification reinstatement(String deliveryId, ActionType type, String connectorId, Map<String, String> params,
+                                             Alert a, Instant now) {
+        return new Notification(deliveryId, type, connectorId, a.id(), a.ruleId(), a.ruleVersion(), a.title(),
+                a.severity(), a.priority(), a.evidenceLevel(), a.network(), a.groupKey(), a.dedupKey(),
+                a.occurrenceCount(), a.firstSeen(), a.lastSeen(), a.matchedEventIds(), a.evidence(), params,
+                a.originChain(), a.hop(), now, a.subject(), EVENT_REINSTATED);
+    }
+
+    public boolean retracted() { return EVENT_RETRACTED.equals(event); }
+
+    public boolean reinstated() { return EVENT_REINSTATED.equals(event); }
 }

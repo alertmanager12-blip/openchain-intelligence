@@ -91,7 +91,33 @@ public final class RuleEngine {
 
     public synchronized Optional<Instant> watermark(Network n) { return Optional.ofNullable(watermarkOf(n)); }
 
+    /** Compensations of the last {@link #process} call (null when it changed nothing undoable). Code review I5. */
+    private UndoLog undo;
+    private String undoEventId;
+
+    private void record(Runnable compensation) { if (undo != null) undo.push(compensation); }
+
+    /**
+     * Restores the engine state to what it was before the last {@link #process} call, if that call was for
+     * {@code eventId}: dedup state, latest event time, window and sequence entries (added, dropped, evicted, consumed by a
+     * completed sequence), group keys created or evicted. For the caller whose transaction storing the outcome failed:
+     * the event can then be evaluated again instead of being taken for a duplicate (code review I5). Counters are not
+     * reverted; entries expired by a periodic sweep during the call stay expired. Returns false when there is nothing to
+     * undo for this event (another event was processed since, or it was a retraction).
+     */
+    public synchronized boolean undoLast(String eventId) {
+        if (undo == null || eventId == null || !eventId.equals(undoEventId)) return false;
+        UndoLog u = undo;
+        undo = null;
+        undoEventId = null;
+        u.run();
+        metrics.undone.incrementAndGet();
+        return true;
+    }
+
     public synchronized EngineResult process(ChainEvent e) {
+        undo = null;
+        undoEventId = null;
         metrics.eventsReceived.incrementAndGet();
         if (e == null || e.eventId() == null || e.eventTime() == null || e.network() == null || e.type() == null) {
             metrics.invalidEvents.incrementAndGet();
@@ -110,10 +136,20 @@ public final class RuleEngine {
         }
         Instant max = maxEventTime.get(e.network());
         if (max != null && e.eventTime().isBefore(max)) metrics.lateAccepted.incrementAndGet();
+        undo = new UndoLog();
+        undoEventId = e.eventId();
+        Network net = e.network();
+        String id = e.eventId();
+        record(() -> { if (max == null) maxEventTime.remove(net); else maxEventTime.put(net, max); });
         if (max == null || e.eventTime().isAfter(max)) maxEventTime.put(e.network(), e.eventTime());
+        EventDedupCache.State priorDedup = dedup.get(id); // null or RETRACTED here
+        record(() -> { if (priorDedup == null) dedup.remove(id); else dedup.put(id, priorDedup); });
         dedup.put(e.eventId(), EventDedupCache.State.ACTIVE);
         metrics.eventsProcessed.incrementAndGet();
+        UndoLog recording = undo;
+        undo = null; // a periodic sweep only drops expired state: it is not undone (and must not restore discardedUpTo)
         maybeSweep();
+        undo = recording;
 
         // loop protection for events emitted by INTERNAL_EVENT actions
         int hop = hopOf(e);
@@ -126,7 +162,13 @@ public final class RuleEngine {
         List<RuleMatch> matches = new ArrayList<>();
         for (Runtime rt : rules.values()) {
             Rule r = rt.rule.rule();
-            if ((!r.enabled() && !rt.evaluateWhenDisabled) || !rt.rule.inScope(e)) continue;
+            if (!r.enabled() && !rt.evaluateWhenDisabled) { // a gap in what it saw
+                Instant was = rt.observingSince.remove(net);
+                if (was != null) record(() -> rt.observingSince.put(net, was));
+                continue;
+            }
+            if (rt.observingSince.putIfAbsent(net, e.eventTime()) == null) record(() -> rt.observingSince.remove(net));
+            if (!rt.rule.inScope(e)) continue;
             if (origin.contains(r.id())) { metrics.loopSuppressed.incrementAndGet(); continue; }
             RuleMatch m = switch (rt.rule.kind()) {
                 case STATELESS -> stateless(rt, e, hop, origin);
@@ -145,7 +187,8 @@ public final class RuleEngine {
             rt.windows.entrySet().removeIf(en -> {
                 Instant wm = watermarkOf(networkOfKey(en.getKey()));
                 if (wm != null) en.getValue().evictUpTo(wm.minus(rt.rule.rule().aggregation().window()));
-                return en.getValue().isEmpty();
+                if (en.getValue().isEmpty()) { rt.discarded(en.getValue()); return true; }
+                return false;
             });
             rt.sequences.entrySet().removeIf(en -> {
                 Instant wm = watermarkOf(networkOfKey(en.getKey()));
@@ -168,7 +211,7 @@ public final class RuleEngine {
                 case AGGREGATION -> {
                     String key = groupKey(e, rt.rule.rule().aggregation().groupBy());
                     SlidingWindow w = key == null ? null : rt.windows.get(key);
-                    if (w != null) { w.remove(e.eventId()); if (w.isEmpty()) rt.windows.remove(key); }
+                    if (w != null) { w.remove(e.eventId()); if (w.isEmpty()) { rt.discarded(w); rt.windows.remove(key); } }
                 }
                 case SEQUENCE -> {
                     String key = groupKey(e, List.of(rt.rule.rule().sequence().key()));
@@ -180,6 +223,46 @@ public final class RuleEngine {
         }
         metrics.retractions.incrementAndGet();
         return new EngineResult(Disposition.RETRACTED, List.of(), e.eventId());
+    }
+
+    /**
+     * After a retraction: is the threshold of an aggregation rule still met for this group key, in a window ending within
+     * {@code [firstEnd, lastEnd]} (the range of the matches grouped in one alert)? Read-only.
+     * <ul>
+     *   <li>STILL_MET: a window of the range passes among the events held (for RATIO_OF_BALANCE, only when the state is
+     *       complete: its value is not monotonic in the events);</li>
+     *   <li>NO_LONGER_MET: none passes and the state is complete: same rule version, the rule has been evaluating without
+     *       interruption since the first match of the range, and no event its windows used was discarded since (expiry,
+     *       size cap, key eviction);</li>
+     *   <li>UNVERIFIABLE otherwise. It is never reported as a verification.</li>
+     * </ul>
+     * Empty when the rule is unknown or is not an aggregation rule.
+     */
+    public synchronized Optional<ThresholdCheck> recheckAggregation(String ruleId, String ruleVersion, Network network,
+                                                                    String groupKey, Instant firstEnd, Instant lastEnd) {
+        Runtime rt = rules.get(ruleId);
+        if (rt == null || rt.rule.kind() != io.openchain.alerting.rule.compile.CompiledRule.Kind.AGGREGATION) return Optional.empty();
+        Aggregation a = rt.rule.rule().aggregation();
+        String fn = a.function().name(), op = a.operator().name();
+        if (ruleVersion == null || !ruleVersion.equals(rt.rule.rule().version()) || groupKey == null || network == null
+                || firstEnd == null || lastEnd == null || lastEnd.isBefore(firstEnd)) {
+            return Optional.of(new ThresholdCheck(ThresholdCheck.Verdict.UNVERIFIABLE, fn, op, a.threshold(), null, 0));
+        }
+        Instant needFrom = firstEnd.minus(a.window()); // events after this instant make the windows of the range
+        SlidingWindow w = rt.windows.get(groupKey);
+        Instant since = rt.observingSince.get(network);
+        // complete: this runtime produced the alert's matches (observing without interruption since the first of them, same
+        // rule version) and has discarded nothing those windows used since. Events it never saw were not in the matches
+        // either: the recheck compares like with like, minus the retracted event.
+        boolean complete = since != null && !since.isAfter(firstEnd)
+                && (rt.discardedUpTo == null || !rt.discardedUpTo.isAfter(needFrom))
+                && (w == null || w.lostUpTo() == null || !w.lostUpTo().isAfter(needFrom));
+        SlidingWindow.Recheck r = w == null ? new SlidingWindow.Recheck(false, null, 0)
+                : w.recheck(firstEnd, lastEnd, a.window(), a.function(), a.operator(), a.threshold());
+        ThresholdCheck.Verdict v = r.passes() && (complete || a.function() != AggregationFunction.RATIO_OF_BALANCE)
+                ? ThresholdCheck.Verdict.STILL_MET
+                : !r.passes() && complete ? ThresholdCheck.Verdict.NO_LONGER_MET : ThresholdCheck.Verdict.UNVERIFIABLE;
+        return Optional.of(new ThresholdCheck(v, fn, op, a.threshold(), r.value(), r.count()));
     }
 
     // ------------------------------------------------------------ evaluation
@@ -213,9 +296,21 @@ public final class RuleEngine {
                 distinct = Values.display(norm);
             }
         }
-        SlidingWindow w = rt.windows.computeIfAbsent(key, k -> new SlidingWindow());
-        if (watermark != null) w.evictUpTo(watermark.minus(a.window()));
-        if (w.add(new SlidingWindow.Entry(e.eventId(), e.eventTime(), seq++, value, distinct, balance), config.maxEntriesPerKey()))
+        SlidingWindow w = rt.windows.get(key);
+        if (w == null) {
+            SlidingWindow created = new SlidingWindow();
+            rt.windows.put(key, created); // may evict the least recently used key (recorded by the map)
+            record(() -> { if (rt.windows.get(key) == created) rt.windows.remove(key); });
+            w = created;
+        }
+        if (watermark != null) w.evictUpTo(watermark.minus(a.window()), undo);
+        if (w.contains(e.eventId())) {
+            // already counted in this window: the event was processed again after the dedup cache forgot it (a signal
+            // evicted then detected again, a block re-indexed after a failure). Counting it twice would fake a threshold.
+            metrics.windowDuplicates.incrementAndGet();
+            return null;
+        }
+        if (w.add(new SlidingWindow.Entry(e.eventId(), e.eventTime(), seq++, value, distinct, balance), config.maxEntriesPerKey(), undo))
             metrics.windowEntriesDropped.incrementAndGet();
         SlidingWindow.Hit hit = w.evaluate(e.eventTime(), a.window(), a.function(), a.operator(), a.threshold(), config.maxEvidenceEvents());
         if (hit == null) return null;
@@ -244,15 +339,25 @@ public final class RuleEngine {
         if (count == 0) return null;
         String key = groupKey(e, List.of(s.key()));
         if (key == null) { metrics.missingGroupKey.incrementAndGet(); return null; }
-        SequenceState st = rt.sequences.computeIfAbsent(key, k -> new SequenceState(s.steps().size()));
-        if (watermark != null) st.evictUpTo(watermark.minus(s.within()));
+        SequenceState st = rt.sequences.get(key);
+        if (st == null) {
+            SequenceState created = new SequenceState(s.steps().size());
+            rt.sequences.put(key, created);
+            record(() -> { if (rt.sequences.get(key) == created) rt.sequences.remove(key); });
+            st = created;
+        }
+        if (watermark != null) st.evictUpTo(watermark.minus(s.within()), undo);
         SequenceState.Entry entry = new SequenceState.Entry(e.eventId(), e.eventTime());
         int perStep = Math.max(1, config.maxEntriesPerKey() / s.steps().size());
-        for (int k = 0; k < count; k++) if (st.add(matching[k], entry, perStep)) metrics.windowEntriesDropped.incrementAndGet();
+        for (int k = 0; k < count; k++) if (st.add(matching[k], entry, perStep, undo)) metrics.windowEntriesDropped.incrementAndGet();
         for (int k = 0; k < count; k++) {
-            List<SequenceState.Entry> chain = st.completeWith(matching[k], entry, s.within());
+            List<SequenceState.Entry> chain = st.completeWith(matching[k], entry, s.within(), undo);
             if (chain == null) continue;
-            if (st.isEmpty()) rt.sequences.remove(key);
+            if (st.isEmpty()) {
+                SequenceState emptied = st;
+                rt.sequences.remove(key);
+                record(() -> rt.sequences.put(key, emptied));
+            }
             Map<String, Object> ev = new LinkedHashMap<>();
             ev.put("kind", "SEQUENCE");
             ev.put("key", s.key());
@@ -339,6 +444,17 @@ public final class RuleEngine {
         final Map<String, SlidingWindow> windows = lru();
         final Map<String, SequenceState> sequences = lru();
         final boolean evaluateWhenDisabled;
+        /** Event time of the first event seen since this runtime evaluates without interruption, per network. */
+        final Map<Network, Instant> observingSince = new EnumMap<>(Network.class);
+        /** Event time up to which the state of some group key was discarded (empty window removed, LRU eviction). */
+        Instant discardedUpTo;
+
+        void discarded(SlidingWindow w) {
+            Instant prior = discardedUpTo;
+            record(() -> discardedUpTo = prior);
+            for (Instant t : new Instant[]{w.lostUpTo(), w.newest()})
+                if (t != null && (discardedUpTo == null || t.isAfter(discardedUpTo))) discardedUpTo = t;
+        }
 
         Runtime(CompiledRule rule, boolean evaluateWhenDisabled) {
             this.rule = rule;
@@ -349,7 +465,14 @@ public final class RuleEngine {
             int max = config.maxGroupKeysPerRule();
             return new LinkedHashMap<>(16, 0.75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, V> eldest) {
-                    if (size() > max) { metrics.groupKeysEvicted.incrementAndGet(); return true; }
+                    if (size() > max) {
+                        String k = eldest.getKey();
+                        V v = eldest.getValue();
+                        record(() -> put(k, v)); // undo: the evicted key comes back (the new one is removed first)
+                        if (v instanceof SlidingWindow sw) discarded(sw);
+                        metrics.groupKeysEvicted.incrementAndGet();
+                        return true;
+                    }
                     return false;
                 }
             };

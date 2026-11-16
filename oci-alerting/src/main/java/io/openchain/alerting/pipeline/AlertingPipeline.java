@@ -34,16 +34,37 @@ public final class AlertingPipeline {
                 "delivery via " + d.connectorId() + " failed permanently after " + d.attempts() + " attempt(s): " + d.lastError())));
     }
 
+    public RuleEngine engine() { return engine; }
+
     public Outcome onEvent(ChainEvent event) {
         EngineResult r = engine.process(event);
-        if (r.retractedEventId() != null) alerts.onRetraction(r.retractedEventId());
+        // Stored alerts are withdrawn for every removed event, even when the engine ignored it: its dedup cache lives in
+        // memory, so after a restart (or an eviction) it no longer knows events matched earlier, while the alerts citing
+        // them are persisted. onRetraction is idempotent (an event already withdrawn changes nothing).
+        String retracted = r.retractedEventId() != null ? r.retractedEventId() : event.removed() ? event.eventId() : null;
+        if (retracted != null) {
+            // an alert whose last valid evidence just left the canonical chain is announced on the channels of its rule
+            // (same routing as its opening), once per withdrawal, through the delivery outbox (retries, dead letters)
+            // aggregation alerts: the threshold is re-evaluated on the events the engine still holds (code review I3)
+            for (AlertService.EvidenceChange c : alerts.onRetraction(retracted, a -> engine.recheckAggregation(
+                    a.ruleId(), a.ruleVersion(), a.network(), a.groupKey(), a.firstSeen(), a.lastSeen()))) {
+                if (!c.becameWithdrawn()) continue;
+                Rule rule = engine.rule(c.alert().ruleId()).map(x -> x.rule()).orElse(null);
+                if (rule != null) for (Rule.ActionSpec action : rule.actions()) delivery.enqueueRetraction(c.alert(), action);
+            }
+        }
         List<Alert> created = new ArrayList<>(), grouped = new ArrayList<>();
         List<DeliveryRecord> enqueued = new ArrayList<>();
         for (RuleMatch m : r.matches()) {
             Rule rule = engine.rule(m.ruleId()).map(c -> c.rule()).orElse(null);
             if (rule == null) continue; // unregistered concurrently
             AlertService.MatchOutcome o = alerts.onMatch(m, rule.cooldown());
-            if (!o.created()) { grouped.add(o.alert()); continue; }
+            if (!o.created()) {
+                grouped.add(o.alert());
+                // announced as withdrawn, valid again: the same channels are told, once (code review I4)
+                if (o.reinstated()) for (Rule.ActionSpec action : rule.actions()) enqueued.add(delivery.enqueueReinstatement(o.alert(), action));
+                continue;
+            }
             Alert a = o.alert();
             if (!rule.actions().isEmpty()) {
                 a = alerts.transition(a.id(), AlertStatus.PENDING, AlertService.SYSTEM,

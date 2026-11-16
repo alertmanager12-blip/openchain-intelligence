@@ -40,7 +40,7 @@ import org.springframework.stereotype.Service;
 public class ApiKeyService {
 
     private static final Logger log = LoggerFactory.getLogger(ApiKeyService.class);
-    public static final Logger AUDIT = LoggerFactory.getLogger("oci.audit");
+    public static final AuditLog AUDIT = AuditLog.of("oci.audit");
     private static final Pattern FORMAT = Pattern.compile("^oci_([a-z0-9]{2,16})_([A-Za-z0-9]{8})_([A-Za-z0-9]{32,128})$");
     private static final String BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int SECRET_BYTES = 32;

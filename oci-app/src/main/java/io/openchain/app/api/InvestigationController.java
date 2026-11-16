@@ -148,7 +148,7 @@ public class InvestigationController {
         for (Network n : Network.values()) {
             var rt = chains.runtime(n);
             if (rt.isEmpty()) {
-                if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0, false,
+                if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0L, false,
                         List.of()));
                 continue;
             }
@@ -156,7 +156,8 @@ public class InvestigationController {
             long indexed = rt.get().lastIndexedBlock();
             String detail = rt.get().lastError() != null ? rt.get().lastError() : s.detail();
             out.add(new Dto.NetworkDto(n.id(), true, s.headBlock(), s.finalizedBlock(), s.healthy() && rt.get().lastError() == null,
-                    s.providerId(), s.latencyMillis(), s.checkedAt(), detail, indexed, indexed < 0 ? s.headBlock() : Math.max(0, s.headBlock() - indexed),
+                    s.providerId(), s.latencyMillis(), s.checkedAt(), detail, indexed,
+                    io.openchain.app.chain.ChainIngestionService.indexerLag(s, indexed).stream().boxed().findFirst().orElse(null),
                     rt.get().simulator().isPresent(), investigation.limitations(n)));
         }
         return out;

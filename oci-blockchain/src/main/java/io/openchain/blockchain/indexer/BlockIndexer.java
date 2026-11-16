@@ -57,8 +57,18 @@ public final class BlockIndexer {
         this.clock = clock;
     }
 
-    public Checkpoint checkpoint() {
-        return store.load(config.indexerId()).orElse(new Checkpoint(provider.network(), config.startBlock() - 1, List.of()));
+    /**
+     * Live state (window with its events), kept in memory: the store is read once (first poll, i.e. after a restart)
+     * and written after each block. A store may persist block references only (JdbcCheckpointStore): reloading it at
+     * every poll would forget the events of the window, and a reorg detected on a later poll would retract nothing.
+     */
+    private Checkpoint current;
+
+    public synchronized Checkpoint checkpoint() {
+        if (current == null) {
+            current = store.load(config.indexerId()).orElse(new Checkpoint(provider.network(), config.startBlock() - 1, List.of()));
+        }
+        return current;
     }
 
     /** One bounded indexing step. Provider failures propagate as {@link ProviderException}; state stays consistent. */
@@ -77,7 +87,10 @@ public final class BlockIndexer {
         if (!window.isEmpty()) {
             BlockRef tip = window.peekLast().block();
             Optional<BlockRef> canonicalTip = provider.getBlock(tip.number());
-            if (canonicalTip.isEmpty() || !canonicalTip.get().hash().equals(tip.hash())) {
+            // A block we indexed that the source does not have is a source lagging behind (failover to another node),
+            // not a reorganisation: retry later. A real reorg shows a block with another hash at that height.
+            if (canonicalTip.isEmpty()) throw behind(tip.number());
+            if (!canonicalTip.get().hash().equals(tip.hash())) {
                 List<ChainEvent> retractions = new ArrayList<>();
                 last = rollback(window, tip.number(), retractions);
                 retracted += retractions.size();
@@ -143,7 +156,8 @@ public final class BlockIndexer {
         while (it.hasNext()) {
             IndexedBlock ib = it.next();
             Optional<BlockRef> canonical = provider.getBlock(ib.block().number());
-            if (canonical.isPresent() && canonical.get().hash().equals(ib.block().hash())) { ancestor = ib.block().number(); break; }
+            if (canonical.isEmpty()) throw behind(ib.block().number()); // unknown, not orphaned: nothing is retracted
+            if (canonical.get().hash().equals(ib.block().hash())) { ancestor = ib.block().number(); break; }
             orphaned.add(ib);
         }
         if (orphaned.isEmpty()) {
@@ -155,8 +169,12 @@ public final class BlockIndexer {
         if (ancestor == null) {
             BlockRef oldest = window.peekFirst().block();
             long parentNumber = oldest.number() - 1;
-            boolean parentIsCanonical = parentNumber < config.startBlock() // never indexed: nothing to retract
-                    || provider.getBlock(parentNumber).map(b -> b.hash().equals(oldest.parentHash())).orElse(false);
+            boolean parentIsCanonical = parentNumber < config.startBlock(); // never indexed: nothing to retract
+            if (!parentIsCanonical) {
+                Optional<BlockRef> parent = provider.getBlock(parentNumber);
+                if (parent.isEmpty()) throw behind(parentNumber);
+                parentIsCanonical = parent.get().hash().equals(oldest.parentHash());
+            }
             if (!parentIsCanonical) throw new ReorgTooDeepException(provider.network(), detectedAt, config.windowSize());
             ancestor = parentNumber;
         }
@@ -170,6 +188,12 @@ public final class BlockIndexer {
             window.removeLast();
         }
         return ancestor;
+    }
+
+    /** The source does not have a block that was already indexed: it lags behind; transient, state untouched. */
+    private ProviderException behind(long blockNumber) {
+        return new ProviderException(provider.id() + ": indexed block " + blockNumber + " is not available from the provider"
+                + " (source lagging behind); retrying later", true);
     }
 
     /** Admin changes are kept for registry tokens, the watch list, or every contract when configured. */
@@ -192,6 +216,8 @@ public final class BlockIndexer {
     }
 
     private void save(long last, Deque<IndexedBlock> window) {
-        store.save(config.indexerId(), new Checkpoint(provider.network(), last, List.copyOf(window)));
+        Checkpoint c = new Checkpoint(provider.network(), last, List.copyOf(window));
+        store.save(config.indexerId(), c);
+        current = c;
     }
 }

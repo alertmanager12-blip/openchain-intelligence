@@ -198,6 +198,292 @@ class DeliveryAndPipelineTest {
         assertThat(alerts.find(a.id()).orElseThrow().comments()).anyMatch(c -> c.author().equals("system:reorg"));
     }
 
+    // ---- code review I8 (2026-11-13), verification: a signal evicted from memory and detected again is re-emitted with
+    // the same id ("signal:<id>"); the engine's dedup cache (200,000 ids, ~50 min at chain-wide volume) has forgotten it.
+
+    static ChainEvent signal(String id, long sec, String wallet) {
+        return Fx.event("signal:" + id, io.openchain.core.model.Network.TRON, ChainEvent.EventType.DETECTION_SIGNAL, T0.plusSeconds(sec),
+                Map.of("signal.type", "INDIRECT_EXPOSURE", "signal.confidence", new java.math.BigDecimal("0.5"), "wallet.address", wallet));
+    }
+
+    /** Engine whose dedup cache keeps one id only: the re-emitted signal is no longer known as a duplicate. */
+    static RuleEngine forgetfulEngine() { return new RuleEngine(EngineConfig.defaults().withDedup(1, Duration.ofHours(24))); }
+
+    @Test void reEmittedSignalDoesNotDuplicateAStatelessAlert() {
+        RuleEngine engine = forgetfulEngine();
+        engine.register(Fx.rule(header("exposure") + """
+                scope: { eventTypes: [DETECTION_SIGNAL] }
+                conditions: { logic: AND, rules: [ { field: signal.type, operator: IN, value: [SANCTIONED_EXPOSURE, INDIRECT_EXPOSURE] } ] }
+                cooldown: 6h
+                dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, delivery);
+        p.onEvent(signal("x", 0, "TW"));
+        p.onEvent(Fx.transfer("other", T0.plusSeconds(1), "TA", "TB", "1")); // pushes signal:x out of the dedup cache
+        p.dispatch(10);
+        int sent = hook.received.size();
+        var again = p.onEvent(signal("x", 3600, "TW")); // same signal, detected again one hour later
+        assertThat(again.created()).isEmpty();
+        assertThat(alerts.repository().findAll()).hasSize(1);
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(hook.received).hasSize(sent);
+    }
+
+    @Test void reEmittedSignalIsNotCountedTwiceByAnAggregation() {
+        RuleEngine engine = forgetfulEngine();
+        engine.register(Fx.rule(header("many-signals") + """
+                scope: { eventTypes: [DETECTION_SIGNAL] }
+                conditions: { logic: AND, rules: [ { field: signal.type, operator: EQUALS, value: INDIRECT_EXPOSURE } ] }
+                aggregation: { window: 24h, groupBy: wallet.address, function: COUNT, operator: GREATER_THAN, threshold: 2 }
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, delivery);
+        p.onEvent(signal("s1", 0, "TW"));
+        p.onEvent(signal("s2", 60, "TW"));
+        p.onEvent(Fx.transfer("other", T0.plusSeconds(61), "TA", "TB", "1"));
+        // two distinct signals only: s1 re-emitted must not make three
+        assertThat(p.onEvent(signal("s1", 120, "TW")).created()).isEmpty();
+        assertThat(alerts.repository().findAll()).isEmpty();
+        assertThat(engine.metrics().windowDuplicates()).isEqualTo(1);
+        // a genuinely new third signal still triggers
+        assertThat(p.onEvent(signal("s3", 180, "TW")).created()).singleElement()
+                .satisfies(a -> assertThat(a.matchedEventIds()).containsExactly("signal:s1", "signal:s2", "signal:s3"));
+    }
+
+    // ---- code review I4 (2026-11-13): an alert announced as withdrawn that has valid evidence again is announced too
+
+    AlertingPipeline bigPipeline() {
+        RuleEngine engine = new RuleEngine(EngineConfig.defaults());
+        engine.register(Fx.rule(header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: hook } ]
+                """));
+        return new AlertingPipeline(engine, alerts, delivery);
+    }
+
+    static List<String> events(List<DeliveryRecord> ds) { return ds.stream().map(d -> d.notification().event()).toList(); }
+
+    @Test void reincludedEvidenceOfAWithdrawnAlertIsAnnouncedOnce() {
+        AlertingPipeline p = bigPipeline();
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_OPENED);
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_RETRACTED);
+
+        p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")); // back on the canonical chain
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.VALID);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> {
+            assertThat(d.notification().event()).isEqualTo(Notification.EVENT_REINSTATED);
+            assertThat(d.notification().alertId()).isEqualTo(a.id());
+            assertThat(NotificationFormatter.text(d.notification(), 4000)).startsWith("EVIDENCE REINSTATED");
+        });
+        p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")); // repeated: already valid, nothing announced
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(alerts.repository().findAll()).hasSize(1);
+    }
+
+    @Test void newMatchGroupedIntoAWithdrawnAlertMakesItValidAgainAndIsAnnounced() {
+        AlertingPipeline p = bigPipeline();
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        p.dispatch(10);
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+
+        var o = p.onEvent(Fx.transfer("e2", T0.plusSeconds(60), "TA", "TB", "7000")); // same sender, within the cooldown
+        assertThat(o.created()).isEmpty();
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN); // e1 withdrawn, e2 valid
+        assertThat(after.history().getLast().reason()).contains("valid evidence again");
+        assertThat(events(p.dispatch(10))).containsExactly(Notification.EVENT_REINSTATED);
+    }
+
+    // ---- code review I3 (2026-11-13): aggregation alerts re-evaluate their threshold after a retraction
+
+    static final String VOLUME = """
+            conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 0 } ] }
+            aggregation: { window: 1h, groupBy: transaction.from, function: SUM, field: transaction.amount, operator: GREATER_THAN, threshold: "100000" }
+            actions: [ { type: WEBHOOK, connectorId: hook } ]
+            """;
+
+    AlertingPipeline volumePipeline(RuleEngine engine) {
+        engine.register(Fx.rule(header("volume") + VOLUME));
+        return new AlertingPipeline(engine, alerts, delivery);
+    }
+
+    /** The remaining events no longer reach the threshold: the alert has no valid evidence, and the channels are told. */
+    @Test void aggregationAlertWhoseThresholdIsNoLongerMetIsWithdrawn() {
+        AlertingPipeline p = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p.onEvent(Fx.transfer("a", T0, "TA", "TB", "60000"));
+        Alert a = p.onEvent(Fx.transfer("b", T0.plusSeconds(1800), "TA", "TB", "50000")).created().getFirst();
+        p.dispatch(10);
+        int sent = hook.received.size();
+
+        p.onEvent(Fx.removed(Fx.transfer("a", T0, "TA", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN); // b remains, but 50000 is not > 100000
+        assertThat(after.withdrawnEventIds()).containsExactly("a");
+        assertThat(after.history().getLast().reason()).contains("no longer met", "SUM 50000 over 1 event(s)", "threshold GREATER_THAN 100000");
+        assertThat(alerts.thresholdNoLongerMet()).isEqualTo(1);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED));
+        assertThat(hook.received).hasSize(sent + 1);
+    }
+
+    /** Cited events were withdrawn but the remaining ones still pass: the alert stays valid, with the new value. */
+    @Test void aggregationAlertWhoseThresholdIsStillMetStaysValid() {
+        AlertingPipeline p = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p.onEvent(Fx.transfer("a", T0, "TA", "TB", "60000"));
+        Alert a = p.onEvent(Fx.transfer("b", T0.plusSeconds(1800), "TA", "TB", "50000")).created().getFirst();
+        p.onEvent(Fx.transfer("c", T0.plusSeconds(2400), "TA", "TB", "70000")); // grouped into the same alert
+        p.dispatch(10);
+
+        p.onEvent(Fx.removed(Fx.transfer("a", T0, "TA", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.VALID); // b + c = 120000 > 100000
+        assertThat(after.withdrawnEventIds()).containsExactly("a");
+        assertThat(after.history().getLast().reason()).contains("still met", "SUM 120000 over 2 event(s)");
+        assertThat(p.dispatch(10)).isEmpty();
+    }
+
+    /** After a restart the engine no longer holds the windows: nothing is concluded, and the history says so. */
+    @Test void aggregationAlertAfterARestartIsNotReverifiedAndSaysSo() {
+        AlertingPipeline p1 = volumePipeline(new RuleEngine(EngineConfig.defaults()));
+        p1.onEvent(Fx.transfer("x", T0, "TX", "TB", "60000"));
+        Alert a = p1.onEvent(Fx.transfer("y", T0.plusSeconds(1800), "TX", "TB", "50000")).created().getFirst();
+
+        AlertingPipeline p2 = volumePipeline(new RuleEngine(EngineConfig.defaults())); // restarted: empty engine state
+        p2.onEvent(Fx.removed(Fx.transfer("x", T0, "TX", "TB", "60000")));
+        Alert after = alerts.find(a.id()).orElseThrow();
+        assertThat(after.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN); // count rule, as before
+        assertThat(after.history().getLast().reason()).contains("1 of 2 matched event(s) remain", "threshold not re-verifiable");
+        assertThat(alerts.thresholdUnverifiable()).isEqualTo(1);
+        assertThat(alerts.thresholdNoLongerMet()).isZero();
+    }
+
+    /** P0 reorg: alert.retracted goes out once, when the last valid evidence is withdrawn, through the outbox. */
+    @Test void alertRetractedIsDeliveredOnceWhenNoValidEvidenceRemains() {
+        ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
+        byte[] secret = "pipeline-secret-pipeline-secret-!!".getBytes(StandardCharsets.UTF_8);
+        ConnectorRegistry reg = new ConnectorRegistry()
+                .register(new WebhookConnector("default-webhook", URI.create("https://hooks.example.com/oc"), secret, http, clock));
+        DeliveryService ds = new DeliveryService(new InMemoryDeliveryStore(), reg, BACKOFF, clock);
+        RuleEngine engine = new RuleEngine(EngineConfig.defaults());
+        engine.register(Fx.rule(header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: default-webhook } ]
+                """));
+        AlertingPipeline p = new AlertingPipeline(engine, alerts, ds);
+        Alert a = p.onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+        p.onEvent(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000"));
+        p.dispatch(10);
+        assertThat(http.calls).hasSize(1);
+
+        assertThat(p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000"))).enqueued()).isEmpty();
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN);
+        assertThat(p.dispatch(10)).isEmpty(); // partial: nothing announced
+
+        p.onEvent(Fx.removed(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000")));
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> {
+            assertThat(d.status()).isEqualTo(DeliveryStatus.DELIVERED);
+            assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED);
+        });
+        assertThat(http.calls).hasSize(2);
+        assertThat(http.calls.getLast().headers().get(WebhookSignature.EVENT_HEADER)).isEqualTo("alert.retracted");
+        assertThat(new String(http.calls.getLast().body(), StandardCharsets.UTF_8)).contains("\"event\":\"alert.retracted\"");
+
+        p.onEvent(Fx.removed(Fx.transfer("e2", T0.plusSeconds(30), "TA", "TB", "7000"))); // repeated notice
+        assertThat(p.dispatch(10)).isEmpty();
+        assertThat(http.calls).hasSize(2);
+        assertThat(alerts.find(a.id()).orElseThrow().status()).isEqualTo(AlertStatus.NOTIFIED); // kept, status unchanged
+    }
+
+    /**
+     * Code review I1 (2026-11-13): after a restart the rule engine's dedup cache is empty, so the engine ignores the
+     * retraction of an event indexed before the restart. The stored alert must still have its evidence withdrawn and
+     * alert.retracted must still go out.
+     */
+    @Test void retractionAfterARestartStillWithdrawsTheStoredAlert() {
+        ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
+        byte[] secret = "pipeline-secret-pipeline-secret-!!".getBytes(StandardCharsets.UTF_8);
+        ConnectorRegistry reg = new ConnectorRegistry()
+                .register(new WebhookConnector("default-webhook", URI.create("https://hooks.example.com/oc"), secret, http, clock));
+        DeliveryService ds = new DeliveryService(new InMemoryDeliveryStore(), reg, BACKOFF, clock);
+        String rule = header("big") + """
+                conditions: { logic: AND, rules: [ { field: transaction.amount, operator: GREATER_THAN, value: 1000 } ] }
+                dedupKey: "{{rule.id}}:{{event.transaction.from}}"
+                actions: [ { type: WEBHOOK, connectorId: default-webhook } ]
+                """;
+        RuleEngine before = new RuleEngine(EngineConfig.defaults());
+        before.register(Fx.rule(rule));
+        Alert a = new AlertingPipeline(before, alerts, ds).onEvent(Fx.transfer("e1", T0, "TA", "TB", "5000")).created().getFirst();
+
+        // restart: a new engine (empty dedup cache), the same persisted alerts and outbox
+        RuleEngine after = new RuleEngine(EngineConfig.defaults());
+        after.register(Fx.rule(rule));
+        AlertingPipeline p = new AlertingPipeline(after, alerts, ds);
+        p.dispatch(10);
+        int sent = http.calls.size();
+
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000")));
+        assertThat(alerts.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(p.dispatch(10)).singleElement().satisfies(d -> assertThat(d.notification().event()).isEqualTo(Notification.EVENT_RETRACTED));
+        assertThat(http.calls).hasSize(sent + 1);
+
+        p.onEvent(Fx.removed(Fx.transfer("e1", T0, "TA", "TB", "5000"))); // repeated notice: idempotent
+        assertThat(p.dispatch(10)).isEmpty();
+    }
+
+    /**
+     * Code review I18 (2026-11-13): deliveries were attempted one after the other, so one unreachable webhook (seconds of
+     * timeout per attempt) delayed every other channel. Connectors are now served in parallel.
+     */
+    @Test void aBlockedConnectorDoesNotDelayTheOthers() throws Exception {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1), fastSent = new java.util.concurrent.CountDownLatch(1);
+        registry.register(new NotificationConnector() {
+            @Override public String id() { return "blackhole"; }
+            @Override public ActionType type() { return ActionType.WEBHOOK; }
+            @Override public DeliveryResult send(Notification n) {
+                try { release.await(10, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                return DeliveryResult.retry(0, "timeout");
+            }
+        });
+        registry.register(new NotificationConnector() {
+            @Override public String id() { return "telegram"; }
+            @Override public ActionType type() { return ActionType.TELEGRAM; }
+            @Override public DeliveryResult send(Notification n) { fastSent.countDown(); return DeliveryResult.ok(200); }
+        });
+        delivery.enqueue(alert(), new ActionSpec(ActionType.WEBHOOK, "blackhole", Map.of()));   // due first
+        DeliveryRecord fast = delivery.enqueue(alert(), new ActionSpec(ActionType.TELEGRAM, "telegram", Map.of()));
+        Thread pass = Thread.ofVirtual().start(() -> delivery.processDue(10));
+        try {
+            assertThat(fastSent.await(3, java.util.concurrent.TimeUnit.SECONDS)).as("sent while the other connector is still blocked").isTrue();
+        } finally {
+            release.countDown();
+            pass.join(5_000);
+        }
+        assertThat(store.find(fast.id()).orElseThrow().status()).isEqualTo(DeliveryStatus.DELIVERED);
+    }
+
+    /** A failing connector gets a bounded number of attempts per pass; its other deliveries wait for the next pass, untouched. */
+    @Test void aFailingConnectorIsAttemptedABoundedNumberOfTimesPerPass() {
+        for (int i = 0; i < 6; i++) hook.script.add(DeliveryResult.retry(0, "timeout"));
+        List<DeliveryRecord> queued = new ArrayList<>();
+        for (int i = 0; i < 6; i++) queued.add(delivery.enqueue(alert(), new ActionSpec(ActionType.WEBHOOK, "hook", Map.of())));
+        delivery.processDue(10);
+        assertThat(hook.received).hasSize(DeliveryService.MAX_CONSECUTIVE_FAILURES_PER_PASS);
+        long untouched = queued.stream().map(r -> store.find(r.id()).orElseThrow())
+                .filter(r -> r.attempts() == 0 && r.status() == DeliveryStatus.PENDING).count();
+        assertThat(untouched).isEqualTo(6 - DeliveryService.MAX_CONSECUTIVE_FAILURES_PER_PASS);
+        // nothing is lost: once the connector answers again, a later pass delivers them
+        hook.script.clear();
+        clock.now = clock.now.plus(Duration.ofMinutes(5));
+        delivery.processDue(10);
+        assertThat(queued).allSatisfy(r -> assertThat(store.find(r.id()).orElseThrow().status()).isEqualTo(DeliveryStatus.DELIVERED));
+    }
+
     @Test void deadLetteredDeliveryIsRecordedOnTheAlert() {
         ConnectorsTest.FakeHttp http = new ConnectorsTest.FakeHttp();
         http.status = 404;

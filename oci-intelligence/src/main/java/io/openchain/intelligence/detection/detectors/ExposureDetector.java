@@ -40,6 +40,9 @@ import java.util.Set;
 public final class ExposureDetector extends AbstractDetector {
     public ExposureDetector() { super("exposure", 1); }
 
+    /** Sees unverified-token flows to record them as zero-weight DUSTING; they never create exposure (see counts()). */
+    @Override public boolean readsUnverifiedTokenFlows() { return true; }
+
     private record Node(Address address, List<ValueFlow> path) {} // path[0] = flow leaving the source ... path[last] = flow into subject
 
     @Override public List<Signal> detect(DetectionContext ctx) {
@@ -129,7 +132,9 @@ public final class ExposureDetector extends AbstractDetector {
         Deque<Node> queue = new ArrayDeque<>();
         Set<Address> visited = new HashSet<>(Set.of(s));
         int budget = cfg.maxVisitedFlows();
-        for (ValueFlow f : ctx.flows().incoming(s)) {
+        // Newest first: one flow is kept per sender, and the latest one admits every upstream flow that is not later
+        // than it. Keeping the oldest missed value that reached the sender between two of its payments (review I7).
+        for (ValueFlow f : ctx.flows().incoming(s).reversed()) {
             if (f.from().equals(s) || !traceable(f, cfg) || !visited.add(f.from())) continue;
             queue.add(new Node(f.from(), List.of(f)));
         }
@@ -151,7 +156,7 @@ public final class ExposureDetector extends AbstractDetector {
             boolean stop = risky || nodeLabels.stream().anyMatch(l -> cfg.stopAt().contains(l.category()));
             if (stop || n.path().size() >= cfg.maxHops()) continue;
             ValueFlow downstream = n.path().getFirst();
-            for (ValueFlow g : ctx.flows().incoming(n.address())) {
+            for (ValueFlow g : ctx.flows().incoming(n.address()).reversed()) { // newest eligible flow per sender, as above
                 if (--budget <= 0) break;
                 if (g.timestamp().isAfter(downstream.timestamp()) || g.from().equals(n.address()) || !traceable(g, cfg)
                         || !visited.add(g.from())) continue;

@@ -22,6 +22,7 @@ public final class StructuringDetector extends AbstractDetector {
         ValueFlow t = ctx.trigger();
         var cfg = ctx.config().structuring();
         BigDecimal threshold = cfg.thresholdFor(t.token().symbol());
+        if (threshold == null) return List.of(); // no reporting threshold for this asset
         BigDecimal lower = threshold.multiply(BigDecimal.valueOf(1 - cfg.marginRatio()));
         List<ValueFlow> hits = between(sameToken(ctx.flows().outgoing(ctx.subject()), t), t.timestamp().minus(cfg.window()), t.timestamp())
                 .stream().filter(f -> f.amount().compareTo(lower) >= 0 && f.amount().compareTo(threshold) < 0).toList();

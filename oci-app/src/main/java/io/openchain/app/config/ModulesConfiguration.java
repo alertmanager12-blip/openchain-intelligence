@@ -55,13 +55,14 @@ public class ModulesConfiguration {
     @Bean EventHistory eventHistory(OciProperties props) { return new EventHistory(props.getIngestion().getEventHistorySize()); }
 
     @Bean
-    IntelligencePipeline intelligencePipeline(LabelCatalog labels, Clock clock,
+    IntelligencePipeline intelligencePipeline(LabelCatalog labels, Clock clock, OciProperties props,
                                               org.springframework.beans.factory.ObjectProvider<io.openchain.app.journal.IntelligenceJournal> journals) {
         // in memory: the working set read synchronously by the detectors; with PostgreSQL every new flow, signal and score
         // is also journaled behind the hot path and reloaded at start-up (ADR-0024 step 2)
         io.openchain.app.journal.IntelligenceJournal journal = journals.getIfAvailable();
         io.openchain.intelligence.flow.FlowStore flows = new InMemoryFlowStore();
-        io.openchain.intelligence.detection.SignalRepository signals = new InMemorySignalRepository();
+        io.openchain.intelligence.detection.SignalRepository signals =
+                new InMemorySignalRepository(props.getIngestion().getWorkingSetMaxSignalsPerWallet());
         io.openchain.intelligence.risk.RiskScoreRepository scores = new InMemoryRiskScoreRepository();
         if (journal != null) {
             flows = new io.openchain.app.journal.JournalingStores.Flows(flows, journal);
@@ -73,6 +74,16 @@ public class ModulesConfiguration {
                 profiles::profileOrEmpty, scores, clock);
         return new IntelligencePipeline(flows, profiles, labels, signals, DetectionEngine.withDefaultDetectors(signals),
                 scoring, DetectionConfig.defaults(), clock);
+    }
+
+    /** Observation of the addresses exempt from the working-set trim (step 2 point 1): changes nothing. */
+    @Bean io.openchain.app.chain.ExemptWorkingSetMonitor exemptWorkingSetMonitor(IntelligencePipeline intelligence,
+            io.openchain.app.history.AddressHistoryService history,
+            org.springframework.beans.factory.ObjectProvider<io.openchain.app.watchlist.WatchlistService> watchlist, Clock clock) {
+        return new io.openchain.app.chain.ExemptWorkingSetMonitor(intelligence, history, () -> {
+            var w = watchlist.getIfAvailable();
+            return w == null ? java.util.List.of() : w.list();
+        }, clock);
     }
 
     @Bean FieldCatalog fieldCatalog() { return FieldCatalog.defaults(); }

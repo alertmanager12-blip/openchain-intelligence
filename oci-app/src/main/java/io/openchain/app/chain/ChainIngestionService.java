@@ -139,6 +139,64 @@ public class ChainIngestionService {
      */
     public void setAgeWarmup(Duration warmup) { this.ageWarmup = warmup == null ? Duration.ZERO : warmup; }
 
+    /**
+     * Every address seen in a flow since start-up, independent of the bounded working set (code review B3): an address
+     * without a profile is either never seen (genuinely new, age 0) or seen before with its profile evicted (age unknown,
+     * the age fields are then absent). Fixed memory; guarded by the processing lock.
+     */
+    private volatile io.openchain.intelligence.memory.SeenAddresses seenAddresses =
+            new io.openchain.intelligence.memory.SeenAddresses(1L << 24); // 2 MB until configured (tests, demo)
+
+    /** Size of the seen-address filter in bits (OCI_INGESTION_SEEN_ADDRESSES_BITS); call before indexing starts. */
+    public void setSeenAddressesBits(long bits) { this.seenAddresses = new io.openchain.intelligence.memory.SeenAddresses(bits); }
+
+    /**
+     * Runs {@code work} at a block boundary of every network: no poll in progress (each network's poll lock, taken in
+     * network order, waits for the block being indexed to be fully processed and its checkpoint saved), then under the
+     * ingestion lock (no backfill or history chunk half applied). The in-memory state then matches the saved checkpoints
+     * exactly. Lock order as in a poll (network, then ingestion): no deadlock. Polls wait meanwhile: keep {@code work} short.
+     */
+    public void atBlockBoundary(Runnable work) {
+        List<NetworkRuntime> rts = new ArrayList<>(runtimes.values());
+        rts.sort(java.util.Comparator.comparing(NetworkRuntime::network));
+        lockFrom(rts, 0, work);
+    }
+
+    private void lockFrom(List<NetworkRuntime> rts, int i, Runnable work) {
+        if (i == rts.size()) { exclusive(work); return; }
+        synchronized (rts.get(i)) { lockFrom(rts, i + 1, work); }
+    }
+
+    /**
+     * Observation state for the working-set snapshot: the live seen-address filter (not a copy: call under the ingestion
+     * lock, see {@link #exclusive}, and finish writing before releasing it), observation start and first block per network.
+     */
+    public synchronized io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation observation() {
+        return new io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation(seenAddresses, Map.copyOf(observationStart),
+                Map.copyOf(firstIndexedBlock));
+    }
+
+    /**
+     * Restores the observation state saved with a snapshot, before indexing starts. Refused (false, nothing changed) when
+     * the filter size differs from the configured one: the observation start is then not restored either, so ages stay
+     * withheld until the warm-up has passed again, never invented.
+     */
+    public synchronized boolean installObservation(io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation o) {
+        if (o.seen().bits() != seenAddresses.bits()) return false;
+        if (seenAddresses.inserted() > 0 || !observationStart.isEmpty() || !firstIndexedBlock.isEmpty())
+            throw new IllegalStateException("observation state is restored before indexing only");
+        seenAddresses = o.seen();
+        observationStart.putAll(o.observationStart());
+        firstIndexedBlock.putAll(o.firstIndexedBlock());
+        return true;
+    }
+
+    /** Fill ratio (0..1), estimated error rate and distinct addresses of the seen-address filter (metrics). */
+    public synchronized double[] seenAddressesStats() {
+        var s = seenAddresses;
+        return new double[] {s.fillRatio(), s.falsePositiveRate(), s.inserted(), s.sizeBytes()};
+    }
+
     /** Days the network has been observed so far (event time span), 0 when nothing was seen. */
     public long observedDays(Network n) {
         Instant start = observationStart.get(n);
@@ -178,7 +236,26 @@ public class ChainIngestionService {
         this.tokens = tokens;
         this.clock = clock;
         this.backfillMapper = new TransferEventMapper(tokens);
+        this.evaluations = new EvaluationRetryQueue(this::evaluateInTransaction, id -> alerting.engine().undoLast(id),
+                EvaluationRetryQueue.DEFAULT_CAPACITY);
     }
+
+    private final EvaluationRetryQueue evaluations;
+
+    /** Re-evaluates the events whose evaluation failed (scheduled). Serialised with ingestion. Code review I5. */
+    public synchronized int retryPendingEvaluations() { return evaluations.retryPending(); }
+
+    /**
+     * Runs {@code work} under the ingestion lock: no event is processed meanwhile (the working-set snapshot reads a state
+     * consistent across stores, ADR-0024 step 3d).
+     */
+    public synchronized void exclusive(Runnable work) { work.run(); }
+
+    public int pendingEvaluations() { return evaluations.pending(); }
+    public long evaluationFailures() { return evaluations.failed(); }
+    public long evaluationsRetried() { return evaluations.retried(); }
+    public long evaluationsDroppedLate() { return evaluations.droppedLate(); }
+    public long evaluationsDroppedQueueFull() { return evaluations.droppedFull(); }
 
     // ---- registration -----------------------------------------------------------------------------------------
 
@@ -262,6 +339,16 @@ public class ChainIngestionService {
     }
 
     /** Current status (refreshed from the provider; falls back to the last known one). */
+    /**
+     * Blocks between the chain head and the last indexed block, or empty when the head is not known: no status yet, an
+     * unhealthy provider (its head is stale or 0) or a head of 0. "Unknown" must never read as "no lag": the provider
+     * failing is exactly when indexing falls behind.
+     */
+    public static java.util.OptionalLong indexerLag(NetworkStatus status, long lastIndexedBlock) {
+        if (status == null || !status.healthy() || status.headBlock() <= 0) return java.util.OptionalLong.empty();
+        return java.util.OptionalLong.of(lastIndexedBlock < 0 ? status.headBlock() : Math.max(0, status.headBlock() - lastIndexedBlock));
+    }
+
     public NetworkStatus status(NetworkRuntime rt) {
         try {
             NetworkStatus s = rt.provider.getNetworkStatus();
@@ -288,28 +375,45 @@ public class ChainIngestionService {
             Optional<ValueFlow> flow = toFlow(e);
             if (flow.isPresent()) balance = realBalanceBefore(flow.get().from(), flow.get().token(), e.blockNumber());
         }
+        // Same rule for the spender of an approval: the contract lookup is a provider call (retries, rate limiter, back-off)
+        // and must never run under the service lock, where a slow or rate-limited network would stall every other network
+        // (code review I15). A failed lookup leaves the field absent; indexing goes on.
+        Optional<Boolean> spenderIsContract = Optional.empty();
+        if (!e.removed() && e.type() == ChainEvent.EventType.APPROVAL) {
+            Optional<Address> spender = address(e, "approval.spender");
+            NetworkRuntime rt = runtimes.get(e.network());
+            if (spender.isPresent() && rt != null) {
+                try {
+                    spenderIsContract = rt.provider().isContract(spender.get(), e.blockNumber());
+                } catch (RuntimeException ex) {
+                    spenderLookupFailures.incrementAndGet();
+                    log.debug("contract lookup of spender {} failed: {}", spender.get(), ex.getMessage());
+                }
+            }
+        }
         long waitFrom = System.nanoTime();
-        process(e, balance, waitFrom);
+        process(e, balance, spenderIsContract, waitFrom);
     }
 
-    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance, long waitFrom) {
+    private synchronized void process(ChainEvent e, Optional<BigDecimal> prefetchedBalance, Optional<Boolean> spenderIsContract, long waitFrom) {
         long start = System.nanoTime();
         add(lockWaitNanos, e.network(), start - waitFrom);
         try {
-            processLocked(e, prefetchedBalance);
+            processLocked(e, prefetchedBalance, spenderIsContract);
         } finally {
             add(processNanos, e.network(), System.nanoTime() - start);
         }
     }
 
-    private void processLocked(ChainEvent e, Optional<BigDecimal> prefetchedBalance) {
+    private void processLocked(ChainEvent e, Optional<BigDecimal> prefetchedBalance, Optional<Boolean> spenderIsContract) {
         if (e.removed()) eventsRetracted.incrementAndGet(); else eventsIndexed.incrementAndGet();
         if (!e.removed() && e.blockNumber() >= 0) firstIndexedBlock.merge(e.network(), e.blockNumber(), Math::min);
         if (!e.removed() && e.eventTime() != null) observationStart.merge(e.network(), e.eventTime(), (a, b) -> a.isBefore(b) ? a : b);
         if (e.removed()) {
-            if (isFreeze(e)) intelligence.onEvent(e); // reverts the label state of a reorged freeze/unfreeze
             history.record(e);
-            evaluate(e);
+            evaluate(e); // the rule engine removes the event's contribution; alerts on it are re-checked
+            // a reorged freeze/unfreeze also reverts its label state and withdraws the exposure signals citing it
+            applyRetraction(e, intelligence.retract(e));
             return;
         }
         List<Signal> fresh = new ArrayList<>();
@@ -319,9 +423,15 @@ public class ChainIngestionService {
             if (flow.isPresent()) {
                 ValueFlow f = flow.get();
                 transfersIndexed.incrementAndGet();
-                trackedWallets.add(f.from());
-                trackedWallets.add(f.to());
+                track(f);
+                // before this flow: was each party ever seen, and does the receiver still have a profile? (age fields)
+                boolean senderSeen = seenAddresses.add(f.from());
+                boolean receiverHadProfile = intelligence.profiles().has(f.to());
+                boolean receiverSeen = f.to().equals(f.from()) ? senderSeen : seenAddresses.add(f.to());
                 WalletProfile senderBefore = intelligence.profiles().profileOrEmpty(f.from());
+                // age known: from a profile covering the address since it was first seen, or a never-seen address (0)
+                boolean senderAgeKnown = senderBefore.firstActivity() != null ? !intelligence.profiles().startUnknown(f.from()) : !senderSeen;
+                boolean receiverAgeKnown = receiverHadProfile ? !intelligence.profiles().startUnknown(f.to()) : !receiverSeen;
                 Optional<BigDecimal> realBalance = Optional.empty();
                 boolean real = intelligence.balances().authoritative(e.network());
                 if (real) {
@@ -330,7 +440,10 @@ public class ChainIngestionService {
                 }
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
                 fresh.addAll(r.newSignals());
-                enriched = enrich(e, f, senderBefore, real, realBalance);
+                // a profile just re-created for an address seen earlier does not know when the address really started
+                if (senderSeen && senderBefore.firstActivity() == null) intelligence.profiles().markStartUnknown(f.from());
+                if (receiverSeen && !receiverHadProfile) intelligence.profiles().markStartUnknown(f.to());
+                enriched = enrich(e, f, senderBefore, real, realBalance, senderAgeKnown, receiverAgeKnown);
             }
         } else if (isFreeze(e)) {
             Optional<Address> target = address(e, "freeze.address");
@@ -340,7 +453,7 @@ public class ChainIngestionService {
         } else if (e.type() == ChainEvent.EventType.APPROVAL) {
             fresh.addAll(intelligence.onEvent(e).newSignals());
             Optional<Address> owner = address(e, "approval.owner"), spender = address(e, "approval.spender");
-            if (owner.isPresent() && spender.isPresent()) enriched = enrichApproval(e, owner.get(), spender.get());
+            if (owner.isPresent() && spender.isPresent()) enriched = enrichApproval(e, owner.get(), spender.get(), spenderIsContract);
         } else {
             fresh.addAll(intelligence.onEvent(e).newSignals());
         }
@@ -353,6 +466,58 @@ public class ChainIngestionService {
             evaluate(se);
         }
     }
+
+    /**
+     * Propagates a chain reorganisation (docs/P0_REORG_DESIGN.md): a signal no longer justified is retracted from the rule
+     * engine (its DETECTION_SIGNAL event, so its contribution and its alerts are re-checked) and from the recent signals;
+     * a signal recomputed from the remaining evidence keeps its id and stays active (only its evidence is refreshed); a
+     * signal that appears with the re-evaluation is handled like any new signal.
+     */
+    private void applyRetraction(ChainEvent e, IntelligencePipeline.RetractResult r) {
+        if (!r.applied()) { reorgIgnored.incrementAndGet(); return; }
+        if (r.flow() != null) reorgRevertedFlows.incrementAndGet();
+        if (r.flow() != null && r.profileSidesReverted() < (r.flow().from().equals(r.flow().to()) ? 1 : 2)) reorgInexactProfiles.incrementAndGet();
+        if (r.replayTruncated()) reorgReplayTruncated.incrementAndGet();
+        reorgSignalsRemoved.addAndGet(r.removed().size());
+        reorgSignalsRecomputed.addAndGet(r.recomputed().size());
+        reorgSignalsAdded.addAndGet(r.added().size());
+        Set<String> gone = new java.util.HashSet<>(r.removed().stream().map(Signal::id).toList());
+        java.util.Map<String, Signal> refreshed = new java.util.HashMap<>();
+        r.recomputed().forEach(x -> refreshed.put(x.id(), x));
+        synchronized (recentSignals) {
+            List<Signal> kept = new ArrayList<>();
+            for (Signal x : recentSignals) if (!gone.contains(x.id())) kept.add(refreshed.getOrDefault(x.id(), x));
+            recentSignals.clear();
+            recentSignals.addAll(kept);
+        }
+        for (Signal x : r.removed()) {
+            ChainEvent se = signalEvent(x, e);
+            ChainEvent retracted = new ChainEvent(se.eventId(), se.type(), se.network(), se.blockNumber(), se.blockHash(), se.eventTime(),
+                    se.ingestedAt(), true, se.fields());
+            history.record(retracted);
+            evaluate(retracted);
+        }
+        for (Signal x : r.added()) {
+            remember(x);
+            ChainEvent se = signalEvent(x, e);
+            history.record(se);
+            evaluate(se);
+        }
+        if (!r.removed().isEmpty() || !r.added().isEmpty() || !r.recomputed().isEmpty())
+            log.info("reorg {}: {} signal(s) withdrawn, {} recomputed from the remaining evidence, {} new{}", e.eventId(),
+                    r.removed().size(), r.recomputed().size(), r.added().size(), r.replayTruncated() ? " (re-evaluation truncated)" : "");
+    }
+
+    private final AtomicLong reorgRevertedFlows = new AtomicLong(), reorgSignalsRemoved = new AtomicLong(), reorgSignalsRecomputed = new AtomicLong(),
+            reorgSignalsAdded = new AtomicLong(), reorgIgnored = new AtomicLong(), reorgInexactProfiles = new AtomicLong(), reorgReplayTruncated = new AtomicLong();
+
+    public long reorgRevertedFlows() { return reorgRevertedFlows.get(); }
+    public long reorgSignalsRemoved() { return reorgSignalsRemoved.get(); }
+    public long reorgSignalsRecomputed() { return reorgSignalsRecomputed.get(); }
+    public long reorgSignalsAdded() { return reorgSignalsAdded.get(); }
+    public long reorgIgnored() { return reorgIgnored.get(); }
+    public long reorgInexactProfiles() { return reorgInexactProfiles.get(); }
+    public long reorgReplayTruncated() { return reorgReplayTruncated.get(); }
 
     private void remember(Signal s) {
         synchronized (recentSignals) {
@@ -379,8 +544,12 @@ public class ChainIngestionService {
      * global order (monitor, then rows) and rules out a monitor/row-lock deadlock.
      */
     private void evaluate(ChainEvent e) {
+        evaluations.evaluate(e); // a failed transaction undoes the engine state and queues the event (code review I5)
+    }
+
+    private io.openchain.alerting.engine.EngineResult.Disposition evaluateInTransaction(ChainEvent e) {
         synchronized (alertService) {
-            tx.run(() -> alerting.onEvent(e));
+            return tx.inTransaction(() -> alerting.onEvent(e)).engine().disposition();
         }
     }
 
@@ -436,11 +605,13 @@ public class ChainIngestionService {
             var chunk = flows.subList(i, Math.min(flows.size(), i + HISTORY_CHUNK));
             long t0 = System.nanoTime();
             restoreChunk(() -> {
-                for (var f : chunk) {
+                for (var restored : chunk) {
+                    var f = intelligence.canonical(restored); // equal flow, shared instances
                     if (intelligence.flows().add(f)) {
                         intelligence.profiles().ingest(f);
-                        trackedWallets.add(f.from());
-                        trackedWallets.add(f.to());
+                        track(f);
+                        seenAddresses.add(f.from());
+                        seenAddresses.add(f.to());
                     }
                 }
             });
@@ -468,8 +639,9 @@ public class ChainIngestionService {
             if (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER) {
                 Optional<ValueFlow> f = toFlow(e);
                 if (f.isEmpty()) continue;
-                trackedWallets.add(f.get().from());
-                trackedWallets.add(f.get().to());
+                track(f.get());
+                seenAddresses.add(f.get().from());
+                seenAddresses.add(f.get().to());
                 r = intelligence.onFlow(f.get());
             } else if (e.type() == ChainEvent.EventType.APPROVAL) {
                 r = intelligence.onEvent(e);
@@ -645,6 +817,96 @@ public class ChainIngestionService {
     /** Addresses seen in at least one indexed value flow. */
     public Set<Address> trackedWallets() { return Set.copyOf(trackedWallets); }
 
+    public int trackedWalletCount() { return trackedWallets.size(); }
+
+    /** Latest flow time seen per network (event time): the working-set trim measures ages against it, not the clock. */
+    private final Map<Network, Instant> flowWatermark = new ConcurrentHashMap<>();
+
+    private void track(ValueFlow f) {
+        trackedWallets.add(f.from());
+        trackedWallets.add(f.to());
+        if (f.timestamp() != null) flowWatermark.merge(f.network(), f.timestamp(), (a, b) -> a.isAfter(b) ? a : b);
+    }
+
+    /** What one working-set trim removed and what is left (logged, exposed as metrics, returned for tests). */
+    public record TrimResult(int flows, int signals, int profiles, int remainingFlows, int remainingSignals,
+                             int remainingProfiles, int remainingScoredAddresses, int trackedWallets, long millis,
+                             /** signals removed by this trim, by severity (P0 item 3: no silent removal) */
+                             java.util.Map<String, Long> signalsRemovedBySeverity) {}
+
+    private volatile TrimResult lastTrim;
+
+    /** The last working-set trim, or null before the first one. */
+    public TrimResult lastTrim() { return lastTrim; }
+
+    /**
+     * Bounds the in-memory working set (ADR-0024 step 3a). Ages of flows and profiles are measured, per network, against
+     * the latest flow time seen on that network (event time, capped at the clock), not the clock: a catch-up after downtime
+     * never evicts what it just indexed, and a stalled network does not stop the trim of the others. Kept addresses
+     * (watchlist, loaded address history) are never trimmed.
+     * <ul>
+     *   <li>flows older than {@code flowRetention};</li>
+     *   <li>profiles, scores and tracking of wallets without a flow for {@code profileIdle};</li>
+     *   <li>signals older than {@code signalRetention} whose wallet no longer has a profile (risk scores are computed from
+     *       the stored signals of the wallet, so they stay as long as the wallet is in the working set), except HIGH and
+     *       CRITICAL ones.</li>
+     * </ul>
+     */
+    public TrimResult trimWorkingSet(Duration flowRetention, Duration signalRetention, Duration profileIdle,
+                                     java.util.function.Predicate<Address> keep) {
+        return trimWorkingSet(flowRetention, signalRetention, profileIdle, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, keep);
+    }
+
+    /**
+     * Same as above, then enforces hard caps (ADR-0024 step 3b): at chain-wide volume the time windows alone do not bound
+     * memory, so when a count is still above its cap the oldest flows, the least recently active profiles (with their
+     * scores and tracking) and the oldest signals of wallets that left the working set are removed until it is not. Under
+     * the caps, HIGH and CRITICAL signals are no longer exempt: alerts already raised are stored apart and stay.
+     */
+    public synchronized TrimResult trimWorkingSet(Duration flowRetention, Duration signalRetention, Duration profileIdle,
+                                                  int maxFlows, int maxSignals, int maxProfiles,
+                                                  java.util.function.Predicate<Address> keep) {
+        long t0 = System.nanoTime();
+        Instant now = clock.instant();
+        Map<Network, Instant> reference = new java.util.EnumMap<>(Network.class);
+        flowWatermark.forEach((n, w) -> reference.put(n, w.isAfter(now) ? now : w));
+        int flows = intelligence.flows().evictBefore(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(flowRetention); }, keep);
+        flows += intelligence.flows().evictOldest(maxFlows, keep);
+        Set<Address> idle = new java.util.HashSet<>(
+                intelligence.profiles().evictIdle(n -> { Instant w = reference.get(n); return w == null ? null : w.minus(profileIdle); }, keep));
+        idle.addAll(intelligence.profiles().evictLeastRecent(maxProfiles, keep));
+        intelligence.scoring().forget(idle);
+        trackedWallets.removeAll(idle);
+        var profiles = intelligence.profiles();
+        java.util.Map<String, Long> evictedBefore = intelligence.signals().evictionCounts();
+        int signals = intelligence.signals().evictBefore(now.minus(signalRetention),
+                s -> keep.test(s.address()) || profiles.has(s.address())
+                        || s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0);
+        // exact global cap (P0 item 3), HIGH/CRITICAL protected first: (0) INFO..MEDIUM of wallets without a profile,
+        // (1) INFO..MEDIUM of profiled wallets, (2) HIGH/CRITICAL of wallets without a profile, (3) HIGH/CRITICAL of
+        // profiled wallets; watched wallets and loaded histories exempt (measured separately)
+        signals += intelligence.signals().evictToCap(maxSignals, s -> keep.test(s.address()), s -> {
+            boolean grave = s.severity().compareTo(io.openchain.core.detection.Severity.HIGH) >= 0;
+            boolean profiled = profiles.has(s.address());
+            return grave ? (profiled ? 3 : 2) : (profiled ? 1 : 0);
+        });
+        TrimResult r = new TrimResult(flows, signals, idle.size(), intelligence.flows().size(), intelligence.signals().size(),
+                profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000,
+                bySeverity(evictedBefore, intelligence.signals().evictionCounts()));
+        lastTrim = r;
+        return r;
+    }
+
+    /** Signal removals between two snapshots of the eviction counters, summed by severity (key reason|severity|type). */
+    static java.util.Map<String, Long> bySeverity(java.util.Map<String, Long> before, java.util.Map<String, Long> after) {
+        java.util.Map<String, Long> out = new java.util.TreeMap<>();
+        after.forEach((k, v) -> {
+            long d = v - before.getOrDefault(k, 0L);
+            if (d > 0) out.merge(k.split("\\|")[1], d, Long::sum);
+        });
+        return out;
+    }
+
     /** Most recent detection signals first. */
     public List<Signal> recentSignals() {
         synchronized (recentSignals) { return List.copyOf(recentSignals); }
@@ -702,7 +964,7 @@ public class ChainIngestionService {
     }
 
     /** Owner as {@code wallet.*}, spender as {@code counterparty.*}. */
-    private ChainEvent enrichApproval(ChainEvent e, Address owner, Address spender) {
+    private ChainEvent enrichApproval(ChainEvent e, Address owner, Address spender, Optional<Boolean> spenderIsContract) {
         Map<String, Object> fields = new LinkedHashMap<>(e.fields());
         fields.put("wallet.address", owner.value());
         putRisk(fields, "wallet", owner);
@@ -710,17 +972,9 @@ public class ChainIngestionService {
         fields.put("counterparty.address", spender.value());
         putRisk(fields, "counterparty", spender);
         putLabels(fields, "counterparty", spender);
-        NetworkRuntime rt = runtimes.get(e.network());
-        if (rt != null) {
-            try {
-                rt.provider().isContract(spender, e.blockNumber()).ifPresent(c -> fields.put("approval.spender_is_contract", c));
-            } catch (RuntimeException ex) { // provider down: the field stays absent, indexing goes on
-                spenderLookupFailures.incrementAndGet();
-                log.debug("contract lookup of spender {} failed: {}", spender, ex.getMessage());
-            }
-        }
+        spenderIsContract.ifPresent(c -> fields.put("approval.spender_is_contract", c)); // looked up before the lock (onEvent)
         Instant firstSeen = intelligence.profiles().profileOrEmpty(spender).firstActivity();
-        if (firstSeen != null && observedLongEnough(e.network(), e.eventTime())) {
+        if (firstSeen != null && !intelligence.profiles().startUnknown(spender) && observedLongEnough(e.network(), e.eventTime())) {
             fields.put("approval.spender_age_days", ageDays(firstSeen, e.eventTime()));
         }
         putWatchlist(fields, owner, null); // wallet.watchlisted = the owner who granted the allowance
@@ -729,7 +983,8 @@ public class ChainIngestionService {
     }
 
     /** Adds the wallet (sender) and counterparty (recipient) catalog fields. */
-    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore, boolean real, Optional<BigDecimal> realBalance) {
+    private ChainEvent enrich(ChainEvent e, ValueFlow f, WalletProfile senderBefore, boolean real, Optional<BigDecimal> realBalance,
+                              boolean senderAgeKnown, boolean receiverAgeKnown) {
         Map<String, Object> fields = new LinkedHashMap<>(e.fields());
         fields.put("wallet.address", f.from().value());
         if (real) {
@@ -742,7 +997,10 @@ public class ChainIngestionService {
             fields.put("wallet.balance", stats == null ? BigDecimal.ZERO : stats.balanceEstimate()); // demo ledger: exact
         }
         boolean aged = observedLongEnough(e.network(), e.eventTime());
-        if (aged) {
+        // Age and activity are measured only when known: from the wallet's profile, or 0 for an address never seen before.
+        // An address seen before whose profile left the bounded working set has an unknown age: no field (a 0 would make
+        // an old wallet look new and fire "young wallet" rules).
+        if (aged && senderAgeKnown) {
             fields.put("wallet.tx_count", senderBefore.transactionCount());
             fields.put("wallet.age_days", ageDays(senderBefore.firstActivity(), e.eventTime()));
         }
@@ -752,7 +1010,8 @@ public class ChainIngestionService {
         putRisk(fields, "counterparty", f.to());
         putLabels(fields, "counterparty", f.to());
         WalletProfile cp = intelligence.profiles().profileOrEmpty(f.to());
-        if (aged) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
+        // same rule: the receiver's profile (as it was before this flow), or a never-seen receiver (age 0)
+        if (aged && receiverAgeKnown) fields.put("counterparty.age_days", ageDays(cp.firstActivity(), e.eventTime()));
         putWatchlist(fields, f.from(), f.to());
         return new ChainEvent(e.eventId(), e.type(), e.network(), e.blockNumber(), e.blockHash(), e.eventTime(),
                 e.ingestedAt(), e.removed(), fields);

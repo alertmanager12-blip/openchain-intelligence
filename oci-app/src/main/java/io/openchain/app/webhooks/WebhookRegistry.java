@@ -46,7 +46,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class WebhookRegistry {
 
-    public static final List<String> EVENTS = List.of("alert.opened", "alert.updated", "alert.retracted", "alert.status_changed", "webhook.test");
+    public static final List<String> EVENTS = List.of("alert.opened", "alert.updated", "alert.retracted", "alert.reinstated", "alert.status_changed", "webhook.test");
 
     public record Webhook(String id, String type, String name, String url, List<String> events, boolean enabled, Instant createdAt,
                           Instant lastDeliveryAt, String lastDeliveryStatus) {

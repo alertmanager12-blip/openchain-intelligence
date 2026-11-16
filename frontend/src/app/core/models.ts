@@ -43,7 +43,8 @@ export interface NetworkStatus {
   /** Present on backend responses (NetworkDto); optional so older payloads still type-check. */
   enabled?: boolean;
   lastIndexedBlock?: number;
-  indexerLag?: number;
+  /** Blocks behind the chain head; null when the head is unknown (provider failing), which is not "no lag". */
+  indexerLag?: number | null;
   /** True when the provider is the simulated demo ledger, not a real chain. */
   simulated?: boolean;
   /** What this instance cannot see or detect on this network (data-source limits). */
@@ -326,6 +327,10 @@ export interface Alert {
   summary: string;
   /** One plain-language line explaining why the rule fired. */
   evidenceSummary: string | null;
+  /** Evidence after chain reorganisations: VALID, PARTIALLY_WITHDRAWN or WITHDRAWN (absent from older servers: VALID). */
+  evidenceState?: 'VALID' | 'PARTIALLY_WITHDRAWN' | 'WITHDRAWN';
+  /** Matched events that left the canonical chain and were not re-included. */
+  withdrawnEventIds?: string[];
   evidenceLevel: EvidenceLevel;
   assignee: string | null;
   createdAt: string;

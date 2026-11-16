@@ -28,7 +28,11 @@ public class AlertController {
                                          @RequestParam(required = false) Integer limit) {
         var f = new AlertFacade.Filter(status, severity, ruleId, address, network,
                 InvestigationController.instant(from, "from"), InvestigationController.instant(to, "to"));
-        return CursorPage.of(alerts.list(f), cursor, limit);
+        // paged in the repository: one row more than the page tells whether a next page exists
+        int n = CursorPage.limit(limit), offset = CursorPage.decode(cursor);
+        java.util.List<Dto.AlertDto> rows = alerts.list(f, offset, n + 1);
+        boolean more = rows.size() > n;
+        return new CursorPage<>(more ? java.util.List.copyOf(rows.subList(0, n)) : rows, more ? CursorPage.encode(offset + n) : null, false);
     }
 
     @GetMapping("/{id}")

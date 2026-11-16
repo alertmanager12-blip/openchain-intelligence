@@ -8,10 +8,112 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 1 — restart without loss, ADR-0024 step 3d, first part)
+
+- **Working-set snapshot** (off by default, `OCI_PERSISTENCE_WORKING_SET_SNAPSHOT=true`, PostgreSQL mode): at an orderly shutdown, once the polls in progress are done, the bounded working set (flows, wallet profiles with their exact bounded state, signals, score histories, remembered balances) is written to PostgreSQL (`V11__working_set_snapshot`, versioned binary format, chunks of 1 MB) with a copy of the indexer checkpoints; at the next start it is reloaded before the indexers, which resume at the next block, only if the checkpoints did not move since. Any other case (crash after an earlier restore, newer format, corrupted data) restores nothing and says why: never a partial state. Needs a container stop grace period above the default 10 s. An end-to-end test restarts the real application on a simulated Ethereum node: it resumes at the next block without reading an indexed block again, and ends with the same flows, profiles, signals and scores as a run without restart. The snapshot also keeps what makes a wallet's age known (seen-address filter, observation start per network), restored together or not at all: a restart no longer restarts the 30-day age warm-up. Metrics `oci_snapshot_*` (restore outcome, duration and restored items, snapshot age, size, failures by phase). Periodic snapshots while indexing (`OCI_PERSISTENCE_SNAPSHOT_INTERVAL`, default 30 min, 0 = at shutdown only), copied at a block boundary of every network: after a crash the last one is reloaded, the indexer checkpoints go back to its watermark and the blocks indexed since are indexed again, without duplicate alerts. See `docs/PERSISTENCE_SNAPSHOT_DESIGN.md` § 10.
+- **CI fails when a test is skipped** (the PostgreSQL integration tests skip themselves without Docker; in CI that would hide a persistence test that did not run).
+
+### Security (code review of 2026-11-13, I32)
+
+- **Every GitHub Action of the CI is pinned to a commit SHA** (`checkout`, `setup-java`, `setup-node`, `upload-artifact`, `codeql-action`; the version stays in a comment and Dependabot keeps updating them): a moved tag can no longer change what runs in CI. The npm licence check no longer downloads `license-checker-rseidelsohn` at run time: version 4.4.2 is a locked development dependency of the frontend (`npx --no-install`).
+
+### Fixed (code review of 2026-11-13, I22)
+
+- **An HTTP 403 from a provider was treated as a permanent error** (I22): TronGrid answers abnormally frequent polling with a 403 and a temporary block, to be retried with backoff (TRON Developer Hub, "Rate limits"). The 403 was not retried, and the circuit breaker counted it as a success, so polling went on at the same pace and prolonged the block. A 403 is now transient, like a 429: retried with backoff (`Retry-After` honoured), counted by the circuit breaker, and a reason to fail over to the next endpoint. A 403 that lasts (refused key) opens the circuit instead of being sent again at every poll.
+
+### Fixed (code review of 2026-11-13, I8)
+
+- **An event processed again could be counted twice by an aggregation rule** (I8, verified by a test before the fix): once the engine's dedup cache (200,000 ids, about 50 minutes at chain-wide volume) has forgotten an event id, the same event (a signal evicted from memory and detected again, a block re-indexed after a failure) was added a second time to the window, and could fake a threshold. A window now counts each event id once (`window.duplicates` counter). Verified as not affected: stateless rules such as the shipped `sanctioned-exposure-signal` (the alert service recognises a trigger already used). Not fixed: a signal re-emitted after its first occurrence left the window counts in a later window, and the "signals in 24 h" figure counts it as new.
+
+### Fixed (code review of 2026-11-13, I5)
+
+- **An alert could be lost when the transaction storing it failed** (I5): the rule engine runs inside that transaction, and its state (dedup, windows, consumed sequence steps) was not rolled back with the database, so a later evaluation of the event was taken for a duplicate. The alerts of the signals derived from that event were lost too (the intelligence pipeline does not derive them twice). Now the engine state of the event is undone (`RuleEngine.undoLast`) and the event is queued (in memory, at most 10,000) and retried before the next events and every 30 s, in order. A retry older than the engine's allowed lateness (2 min) is dropped and counted, not forced through (decision of 2026-11-13). Metrics `oci_alerting_evaluation_failed_total`, `_retried_total`, `_dropped_total{reason}`, `oci_alerting_evaluation_pending`.
+
+### Added (code review of 2026-11-13, I4)
+
+- **Notification `alert.reinstated`**: an alert announced as withdrawn (`alert.retracted`) that has valid evidence again (events back on the canonical chain, or a new match grouped into it) is announced to the same channels, once per transition. Webhook receivers must accept or ignore this new event type (`docs/api/README.md`).
+
+### Fixed (code review of 2026-11-13, I4)
+
+- **A new valid match grouped into a withdrawn alert left it withdrawn**: its evidence state is recomputed.
+- **Telegram: a retraction read like a new alert** (the message had no mention of the withdrawal): retractions and reinstatements now start with « PREUVE RETIRÉE » / « PREUVE RÉTABLIE ».
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, I3)
+
+- **Aggregation alerts kept their evidence state after a reorganisation, whatever the remaining total** (I3): after a retraction, the threshold is re-evaluated on the events the engine still holds. Still met: the alert stays `VALID`, with the new value in its history. No longer met: `WITHDRAWN` even if cited events remain, and `alert.retracted` is sent. When the engine state is incomplete (restart, other rule version, discarded window), nothing is concluded and the history says "threshold not re-verifiable". Metric `oci_alert_threshold_recheck_total{verdict}`.
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, second part)
+
+- **`Authorization: Bearer oci_…` was refused when OIDC is enabled** (I33): the API key was sent to the JWT decoder; it is now left to the API-key filter, in both forms (`X-API-Key` and `Bearer`).
+- **Circuit breaker stuck half-open** after a probe that ended with an `Error`: the endpoint was refused for ever.
+- **Freeze backfill stuck in `RUNNING`** after an `Error`: it is marked `FAILED` and can be triggered again.
+- **CI: a run on `main` is no longer cancelled by the next push**, so every commit of `main` keeps its own result.
+- **Rule creation, update and import are audited** (`rule.create`, `rule.update`, `rule.import` in the `oci.audit` log), like enabling and deleting.
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 5, first part)
+
+- **A retracted freeze left the exposure of counterparties** (I6): when a stablecoin freeze leaves the canonical chain, the signals that cite its label are withdrawn (and the alerts on them re-checked), detection is run again for their subjects, and scores are recomputed; an exposure still justified by another label is kept.
+- **Indirect exposure missed when an intermediary paid several times** (I7): the trace kept the oldest payment of each sender, so value that reached the intermediary between two payments was never found; it now follows the latest payment that is not after the next hop.
+- **Indexing lag shown as 0 when the chain head is unknown**: `oci_indexer_lag_blocks` is `NaN` and `indexerLag` of `GET /networks` is `null` when the provider is failing or has no head; the console shows "unknown".
+- **A failed journal reload stopped the address histories and the journal purge** (I23): histories are re-applied anyway and the purge is scheduled first.
+- **Watchlist changes are audited** (I35): `watchlist.add` and `watchlist.remove` lines in the `oci.audit` log, with the actor.
+- **Console: a non-zero amount below the displayed precision was shown as "0"** (I12): it is shown as `<0.000001` (or `<0.01`), so a dust transfer stays visible.
+- **Console: a graph expansion could be merged into another graph** (I13): an answer that arrives after the root, token, dates or depth changed is ignored, and a new expansion cancels the previous one.
+
+### Changed
+
+- `GET /api/v1/networks`: `indexerLag` can be `null` (lag unknown). Clients must not read `null` as 0.
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lots 3 and 4: operations, providers)
+
+- **A lagging node was mistaken for a chain reorganisation** (I10): when the provider does not have a block that was already indexed (failover to a node behind), the indexer now retries later instead of retracting events or stopping with "reorg too deep"; a real reorganisation shows another hash at that height.
+- **JSON-RPC rate limits sent with HTTP 200 escaped retry, circuit breaker and failover** (I19): transient JSON-RPC errors (-32005, -32002, 429) are retried and failed over like an HTTP 429; "too many results" (same code) still asks for a smaller range and is not retried.
+- **TRON: receipts, freeze scans and address histories burned the indexing quota** (I20): they read the block reference only, instead of the indexer's block fetch (full transaction infos and prefetch of the next blocks).
+- **Provider responses are bounded** (I21): a body above 64 MB is refused before parsing (permanent error).
+- **`deploy/smoke-test.sh` replaced the images of a real deployment** (I31): the smoke stack builds under its own `:smoke` tags (`deploy/smoke.override.yml`).
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 2: availability)
+
+- **A provider call ran under the service-wide processing lock** (I15): the contract lookup of an approval's spender (retries, rate limiter, back-off) is now made before the lock, so a slow or rate-limited network no longer stalls the others.
+- **Removing a flow scanned every stored flow** (I16): flows are indexed by event id; a retraction now costs the flows of its two parties only.
+- **Background tasks stopped for good after an Error** (I17): the working-set trim, the alert dispatch, the escalation and the polling loops stay scheduled after any failure, which is logged as an error.
+- **One unreachable connector delayed every notification** (I18): connectors are served in parallel (in due order within a connector), and a connector that fails 3 times in a row is left until the next pass; its other deliveries stay pending, untouched. `processDue` reports only the deliveries it attempted.
+- **`GET /alerts` and the dashboard loaded every alert** (I24): filtering, ordering, paging and counts run in the database. The `address` filter of `GET /alerts` uses the address stored with the alert (alerts stored before subjects existed are no longer matched by address); an unknown status, severity or network returns an empty page as before.
+
+### Fixed (code review of 2026-11-13, `docs/CODE_REVIEW_REPORT.md`, lot 1: accuracy)
+
+- **Chain reorganisations were not retracted with PostgreSQL persistence** (B1): the indexer reloaded its reorg window from the checkpoint store at every poll, and the PostgreSQL store keeps block references only, so a reorg was detected but no retraction was emitted (orphaned flows, signals and alerts stayed valid). The window now lives in memory and the store is read once at start-up. Events of blocks indexed before a restart are still not retracted (unchanged, documented in ADR-0024).
+- **Transfers of unverified tokens no longer drive behavioural detectors** (B2): anyone can deploy a contract emitting `Transfer(from = victim, …)`; such flows raised fast-forwarding, circular-flow, unusual-amount, fan-out and estimated rapid-drain signals against third parties. Detectors now see verified tokens only; the exposure detector still records unverified transfers from listed addresses as zero-weight `DUSTING`.
+- **Age and activity of wallets whose profile left the working set** (B3): `wallet.age_days`, `wallet.tx_count`, `counterparty.age_days` and `approval.spender_age_days` were 0 (or counted from the re-created profile) for old wallets evicted by the caps, so "young wallet" conditions could match old wallets. A fixed-size filter of every address seen since start-up (`OCI_INGESTION_SEEN_ADDRESSES_BITS`, default 2^28 bits = 32 MB of heap; gauges `oci_seen_addresses_fill_ratio`, `oci_seen_addresses_false_positive_rate`, `oci_seen_addresses`) tells a never-seen address (age 0, emitted) from one seen before (age unknown: the fields are absent, so conditions on them do not match).
+- **Alert retraction after a restart** (I1): the rule engine ignores the retraction of an event it no longer remembers (in-memory dedup cache); stored alerts citing the event now have their evidence withdrawn anyway, and `alert.retracted` is delivered.
+- **Retraction through the internal connector** (I2): an `alert.retracted` notification reached correlation rules as a new signal; it is now a removed event with the same id.
+- **Fund flow graph kept stale transfers** (I11): changing the token, the dates or the depth on the same root only added elements; elements that no longer match are now removed.
+
+### Changed (memory — shared instances, `docs/KEY_COMPACTION_IMPLEMENTATION_REPORT.md`)
+
+- **Stored flows share one instance per equal token and per address** instead of a new token and new addresses per decoded event. Tokens are shared on their full identity (network, contract, symbol, decimals: two tokens with the same symbol stay distinct) in a bounded table (4,096, least recently used forgotten first); addresses reuse the instance held by the wallet's profile, so no table of their own and no reference outlives the profile. Native coin descriptors are now one per network. Equality, identification, deduplication, retractions and re-inclusions are unchanged (differential tests, forced hash collisions).
+- **Diagnostic of orphan dedup keys** (keys kept by profiles after their flow left memory), on request only: `GET /api/v1/admin/working-set/profile-keys` (permission `keys:admin`).
+
+### Added (observation — exempt working set, `docs/EXEMPT_METRICS_REPORT.md`)
+
+- **The addresses exempt from the working-set trim are measured, nothing else changes**: per category (watchlist; address history loaded, partial, in progress, empty, failed) the number of addresses, flows and signals in memory, an estimate of their memory, the age of the last consultation and, for information only, how far the proposed caps (10,000 flows per address, 150,000 in all) would be exceeded. Prometheus gauges `oci_exempt_*` (no address label) and `GET /api/v1/admin/working-set/exempt` (permission `keys:admin`) for the per-address detail; one summary line per trim.
+
+### Fixed (P0 — signal cap, `docs/bench/SIGNAL_CAP_REPORT.md`)
+
+- **The signal store is bounded per wallet and exactly at the global cap**: 64 signals per wallet by default (`OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET`; the most represented signal type gives way first, so every kind of evidence keeps its latest signals; HIGH/CRITICAL only when nothing weaker is left), and the global cap of 150,000 is enforced exactly in four tiers that remove HIGH/CRITICAL last. Every removal is counted (`oci_signals_evicted_total{reason,severity}`, `oci_signals_evicted_by_type_total{reason,type}`) and each trim log line lists the signals removed by severity. Measured on a busy synthetic wallet (203 signals): score unchanged (83).
+
+### Fixed (P0 — chain reorganisations, `docs/P0_REORG_REPORT.md`)
+
+- **A transfer whose block leaves the canonical chain is now reverted with everything derived from it**: the flow, its effect on both wallet profiles (exact), the signals citing its transaction (re-evaluated from the remaining evidence: a signal still justified keeps its id with updated evidence, one that is not is withdrawn, including indirect exposure on other wallets), the scores and the rule-engine contributions. Idempotent; a transaction re-included in another block is counted once and restores its signals. Retracted approvals and admin changes drop the signals they alone justified.
+- **Alerts are never deleted but their evidence is qualified** (migration V10, additive): `PARTIALLY_WITHDRAWN` or `WITHDRAWN`, with history, a console banner and `evidenceState` / `withdrawnEventIds` in the API; when the last valid evidence goes, `alert.retracted` is delivered once through the delivery outbox (header `X-OCI-Event`, payload field `event`). Metrics `oci_reorg_reverted_flows_total`, `oci_reorg_signals_total{outcome}`, `oci_reorg_ignored_total`, `oci_reorg_inexact_profiles_total`, `oci_reorg_replay_truncated_total`.
+
+### Fixed (P0 — detector defects, `docs/bench/DETECTION_BENCH_STEP_2.md`)
+
+- `UnusualAmount`: baseline per direction (sent vs received); no infinite or inflated z when one amount dominates the history (at least 3× the median required instead). `FastForwarding`: receipts must explain the forwarding (≥ 50 % of the amount sent), share capped at 100 %. `Structuring`: the 10,000 threshold applies to USD stablecoins only. `CircularFlow`: one signal per return flow listing every path. Detection bench added (`oci-intelligence` tests, synthetic scenarios): precision 0.70 → 0.93 (1.00 with business rule R1 on statistical anomalies), recall of existing detectors unchanged (1.00).
+
 ## [0.1.0] - 2026-11-16
 
 First published version, as a pre-release (0.x: APIs and schemas may still change, see the stability note above). Known issues of this version are listed in [`docs/releases/v0.1.0.md`](docs/releases/v0.1.0.md).
-
 
 ### Changed (console UI/UX redesign, see `docs/FRONTEND_UI_UX_REDESIGN.md`)
 
@@ -24,6 +126,15 @@ First published version, as a pre-release (0.x: APIs and schemas may still chang
 
 - **Landing page on `/`** (ChainSentinel): what the platform is, the problem, the four capabilities (each item marked available, partial or planned), how it works, an illustrative wallet dossier, the developer API (real contract of `GET /api/v1/wallets/{address}/risk`), open source principles (Apache-2.0), use cases, community. Illustrative data is labeled as such; only Ethereum and TRON are presented as live networks. Repository, documentation, issue and contribution links are hidden until a public repository URL is set in `features/landing/public-links.ts` (none exists yet). Lazy chunk of 73 kB (17 kB transferred), no new dependency, `prefers-reduced-motion` respected.
 - The console Overview moves to **`/overview`** (other console URLs unchanged); the console shows the ChainSentinel name and mark. The landing page renders without the console chrome and makes no API call. `robots.txt`, SVG favicon, Open Graph tags.
+
+### Changed (ADR-0024 step 3b — hard caps and compact wallet accumulators)
+
+- **Hard caps on the working set** (production measurement pending): after the time windows, the working-set trim enforces caps on flows, profiles and signals (`OCI_INGESTION_WORKING_SET_MAX_FLOWS`, `_MAX_PROFILES`, `_MAX_SIGNALS`, defaults 400,000 / 300,000 / 150,000 for a 3 GB heap), removing the oldest items first; HIGH and CRITICAL signals are no longer exempt beyond the cap (raised alerts are stored apart). Watched wallets and loaded histories are neither removed nor counted.
+- **A very active wallet no longer grows with its number of transfers**: bounded de-duplication (latest 4,096 events), folded activity times beyond 2,048 instants, the 1,024 heaviest counterparties, distinct contracts counted up to 1,024. Totals, transfer counts and first activity stay exact. Profile reads on the event path (rules) no longer scan a hot wallet's full history.
+
+### Changed (ADR-0024 step 3a — working-set trim, not sufficient on its own)
+
+- **The in-memory working set grew without limit** (measured on 2026-11-09: ~4.8 million flows and ~950,000 signals per day once indexing keeps up with Ethereum mainnet and TRON). It is trimmed every 10 minutes: flows older than 24 h and profiles/scores of wallets idle for 7 days (ages per network, in event time), signals older than 48 h once their wallet left the working set (HIGH/CRITICAL kept, so risk scores of active wallets are unchanged); watched wallets and addresses with loaded history are kept. Non-transfer event ids are capped at 500,000. New metrics `oci_working_set_size{kind}` and `oci_working_set_trim_millis`; `OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0` disables the trim. Trade-off for unwatched wallets: detectors see 24 h of flows (see the installation guide). Measured on 2026-11-10 with all retentions at 2 h: the trim slows the growth but memory is still not bounded at chain-wide volume (old generation 2.9 GB of 3 GB after 3 hours); step 3b (compact accumulators) is needed.
 
 ### Added (phase 1 — durable intelligence, ADR-0024 step 2)
 

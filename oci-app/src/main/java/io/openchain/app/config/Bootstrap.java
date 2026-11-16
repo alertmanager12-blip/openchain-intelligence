@@ -83,6 +83,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final DemoScenarios demoScenarios;
     private final FreezeBackfillService backfills;
     private final io.openchain.app.history.AddressHistoryService history;
+    /** Working-set snapshot (ADR-0024 step 3d); null when disabled. Used only when {@link #snapshotsActive}. */
+    private final io.openchain.app.persistence.WorkingSetSnapshotService snapshots;
+    private volatile boolean snapshotsActive;
     /** Delay before retrying a real chain whose provider was unreachable at start-up. */
     private static final Duration START_RETRY = Duration.ofSeconds(30);
     // virtual threads: polls and lookups mostly wait on providers; one task per network runs in parallel
@@ -93,7 +96,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
                      UserDirectory users, TokenRegistry tokens, Clock clock, ObjectProvider<DemoNotificationSink> demoSink,
                      ObjectProvider<DemoScenarios> demoScenarios, FreezeBackfillService backfills,
-                     io.openchain.app.history.AddressHistoryService history) {
+                     io.openchain.app.history.AddressHistoryService history,
+                     ObjectProvider<io.openchain.app.persistence.WorkingSetSnapshotService> snapshots) {
+        this.snapshots = snapshots.getIfAvailable();
         this.backfills = backfills;
         this.history = history;
         this.demoSink = demoSink.getIfAvailable();
@@ -118,6 +123,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         boolean demo = props.getDemo().isEnabled();
         refuseRealChainsInDemoMode(demo);
         chains.setAgeWarmup(props.getIngestion().getAgeWarmup());
+        chains.setSeenAddressesBits(props.getIngestion().getSeenAddressesBits());
         // internal bus: INTERNAL_EVENT actions feed derived events back to the rule engine (hop-limited by the engine)
         connectors.register(new InternalEventConnector("internal-bus", chains::publishInternal, clock));
         if (demo) {
@@ -133,11 +139,18 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         rules.disableUnreachable();
         warnAboutNotificationRouting(demo);
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
+        restoreWorkingSet(demo); // before any real indexer starts: they resume where the snapshot was taken
         props.getChains().forEach(this::startRealChain);
         // stored address histories are re-applied in the background: with a few dozen of them this takes minutes
         // (each event goes through the intelligence pipeline, serialised with live ingestion) and must not hold readiness
         scheduler.execute(guard("history restore", () -> {
-            restoreIntelligence(); // journaled flows, signals and scores first (ADR-0024 step 2), then address histories
+            // journaled flows, signals and scores first (ADR-0024 step 2), then address histories. A failed journal
+            // reload must not prevent the stored histories from being re-applied (code review I23).
+            try {
+                restoreIntelligence();
+            } catch (RuntimeException e) {
+                log.error("intelligence journal not restored, continuing with address histories: {}", e.toString());
+            }
             int restored = history.restore();
             if (restored > 0) log.info("address history: {} stored backfill(s) re-applied", restored);
         }));
@@ -145,6 +158,20 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         Duration dispatch = props.getIngestion().getDispatchInterval();
         scheduler.scheduleWithFixedDelay(guard("dispatch", () -> alerting.dispatch(200)), dispatch.toMillis(), dispatch.toMillis(), TimeUnit.MILLISECONDS);
         scheduler.scheduleWithFixedDelay(guard("escalation", alertService::escalateOverdue), 60, 60, TimeUnit.SECONDS);
+        // events whose rule evaluation failed (transaction error) are retried even when no new event arrives (review I5)
+        scheduler.scheduleWithFixedDelay(guard("evaluation retry", chains::retryPendingEvaluations), 30, 30, TimeUnit.SECONDS);
+        var ing = props.getIngestion();
+        long trim = ing.getWorkingSetTrimInterval().toMillis();
+        if (trim > 0) {
+            scheduler.scheduleWithFixedDelay(guard("working-set trim", this::trimWorkingSet), trim, trim, TimeUnit.MILLISECONDS);
+            log.info("working-set trim every {}: flows older than {}, profiles idle for {}, signals older than {} once their wallet left "
+                    + "the working set (HIGH/CRITICAL, watchlist and loaded histories kept); caps {} flows, {} signals, {} profiles",
+                    ing.getWorkingSetTrimInterval(), ing.getWorkingSetFlowRetention(), ing.getWorkingSetProfileIdle(),
+                    ing.getWorkingSetSignalRetention(), ing.getWorkingSetMaxFlows(), ing.getWorkingSetMaxSignals(), ing.getWorkingSetMaxProfiles());
+        } else {
+            log.warn("working-set trim disabled (OCI_INGESTION_WORKING_SET_TRIM_INTERVAL={}): memory grows with uptime",
+                    ing.getWorkingSetTrimInterval());
+        }
         // first flush of pending deliveries off the main thread: INTERNAL_EVENT deliveries wait for the ingestion lock, so a
         // long first indexing pass on a busy real chain must not keep start-up (and readiness) waiting
         scheduler.execute(guard("initial dispatch", () -> alerting.dispatch(1_000)));
@@ -314,6 +341,8 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 more = chains.poll(rt);
             } catch (RuntimeException e) {
                 log.error("poll {} failed: {}", id, e.toString());
+            } catch (Throwable e) { // never lose the polling loop on an Error; rescheduled below
+                log.error("poll {} failed with an error: {}", id, e.toString(), e);
             } finally {
                 if (!scheduler.isShutdown()) schedulePolling(id, rt, everyMillis, more ? 0 : everyMillis);
             }
@@ -334,6 +363,39 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         }
     }
 
+    private io.openchain.app.watchlist.WatchlistService watchlistService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setWatchlistService(io.openchain.app.watchlist.WatchlistService w) { this.watchlistService = w; }
+
+    private io.openchain.app.chain.ExemptWorkingSetMonitor exemptMonitor;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setExemptMonitor(io.openchain.app.chain.ExemptWorkingSetMonitor m) { this.exemptMonitor = m; }
+
+    /** Bounds the in-memory working set; watched wallets and addresses with loaded history are kept. */
+    private void trimWorkingSet() {
+        var ing = props.getIngestion();
+        java.util.Set<Address> histories = history.historyAddresses();
+        var w = watchlistService;
+        var r = chains.trimWorkingSet(ing.getWorkingSetFlowRetention(), ing.getWorkingSetSignalRetention(), ing.getWorkingSetProfileIdle(),
+                ing.getWorkingSetMaxFlows(), ing.getWorkingSetMaxSignals(), ing.getWorkingSetMaxProfiles(),
+                a -> histories.contains(a) || (w != null && w.isWatched(a)));
+        log.info("working set trimmed in {} ms: removed {} flow(s), {} signal(s) {}, {} idle profile(s); kept {} flow(s), {} signal(s), "
+                + "{} profile(s), {} scored address(es), {} tracked wallet(s)", r.millis(), r.flows(), r.signals(), r.signalsRemovedBySeverity(),
+                r.profiles(), r.remainingFlows(), r.remainingSignals(), r.remainingProfiles(), r.remainingScoredAddresses(), r.trackedWallets());
+        if (exemptMonitor != null) { // observation only: measures the exempt addresses, changes nothing
+            var x = exemptMonitor.refresh();
+            log.info("exempt working set: {} address(es), {} distinct flow(s) ({} outside the watchlist), measured in {} ms; by category {}; "
+                    + "over the proposed caps (not enforced): {} address(es) above {} flows, {} flow(s) above {} in all",
+                    x.entries().size(), x.distinctExemptFlows(), x.distinctExemptFlowsOutsideWatchlist(), x.millis(),
+                    x.byCategory().entrySet().stream().filter(e -> e.getValue().addresses() > 0)
+                            .map(e -> e.getKey() + "=" + e.getValue().addresses() + "/" + e.getValue().flows() + "f").toList(),
+                    x.addressesOverProposedPerAddressCap(), io.openchain.app.chain.ExemptWorkingSetMonitor.PROPOSED_FLOWS_PER_ADDRESS,
+                    x.overProposedTotal(), io.openchain.app.chain.ExemptWorkingSetMonitor.PROPOSED_EXEMPT_FLOWS_TOTAL);
+        }
+    }
+
     private io.openchain.app.journal.JdbcIntelligenceJournal journal;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -344,6 +406,11 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         if (journal == null) return;
         Duration retention = props.getPersistence().getIntelligenceRetention();
         Instant since = clock.instant().minus(retention);
+        // scheduled before the reload: a failed reload must not leave the journal growing without purge
+        scheduler.scheduleWithFixedDelay(guard("journal purge", () -> {
+            int n = journal.purge(clock.instant().minus(retention));
+            if (n > 0) log.info("intelligence journal: {} row(s) older than {} purged", n, retention);
+        }), 1, 24, TimeUnit.HOURS);
         long t0 = System.nanoTime();
         List<io.openchain.intelligence.flow.ValueFlow> flows = new java.util.ArrayList<>();
         journal.loadFlows(since, 10_000, flows::addAll);
@@ -352,10 +419,6 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         chains.restoreIntelligence(flows, signals, scores);
         log.info("intelligence restored from PostgreSQL in {} ms: {} flow(s), {} signal(s), {} score(s) since {}",
                 (System.nanoTime() - t0) / 1_000_000, flows.size(), signals.size(), scores.size(), since);
-        scheduler.scheduleWithFixedDelay(guard("journal purge", () -> {
-            int n = journal.purge(clock.instant().minus(retention));
-            if (n > 0) log.info("intelligence journal: {} row(s) older than {} purged", n, retention);
-        }), 1, 24, TimeUnit.HOURS);
     }
 
     /**
@@ -451,11 +514,63 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         }
     }
 
-    private static Runnable guard(String name, Runnable r) {
+    /**
+     * Wraps a background task so that no failure cancels its schedule: a periodic task that throws is never run again
+     * by the executor, and an Error (StackOverflowError, LinkageError...) used to escape silently (code review I17),
+     * stopping for good the working-set trim, the alert dispatch or the escalation. Errors are logged as such.
+     */
+    static Runnable guard(String name, Runnable r) {
         return () -> {
-            try { r.run(); } catch (RuntimeException e) { log.warn("background task '{}' failed: {}", name, e.toString()); }
+            try {
+                r.run();
+            } catch (RuntimeException e) {
+                log.warn("background task '{}' failed: {}", name, e.toString());
+            } catch (Throwable e) {
+                log.error("background task '{}' failed with an error, it stays scheduled: {}", name, e.toString(), e);
+            }
         };
     }
 
-    @Override public void destroy() { scheduler.shutdownNow(); }
+    /** ADR-0024 step 3d: reloads the working-set snapshot, if enabled and usable, before the real indexers start. */
+    private void restoreWorkingSet(boolean demo) {
+        if (snapshots == null) return;
+        if (demo) { log.warn("working-set snapshot ignored in demo mode (simulated chains are not persisted)"); return; }
+        if (props.getPersistence().isIntelligenceJournal()) {
+            log.warn("working-set snapshot disabled: the intelligence journal is on (the two would restore the same state twice)");
+            return;
+        }
+        snapshotsActive = true;
+        snapshots.restoreAtStartup();
+        Duration every = props.getPersistence().getSnapshotInterval();
+        if (every.isPositive()) {
+            scheduler.scheduleWithFixedDelay(guard("working-set snapshot", snapshots::writePeriodic), every.toMillis(), every.toMillis(),
+                    TimeUnit.MILLISECONDS);
+            log.info("working-set snapshot every {} (after a crash, at most that much indexing is done again)", every);
+        } else {
+            log.warn("periodic working-set snapshots disabled: after a crash the last snapshot is reloaded and everything indexed "
+                    + "since it is indexed again (or skipped beyond max-resume-gap)");
+        }
+    }
+
+    /**
+     * Orderly shutdown. With the working-set snapshot active: no new poll is scheduled, polls in progress get
+     * {@code snapshot-shutdown-timeout} to finish (then they are interrupted), and the snapshot is written while nothing
+     * is indexed. Without it: everything stops at once, as before.
+     */
+    @Override public void destroy() {
+        if (!snapshotsActive) { scheduler.shutdownNow(); return; }
+        scheduler.shutdown(); // periodic tasks are cancelled, running ones finish
+        try {
+            Duration wait = props.getPersistence().getSnapshotShutdownTimeout();
+            if (!scheduler.awaitTermination(wait.toMillis(), TimeUnit.MILLISECONDS)) {
+                log.warn("shutdown: background tasks still running after {}; interrupting them before the snapshot", wait);
+                scheduler.shutdownNow();
+                scheduler.awaitTermination(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        snapshots.writeAtShutdown(); // under the ingestion lock: an interrupted poll cannot be half-way through an event
+        scheduler.shutdownNow();
+    }
 }

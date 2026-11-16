@@ -6,6 +6,9 @@ import java.util.List;
 /** Storage of value flows indexed by address. Implementations must be idempotent on {@link ValueFlow#eventId()}. */
 public interface FlowStore {
 
+    /** Every stored flow, for the working-set snapshot (ADR-0024 step 3d); any order. Unsupported by default. */
+    default java.util.List<ValueFlow> all() { throw new UnsupportedOperationException("snapshot of " + getClass().getSimpleName()); }
+
     /** @return true if stored, false if a flow with the same eventId already exists (duplicate ignored). */
     boolean add(ValueFlow flow);
 
@@ -16,6 +19,28 @@ public interface FlowStore {
 
     /** Flows received by the address, ordered by timestamp ascending. */
     List<ValueFlow> incoming(Address address);
+
+    /**
+     * Removes the flows older than the cutoff of their network ({@code null}: none removed on that network) that involve no
+     * kept address; returns how many were removed. Bounds the in-memory working set (default: nothing removed).
+     */
+    /**
+     * Removes the oldest flows (by event time) not touching a kept address until at most {@code max} evictable ones remain
+     * (ADR-0024 step 3b: a hard bound whatever the volume); returns how many were removed.
+     */
+    /**
+     * Removes one flow by event id (chain reorganisation: its block left the canonical chain). Idempotent: an unknown or
+     * already removed id returns empty. The id is forgotten, so the same transfer re-included later is a new flow.
+     */
+    default java.util.Optional<ValueFlow> remove(String eventId) { return java.util.Optional.empty(); }
+
+    default int evictOldest(int max, java.util.function.Predicate<Address> keep) { return 0; }
+
+    default int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
+                            java.util.function.Predicate<Address> keep) { return 0; }
+
+    /** Flows held, or -1 when unknown. */
+    default int size() { return -1; }
 
     /** All flows involving the address (both directions), ordered by timestamp ascending. */
     default List<ValueFlow> involving(Address address) {

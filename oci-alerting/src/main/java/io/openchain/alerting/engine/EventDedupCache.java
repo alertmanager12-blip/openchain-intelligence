@@ -43,6 +43,8 @@ final class EventDedupCache {
         map.put(id, new Stamp(s, clock.instant()));
     }
 
+    void remove(String id) { map.remove(id); }
+
     void purgeExpired() {
         Instant limit = clock.instant().minus(ttl);
         for (Iterator<Stamp> it = map.values().iterator(); it.hasNext(); ) {

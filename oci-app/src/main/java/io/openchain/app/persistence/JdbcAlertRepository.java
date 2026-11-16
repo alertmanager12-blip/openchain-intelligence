@@ -31,7 +31,8 @@ public final class JdbcAlertRepository implements AlertRepository {
     private static final String COLUMNS = "id, rule_id, rule_version, title, severity, priority, status, evidence_level, network, "
             + "group_key, dedup_key, matched_event_ids, evidence, first_seen, last_seen, occurrence_count, assignee, created_at, "
             + "updated_at, escalation_level, last_escalated_at, origin_chain, hop, row_version, subject_event_id, subject_event_type, "
-            + "subject_address, subject_counterparty, subject_tx_hash, subject_block, subject_time, subject_fields";
+            + "subject_address, subject_counterparty, subject_tx_hash, subject_block, subject_time, subject_fields, "
+            + "evidence_state, withdrawn_event_ids";
     private static final String TERMINAL = "('" + AlertStatus.RESOLVED.name() + "','" + AlertStatus.FALSE_POSITIVE.name() + "')";
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -53,7 +54,8 @@ public final class JdbcAlertRepository implements AlertRepository {
                         + ":priority, :status, :evidenceLevel, :network, :groupKey, :dedupKey, cast(:eventIds as jsonb), "
                         + "cast(:evidence as jsonb), :firstSeen, :lastSeen, :occurrences, :assignee, :createdAt, :updatedAt, "
                         + ":escalationLevel, :lastEscalatedAt, cast(:originChain as jsonb), :hop, :next, :sEventId, :sEventType, "
-                        + ":sAddress, :sCounterparty, :sTxHash, :sBlock, :sTime, cast(:sFields as jsonb)) on conflict (id) do nothing", p);
+                        + ":sAddress, :sCounterparty, :sTxHash, :sBlock, :sTime, cast(:sFields as jsonb), :evidenceState, "
+                        + "cast(:withdrawn as jsonb)) on conflict (id) do nothing", p);
             } else {
                 rows = jdbc.update("update alerts set rule_version = :ruleVersion, title = :title, severity = :severity, "
                         + "priority = :priority, status = :status, evidence_level = :evidenceLevel, network = :network, "
@@ -64,7 +66,8 @@ public final class JdbcAlertRepository implements AlertRepository {
                         + "origin_chain = cast(:originChain as jsonb), hop = :hop, row_version = :next, "
                         + "subject_event_id = :sEventId, subject_event_type = :sEventType, subject_address = :sAddress, "
                         + "subject_counterparty = :sCounterparty, subject_tx_hash = :sTxHash, subject_block = :sBlock, "
-                        + "subject_time = :sTime, subject_fields = cast(:sFields as jsonb) "
+                        + "subject_time = :sTime, subject_fields = cast(:sFields as jsonb), evidence_state = :evidenceState, "
+                        + "withdrawn_event_ids = cast(:withdrawn as jsonb) "
                         + "where id = :id and row_version = :expected", p);
             }
             if (rows != 1) throw new ConcurrentAlertModificationException(a.id(), a.version());
@@ -120,6 +123,36 @@ public final class JdbcAlertRepository implements AlertRepository {
     }
 
     @Override public List<Alert> findAll() { return query("order by created_at, id", Map.of()); }
+
+    @Override public List<Alert> findPage(AlertQuery q, int offset, int limit) {
+        StringBuilder where = new StringBuilder("where true");
+        Map<String, Object> p = new HashMap<>();
+        if (q.statuses() != null) {
+            if (q.statuses().isEmpty()) return List.of();
+            where.append(" and status in (:statuses)");
+            p.put("statuses", q.statuses().stream().map(Enum::name).toList());
+        }
+        if (q.severity() != null) { where.append(" and severity = :severity"); p.put("severity", q.severity().name()); }
+        if (q.ruleId() != null) { where.append(" and rule_id = :ruleId"); p.put("ruleId", q.ruleId()); }
+        if (q.network() != null) { where.append(" and network = :network"); p.put("network", q.network().id()); }
+        if (q.from() != null) { where.append(" and created_at >= :from"); p.put("from", Sql.ts(q.from())); }
+        if (q.to() != null) { where.append(" and created_at <= :to"); p.put("to", Sql.ts(q.to())); }
+        if (q.subjectAddress() != null) { where.append(" and lower(subject_address) = lower(:address)"); p.put("address", q.subjectAddress()); }
+        p.put("limit", Math.max(0, limit));
+        p.put("offset", Math.max(0, offset));
+        return query(where + " order by created_at desc, id desc limit :limit offset :offset", p);
+    }
+
+    @Override public List<StatusSeverityCount> countByStatusAndSeverity() {
+        return jdbc.query("select status, severity, count(*) n from alerts group by status, severity order by status, severity", Map.of(),
+                (rs, i) -> new StatusSeverityCount(AlertStatus.valueOf(rs.getString("status")),
+                        io.openchain.core.detection.Severity.valueOf(rs.getString("severity")), rs.getLong("n")));
+    }
+
+    @Override public List<java.time.Instant> createdAtSince(java.time.Instant since) {
+        return jdbc.query("select created_at from alerts where created_at >= :since", Map.of("since", Sql.ts(since)),
+                (rs, i) -> Sql.instant(rs, "created_at"));
+    }
 
     @Override public List<io.openchain.alerting.alert.RuleAlertStats> statsByRule(java.time.Instant since) {
         return jdbc.query("select rule_id, count(*) total, "
@@ -184,6 +217,8 @@ public final class JdbcAlertRepository implements AlertRepository {
                 .escalationLevel(rs.getInt("escalation_level")).lastEscalatedAt(Sql.instant(rs, "last_escalated_at"))
                 .originChain(TypedJson.readStrings(rs.getString("origin_chain"))).hop(rs.getInt("hop"))
                 .version(rs.getLong("row_version"))
+                .evidenceState(Alert.EvidenceState.valueOf(rs.getString("evidence_state")))
+                .withdrawnEventIds(TypedJson.readStrings(rs.getString("withdrawn_event_ids")))
                 .subject(subject(rs));
     }
 
@@ -212,7 +247,8 @@ public final class JdbcAlertRepository implements AlertRepository {
                 .addValue("occurrences", a.occurrenceCount()).addValue("assignee", a.assignee())
                 .addValue("createdAt", Sql.ts(a.createdAt())).addValue("updatedAt", Sql.ts(a.updatedAt()))
                 .addValue("escalationLevel", a.escalationLevel()).addValue("lastEscalatedAt", Sql.ts(a.lastEscalatedAt()))
-                .addValue("originChain", TypedJson.write(a.originChain())).addValue("hop", a.hop());
+                .addValue("originChain", TypedJson.write(a.originChain())).addValue("hop", a.hop())
+                .addValue("evidenceState", a.evidenceState().name()).addValue("withdrawn", TypedJson.write(a.withdrawnEventIds()));
         AlertSubject s = a.subject();
         p.addValue("sEventId", s == null ? null : s.eventId()).addValue("sEventType", s == null ? null : s.eventType())
                 .addValue("sAddress", s == null ? null : s.address()).addValue("sCounterparty", s == null ? null : s.counterparty())

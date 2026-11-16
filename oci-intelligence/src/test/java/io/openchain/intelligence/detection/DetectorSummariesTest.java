@@ -37,7 +37,7 @@ class DetectorSummariesTest {
         for (int i = 0; i < 12; i++) fx.flow(src, me, String.valueOf(100 + i), min(i));
         Signal s = one(new UnusualAmountDetector().detect(fx.ctx(me, fx.flow(src, me, "5000", min(100)))));
         assertThat(s.title()).isEqualTo("Unusual amount");
-        assertThat(s.summary()).isEqualTo("Received 5,000 USDT in one transfer, far above its usual amount (median 105.5 USDT over 12 earlier transfers).");
+        assertThat(s.summary()).isEqualTo("Received 5,000 USDT in one transfer, far above what it usually receives (median 105.5 USDT over 12 earlier transfers).");
     }
 
     @Test void structuring() {

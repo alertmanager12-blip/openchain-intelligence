@@ -91,6 +91,30 @@ class RuleApiTest extends ApiTestSupport {
                 .andExpect(status().isBadRequest());
     }
 
+    /** Code review (minor, 2026-11-13): creating and changing a rule is audited, like enabling and deleting it. */
+    @Test
+    void ruleCreationAndUpdateAreAudited() throws Exception {
+        var audit = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("oci.audit");
+        var captured = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        captured.start();
+        audit.addAppender(captured);
+        String yaml = VALID.replace("test-big-transfer", "test-audited");
+        try {
+            mvc.perform(post("/api/v1/rules").header("X-API-Key", ANALYST).contentType(MediaType.APPLICATION_JSON).content(json("yaml", yaml)))
+                    .andExpect(status().isCreated());
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/rules/test-audited")
+                    .header("X-API-Key", ANALYST).contentType(MediaType.APPLICATION_JSON).content(json("yaml", yaml))).andExpect(status().isOk());
+            java.util.List<String> lines = captured.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage).toList();
+            org.assertj.core.api.Assertions.assertThat(lines).anySatisfy(l -> org.assertj.core.api.Assertions.assertThat(l)
+                    .startsWith("rule.create id=test-audited version=1").contains("actor=apikey:"));
+            org.assertj.core.api.Assertions.assertThat(lines).anySatisfy(l -> org.assertj.core.api.Assertions.assertThat(l)
+                    .startsWith("rule.update id=test-audited version=2").contains("actor=apikey:"));
+        } finally {
+            audit.detachAppender(captured);
+            mvc.perform(delete("/api/v1/rules/test-audited").header("X-API-Key", ADMIN));
+        }
+    }
+
     @Test
     void createIsDisabledThenConflictEnableTestExportDelete() throws Exception {
         String yaml = VALID.replace("test-big-transfer", "test-lifecycle");

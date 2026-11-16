@@ -5,12 +5,29 @@ export function formatUnits(raw: string | null | undefined, decimals: number, ma
   const digits = (neg ? raw.slice(1) : raw).replace(/^0+(?=\d)/, '');
   const padded = digits.padStart(decimals + 1, '0');
   const int = decimals ? padded.slice(0, -decimals) : padded;
-  let frac = decimals ? padded.slice(-decimals) : '';
-  frac = frac.slice(0, maxFraction).replace(/0+$/, '');
+  const frac = decimals ? padded.slice(-decimals) : '';
+  const shown = frac.slice(0, maxFraction).replace(/0+$/, '');
+  // A non-zero amount below the displayed precision is never shown as "0": a dust transfer (address poisoning) must
+  // stay visible. "<0.01" says "more than nothing, less than the smallest unit shown".
+  if (/^0+$/.test(int) && !shown && /[1-9]/.test(frac)) {
+    return `${neg ? '-' : ''}<${maxFraction > 0 ? '0.' + '0'.repeat(maxFraction - 1) + '1' : '1'}`;
+  }
   const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${neg ? '-' : ''}${grouped}${frac ? '.' + frac : ''}`;
+  const zero = /^0+$/.test(int) && !shown;
+  return `${neg && !zero ? '-' : ''}${grouped}${shown ? '.' + shown : ''}`;
 }
 
+
+/**
+ * Indexing lag of a network in blocks, or null when it is unknown: the server says so (null), or the provider is
+ * unhealthy / has no head. Unknown is shown as such, never as 0.
+ */
+export function indexerLag(x: { indexerLag?: number | null; headBlock: number; finalizedBlock: number; healthy?: boolean }): number | null {
+  if (x.indexerLag === null) return null;
+  if (x.indexerLag !== undefined) return x.indexerLag;
+  if (x.healthy === false || !x.headBlock) return null;
+  return x.headBlock - x.finalizedBlock; // older payloads without indexerLag
+}
 
 export function shortHash(v: string | null | undefined, head = 6, tail = 4): string {
   if (!v) return '—';

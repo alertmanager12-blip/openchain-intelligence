@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRe
 import cytoscape, { Core, ElementDefinition, EventObject, NodeSingular } from 'cytoscape';
 import { GraphNode } from '../../core/models';
 import { formatUnits, shortHash } from '../../shared/format';
-import { GraphCommand, GraphSelection, KeyedEdge, RISK_VAR, edgeWidths } from './graph-model';
+import { GraphCommand, GraphSelection, KeyedEdge, RISK_VAR, edgeWidths, graphDiff } from './graph-model';
 
 /**
  * Cytoscape canvas. Rendered inside a @defer block by the page, so cytoscape (~400 kB) loads only when a graph
@@ -117,13 +117,16 @@ export class GraphCanvas {
       return;
     }
     const existing = new Set(this.cy.elements().map((e) => e.id()));
-    const added = els.filter((e) => !existing.has(e.data.id!));
+    // the drawn graph must match the current data exactly: a narrower token, date range or depth removes elements
+    const { add: added, removeIds } = graphDiff(existing, els);
+    if (removeIds.length) {
+      const gone = new Set(removeIds);
+      this.cy.elements().filter((e) => gone.has(e.id())).remove();
+    }
     // edge widths are relative to the whole graph: refresh them on existing edges too
     for (const e of els) if (existing.has(e.data.id!) && e.data['w'] !== undefined) this.cy.getElementById(e.data.id!).data('w', e.data['w']);
-    if (added.length) {
-      this.cy.add(added);
-      this.layout();
-    }
+    if (added.length) this.cy.add(added);
+    if (added.length || removeIds.length) this.layout();
   }
 
   private layout(): void {

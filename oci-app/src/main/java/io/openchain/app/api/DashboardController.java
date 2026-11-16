@@ -75,7 +75,10 @@ public class DashboardController {
             riskDist.merge(lvl, 1L, Long::sum);
         }
 
-        List<Alert> all = alerts.repository().findAll();
+        // aggregates computed by the repository: the dashboard must not load every alert (code review I24)
+        var alertCounts = alerts.repository().countByStatusAndSeverity();
+        long alertTotal = alertCounts.stream().mapToLong(c -> c.count()).sum();
+        long alertOpen = alertCounts.stream().filter(c -> AlertFacade.apiStatus(c.status()).equals("OPEN")).mapToLong(c -> c.count()).sum();
         List<Signal> signals = chains.recentSignals();
         long signals24h = signals.stream().filter(s -> s.detectedAt() != null && !s.detectedAt().isBefore(now.minus(Duration.ofHours(24)))).count();
 
@@ -86,8 +89,8 @@ public class DashboardController {
         totals.put("eventsRetracted", chains.eventsRetracted());
         totals.put("rules", rules.list().size());
         totals.put("rulesEnabled", rules.list().stream().filter(RuleRegistry.StoredRule::enabled).count());
-        totals.put("alerts", canAlerts ? all.size() : null);
-        totals.put("openAlerts", canAlerts ? all.stream().filter(a -> AlertFacade.apiStatus(a.status()).equals("OPEN")).count() : null);
+        totals.put("alerts", canAlerts ? alertTotal : null);
+        totals.put("openAlerts", canAlerts ? alertOpen : null);
         totals.put("signals24h", canRisk ? signals24h : null);
 
         // hourly buckets over the last 24 h: indexed events (event time), alerts (creation), signals (detection)
@@ -97,7 +100,7 @@ public class DashboardController {
             if (e.type() == ChainEvent.EventType.DETECTION_SIGNAL) continue;
             bump(ev, since, e.eventTime());
         }
-        for (Alert a : all) bump(al, since, a.createdAt());
+        for (Instant created : alerts.repository().createdAtSince(since)) bump(al, since, created);
         for (Signal s : signals) bump(sg, since, s.detectedAt());
         for (int i = 0; i < BUCKETS; i++) {
             Map<String, Object> b = new LinkedHashMap<>();
@@ -123,18 +126,18 @@ public class DashboardController {
                 bySeverity.put(s.name(), 0L);
                 openBySeverity.put(s.name(), 0L);
             }
-            for (Alert a : all) {
-                String st = AlertFacade.apiStatus(a.status());
-                byStatus.merge(st, 1L, Long::sum);
-                bySeverity.merge(a.severity().name(), 1L, Long::sum);
-                if (st.equals("OPEN")) openBySeverity.merge(a.severity().name(), 1L, Long::sum);
+            for (var c : alertCounts) {
+                String st = AlertFacade.apiStatus(c.status());
+                byStatus.merge(st, c.count(), Long::sum);
+                bySeverity.merge(c.severity().name(), c.count(), Long::sum);
+                if (st.equals("OPEN")) openBySeverity.merge(c.severity().name(), c.count(), Long::sum);
             }
             Map<String, Object> alertSection = new LinkedHashMap<>();
             alertSection.put("byStatus", byStatus);
             alertSection.put("bySeverity", bySeverity);
             alertSection.put("openBySeverity", openBySeverity);
-            alertSection.put("recent", all.stream().sorted(Comparator.comparing(Alert::createdAt).reversed()).limit(5)
-                    .map(alertFacade::dto).toList());
+            alertSection.put("recent", alerts.repository().findPage(io.openchain.alerting.alert.AlertRepository.AlertQuery.any(), 0, 5)
+                    .stream().map(alertFacade::dto).toList());
             out.put("alerts", alertSection);
         } else {
             out.put("alerts", null);

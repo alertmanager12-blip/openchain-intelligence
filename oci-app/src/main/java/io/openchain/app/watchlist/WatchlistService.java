@@ -44,13 +44,20 @@ public class WatchlistService implements io.openchain.app.chain.ChainIngestionSe
                 a.network().id(), a.value(), name == null || name.isBlank() ? null : name.strip(), createdBy, clock.instant());
         if (!repository.insert(e)) return Optional.empty();
         index.add(a);
+        // audited: the watchlist decides which wallets the behavioural rules look at (code review I35)
+        io.openchain.app.security.ApiKeyService.AUDIT.info("watchlist.add id={} network={} address={} name={} watched={} actor={}",
+                e.id(), e.network(), e.address(), e.name(), index.size(), createdBy);
         return Optional.of(e);
     }
 
-    public synchronized boolean remove(String id) {
+    public boolean remove(String id) { return remove(id, null); }
+
+    public synchronized boolean remove(String id, String actor) {
         Optional<WatchlistRepository.Entry> e = repository.findAll().stream().filter(x -> x.id().equals(id)).findFirst();
         if (e.isEmpty() || !repository.delete(id)) return false;
         index.remove(address(e.get()));
+        io.openchain.app.security.ApiKeyService.AUDIT.info("watchlist.remove id={} network={} address={} watched={} actor={}",
+                id, e.get().network(), e.get().address(), index.size(), actor);
         return true;
     }
 }

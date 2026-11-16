@@ -39,8 +39,22 @@ public final class HttpJsonTransport {
     public HttpJsonTransport(List<RpcEndpoint> endpoints, Clock clock, Sleeper sleeper) {
         if (endpoints == null || endpoints.isEmpty()) throw new IllegalArgumentException("at least one endpoint is required");
         List<Lane> l = new ArrayList<>();
-        for (RpcEndpoint e : endpoints) l.add(new Lane(e, clock, sleeper));
+        for (RpcEndpoint e : endpoints) l.add(new Lane(e, clock, sleeper, () -> maxResponseBytes));
         this.lanes = List.copyOf(l);
+    }
+
+    /** Default cap on a response body: far above a full block with receipts, far below what would endanger the heap. */
+    public static final int DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+    private volatile int maxResponseBytes = DEFAULT_MAX_RESPONSE_BYTES;
+
+    /**
+     * Largest response body accepted, in bytes. A larger one is refused before it is parsed (permanent error): an
+     * oversized or hostile answer must not be turned into hundreds of megabytes of strings and JSON nodes.
+     */
+    public HttpJsonTransport maxResponseBytes(int bytes) {
+        if (bytes < 1) throw new IllegalArgumentException("maxResponseBytes must be positive");
+        this.maxResponseBytes = bytes;
+        return this;
     }
 
     /** The endpoint currently preferred (the primary unless a failover happened). */
@@ -51,10 +65,21 @@ public final class HttpJsonTransport {
     /** Number of configured endpoints (1 = no failover). */
     public int endpointCount() { return lanes.size(); }
 
-    public JsonNode post(String path, JsonNode body) {
+    public JsonNode post(String path, JsonNode body) { return post(path, body, null); }
+
+    /**
+     * @param transientError inspects a parsed response and returns a retryable exception when the body itself reports a
+     *                       transient failure (a JSON-RPC rate limit sent with HTTP 200), else null. It runs inside the
+     *                       attempt, so the retry policy, the circuit breaker and the failover see the failure.
+     */
+    public JsonNode post(String path, JsonNode body, Function<JsonNode, ProviderException> transientError) {
         String json = Json.MAPPER.writeValueAsString(body);
-        return call(lane -> lane.retry.execute(() -> lane.breaker.execute(() -> lane.attempt(path,
-                HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8), "POST"))));
+        return call(lane -> lane.retry.execute(() -> lane.breaker.execute(() -> {
+            JsonNode resp = lane.attempt(path, HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8), "POST");
+            ProviderException transientFailure = transientError == null ? null : transientError.apply(resp);
+            if (transientFailure != null && transientFailure.retryable()) throw transientFailure;
+            return resp;
+        })));
     }
 
     public JsonNode get(String path) {
@@ -86,9 +111,11 @@ public final class HttpJsonTransport {
         final RetryPolicy retry;
         final CircuitBreaker breaker;
         final TokenBucketRateLimiter limiter; // nullable
+        final java.util.function.IntSupplier maxResponseBytes;
 
-        Lane(RpcEndpoint endpoint, Clock clock, Sleeper sleeper) {
+        Lane(RpcEndpoint endpoint, Clock clock, Sleeper sleeper, java.util.function.IntSupplier maxResponseBytes) {
             this.endpoint = endpoint;
+            this.maxResponseBytes = maxResponseBytes;
             ResilienceConfig r = endpoint.resilience();
             this.client = HttpClient.newBuilder().connectTimeout(endpoint.connectTimeout())
                     .followRedirects(HttpClient.Redirect.NEVER).build();
@@ -104,9 +131,18 @@ public final class HttpJsonTransport {
                     .header("Accept", "application/json").method(method, body);
             if ("POST".equals(method)) b.header("Content-Type", "application/json");
             endpoint.headers().forEach(b::header);
-            HttpResponse<String> resp;
+            HttpResponse<java.io.InputStream> resp;
+            String text;
             try {
-                resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                resp = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+                int max = maxResponseBytes.getAsInt();
+                try (java.io.InputStream in = resp.body()) {
+                    byte[] bytes = in.readNBytes(max == Integer.MAX_VALUE ? max : max + 1);
+                    if (bytes.length > max) {
+                        throw new ProviderException(endpoint.name() + ": response larger than " + max + " bytes, refused", false);
+                    }
+                    text = new String(bytes, StandardCharsets.UTF_8);
+                }
             } catch (HttpTimeoutException e) {
                 throw new ProviderException(endpoint.name() + ": timeout", true, e);
             } catch (IOException e) {
@@ -119,16 +155,22 @@ public final class HttpJsonTransport {
             if (status == 429) {
                 throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 429 rate limited", retryAfter(resp));
             }
+            if (status == 403) {
+                // TronGrid answers abnormally frequent polling with 403 and a temporary block, to be retried with backoff
+                // (TRON Developer Hub, "Rate limits"). Treated as transient so that the breaker counts it and polling slows
+                // down; a 403 that lasts (key refused) opens the circuit and fails over instead of hammering the endpoint.
+                throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 403 forbidden or temporarily blocked", retryAfter(resp));
+            }
             if (status >= 500) throw new ProviderException(endpoint.name() + ": HTTP " + status, true);
             if (status >= 400) {
                 // some JSON-RPC gateways answer a JSON-RPC error with HTTP 400 (e.g. dRPC "ranges over 10000 blocks are not
                 // supported"): hand that error to JsonRpcClient so that it is classified (range too large, unsupported method...)
-                JsonNode rpcError = "POST".equals(method) ? jsonRpcError(resp.body()) : null;
+                JsonNode rpcError = "POST".equals(method) ? jsonRpcError(text) : null;
                 if (rpcError != null) return rpcError;
                 throw new ProviderException(endpoint.name() + ": HTTP " + status, false);
             }
             try {
-                return Json.MAPPER.readTree(resp.body() == null || resp.body().isBlank() ? "null" : resp.body());
+                return Json.MAPPER.readTree(text.isBlank() ? "null" : text);
             } catch (JacksonException e) {
                 throw new ProviderException(endpoint.name() + ": malformed JSON response", false, e);
             }

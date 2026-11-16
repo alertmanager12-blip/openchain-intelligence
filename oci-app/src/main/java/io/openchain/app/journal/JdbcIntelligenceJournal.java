@@ -36,10 +36,13 @@ public final class JdbcIntelligenceJournal implements IntelligenceJournal, AutoC
     static final ObjectMapper JSON = JsonMapper.builder().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build();
     private static final int BATCH = 1_000;
 
-    private sealed interface Item permits FlowItem, SignalItem, ScoreItem {}
+    private sealed interface Item permits FlowItem, SignalItem, ScoreItem, ForgetFlowItem, ForgetSignalItem {}
     private record FlowItem(ValueFlow f) implements Item {}
     private record SignalItem(Signal s) implements Item {}
     private record ScoreItem(RiskScore s) implements Item {}
+    /** Deletions travel through the same queue as the writes, so a retraction never overtakes the insert it undoes. */
+    private record ForgetFlowItem(String eventId) implements Item {}
+    private record ForgetSignalItem(String id) implements Item {}
 
     private final NamedParameterJdbcTemplate jdbc;
     private final BlockingQueue<Item> queue;
@@ -57,6 +60,8 @@ public final class JdbcIntelligenceJournal implements IntelligenceJournal, AutoC
     @Override public void flow(ValueFlow f) { offer(new FlowItem(f)); }
     @Override public void signal(Signal s) { offer(new SignalItem(s)); }
     @Override public void score(RiskScore s) { offer(new ScoreItem(s)); }
+    @Override public void forgetFlow(String eventId) { offer(new ForgetFlowItem(eventId)); }
+    @Override public void forgetSignal(String signalId) { offer(new ForgetSignalItem(signalId)); }
 
     public long written() { return written.get(); }
     public long dropped() { return dropped.get(); }
@@ -99,6 +104,15 @@ public final class JdbcIntelligenceJournal implements IntelligenceJournal, AutoC
         List<MapSqlParameterSource> flows = new ArrayList<>(), signals = new ArrayList<>(), scores = new ArrayList<>();
         for (Item i : batch) {
             switch (i) {
+                // a deletion first writes what was queued before it, so the order of the queue is the order in the table
+                case ForgetFlowItem(String id) -> {
+                    insert(flows, signals, scores);
+                    jdbc.update("delete from value_flows where event_id = :id", Map.of("id", id));
+                }
+                case ForgetSignalItem(String id) -> {
+                    insert(flows, signals, scores);
+                    jdbc.update("delete from signals where id = :id", Map.of("id", id));
+                }
                 case FlowItem(ValueFlow f) -> flows.add(new MapSqlParameterSource().addValue("id", f.eventId())
                         .addValue("network", f.network().id()).addValue("tx", f.txHash()).addValue("ts", Sql.ts(f.timestamp()))
                         .addValue("from", f.from().value()).addValue("to", f.to().value()).addValue("contract", f.token().contract())
@@ -112,6 +126,10 @@ public final class JdbcIntelligenceJournal implements IntelligenceJournal, AutoC
                         .addValue("at", Sql.ts(s.computedAt())).addValue("payload", JSON.writeValueAsString(s)));
             }
         }
+        insert(flows, signals, scores);
+    }
+
+    private void insert(List<MapSqlParameterSource> flows, List<MapSqlParameterSource> signals, List<MapSqlParameterSource> scores) {
         if (!flows.isEmpty()) jdbc.batchUpdate("insert into value_flows (event_id, network, tx_hash, ts, from_address, to_address, "
                 + "token_contract, token_symbol, token_decimals, raw_amount) values (:id, :network, :tx, :ts, :from, :to, :contract, "
                 + ":symbol, :decimals, :raw) on conflict (event_id) do nothing", flows.toArray(MapSqlParameterSource[]::new));
@@ -119,6 +137,7 @@ public final class JdbcIntelligenceJournal implements IntelligenceJournal, AutoC
                 + "(:id, :network, :address, :at, cast(:payload as jsonb)) on conflict (id) do nothing", signals.toArray(MapSqlParameterSource[]::new));
         if (!scores.isEmpty()) jdbc.batchUpdate("insert into risk_scores (network, address, computed_at, payload) values "
                 + "(:network, :address, :at, cast(:payload as jsonb))", scores.toArray(MapSqlParameterSource[]::new));
+        flows.clear(); signals.clear(); scores.clear();
     }
 
     // ---- reload (start-up) and retention ----------------------------------------------------------------------

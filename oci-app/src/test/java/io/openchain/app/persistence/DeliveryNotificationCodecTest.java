@@ -32,6 +32,21 @@ class DeliveryNotificationCodecTest {
         assertThat(back.subject().fields().get("transaction.amount")).isEqualTo(new BigDecimal("11.40"));
     }
 
+    /** The notification event (alert.opened / alert.retracted) is part of the immutable outbox snapshot. */
+    @Test void eventRoundTripsAndOldSnapshotsReadAsOpened() {
+        Notification opened = n(null);
+        assertThat(JdbcDeliveryStore.decode(JdbcDeliveryStore.encode(opened)).event()).isEqualTo(Notification.EVENT_OPENED);
+        Notification retracted = new Notification(opened.deliveryId(), opened.actionType(), opened.connectorId(), opened.alertId(),
+                opened.ruleId(), opened.ruleVersion(), opened.title(), opened.severity(), opened.priority(), opened.evidenceLevel(),
+                opened.network(), opened.groupKey(), opened.dedupKey(), opened.occurrenceCount(), opened.firstSeen(), opened.lastSeen(),
+                opened.matchedEventIds(), opened.evidence(), opened.params(), opened.originChain(), opened.hop(), opened.createdAt(),
+                null, Notification.EVENT_RETRACTED);
+        assertThat(JdbcDeliveryStore.decode(JdbcDeliveryStore.encode(retracted)).event()).isEqualTo(Notification.EVENT_RETRACTED);
+        String legacy = JdbcDeliveryStore.encode(opened).replace(",\"event\":\"alert.opened\"", "");
+        assertThat(legacy).doesNotContain("\"event\"");
+        assertThat(JdbcDeliveryStore.decode(legacy).event()).isEqualTo(Notification.EVENT_OPENED);
+    }
+
     @Test void deliveriesQueuedBeforeTheSubjectWasCarriedStillDecode() {
         String legacy = JdbcDeliveryStore.encode(n(null));
         assertThat(legacy).doesNotContain("subject");

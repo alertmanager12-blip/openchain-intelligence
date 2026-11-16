@@ -33,4 +33,27 @@ class WatchlistApiTest extends ApiTestSupport {
         }
         mvc.perform(delete("/api/v1/watchlist/" + id).header("X-API-Key", ADMIN)).andExpect(status().isNotFound());
     }
+
+    /** Code review I35: the watchlist changes what the behavioural rules look at, so adding and removing are audited. */
+    @Test void watchlistChangesAreAudited() throws Exception {
+        var audit = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger("oci.audit");
+        var captured = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        captured.start();
+        audit.addAppender(captured);
+        try {
+            String addr = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj";
+            String created = mvc.perform(post("/api/v1/watchlist").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"network\":\"tron\",\"address\":\"" + addr + "\",\"name\":\"Treasury\"}"))
+                    .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+            String id = JsonPath.read(created, "$.id");
+            mvc.perform(delete("/api/v1/watchlist/" + id).header("X-API-Key", ADMIN)).andExpect(status().isNoContent());
+            java.util.List<String> lines = captured.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage).toList();
+            org.assertj.core.api.Assertions.assertThat(lines).anySatisfy(l -> org.assertj.core.api.Assertions.assertThat(l)
+                    .startsWith("watchlist.add id=" + id).contains("network=tron", "address=" + addr, "actor=apikey:"));
+            org.assertj.core.api.Assertions.assertThat(lines).anySatisfy(l -> org.assertj.core.api.Assertions.assertThat(l)
+                    .startsWith("watchlist.remove id=" + id).contains("address=" + addr, "actor=apikey:"));
+        } finally {
+            audit.detachAppender(captured);
+        }
+    }
 }

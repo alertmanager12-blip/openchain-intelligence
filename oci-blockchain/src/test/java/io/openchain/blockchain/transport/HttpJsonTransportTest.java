@@ -41,6 +41,36 @@ class HttpJsonTransportTest {
         assertThat(sleeper.sleeps).containsExactly(Duration.ofSeconds(2));
     }
 
+    /**
+     * Review item I22: TronGrid answers abnormally frequent polling with HTTP 403 and a temporary block (TRON Developer Hub,
+     * "Rate limits", checked 2026-11-16: "Rate-limited requests usually return 429 or 403 and should be retried with
+     * backoff"). A 403 is therefore transient: retried with backoff (Retry-After honoured), counted by the circuit breaker
+     * so that polling slows down instead of prolonging the block, and a reason to fail over.
+     */
+    @Test void a403IsATemporaryBlockRetriedWithBackoff() {
+        AtomicInteger n = new AtomicInteger();
+        server.route("/x", r -> n.incrementAndGet() == 1 ? new Response(403, "{}", Map.of("Retry-After", "3")) : Response.ok("{}"));
+        transport(fastResilience(3, 10)).get("/x");
+        assertThat(n).hasValue(2);
+        assertThat(sleeper.sleeps).containsExactly(Duration.ofSeconds(3));
+    }
+
+    @Test void repeated403sOpenTheCircuitAndFailOver() throws Exception {
+        server.route("/x", r -> Response.status(403));
+        HttpJsonTransport t = transport(fastResilience(1, 3));
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> t.get("/x")).isInstanceOf(ProviderException.class).hasMessageContaining("HTTP 403")
+                    .satisfies(e -> assertThat(((ProviderException) e).retryable()).isTrue());
+        }
+        assertThat(t.circuitState()).isEqualTo(CircuitBreaker.State.OPEN);
+        try (StubHttpServer backup = new StubHttpServer()) {
+            backup.route("/x", r -> Response.ok("{\"v\":2}"));
+            HttpJsonTransport two = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), fastResilience(1, 10)),
+                    endpoint("backup", backup.url(), fastResilience(1, 10))), Clock.systemUTC(), sleeper);
+            assertThat(two.get("/x").path("v").asInt()).isEqualTo(2);
+        }
+    }
+
     @Test void doesNotRetryClientErrors() {
         server.route("/x", r -> Response.status(400));
         assertThatThrownBy(() -> transport(fastResilience(4, 10)).get("/x"))
@@ -76,6 +106,52 @@ class HttpJsonTransportTest {
             assertThat(server.hits).hasValue(2); // the healthy endpoint is now preferred
             assertThat(backup.hits).hasValue(2);
         }
+    }
+
+    /**
+     * Code review I19 (2026-11-13): gateways answer a rate limit as a JSON-RPC error inside an HTTP 200 (e.g. -32005
+     * "rate limit exceeded"). It was seen as a success by retry, circuit breaker and failover, and failed every poll.
+     */
+    @Test void retryableJsonRpcErrorInAnHttp200IsRetriedThenFailsOver() throws Exception {
+        try (StubHttpServer backup = new StubHttpServer()) {
+            server.route("/", r -> Response.ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32005,\"message\":\"daily request count exceeded, request rate limited\"}}"));
+            backup.route("/", r -> Response.ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":\"0x10\"}"));
+            HttpJsonTransport t = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), fastResilience(2, 10)),
+                    endpoint("backup", backup.url(), fastResilience(2, 10))), Clock.systemUTC(), sleeper);
+            assertThat(new JsonRpcClient(t).call("eth_blockNumber").asString()).isEqualTo("0x10");
+            assertThat(server.hits).hasValue(2);            // retried on the primary first
+            assertThat(backup.hits).hasValue(1);
+            assertThat(t.endpoint().name()).isEqualTo("backup");
+        }
+    }
+
+    /** Without a backup, the caller still gets the classified JSON-RPC error, after the retries. */
+    @Test void retryableJsonRpcErrorSurfacesAsAJsonRpcExceptionAfterRetries() {
+        server.route("/", r -> Response.ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32005,\"message\":\"rate limit exceeded\"}}"));
+        JsonRpcClient rpc = new JsonRpcClient(transport(fastResilience(3, 10)));
+        assertThatThrownBy(() -> rpc.call("eth_blockNumber")).isInstanceOf(JsonRpcException.class)
+                .satisfies(e -> { assertThat(((JsonRpcException) e).code()).isEqualTo(-32005); assertThat(((ProviderException) e).retryable()).isTrue(); });
+        assertThat(server.hits).hasValue(3);
+    }
+
+    /** "Too many results" also uses -32005 (Infura): it asks for a smaller range and must not be retried as is. */
+    @Test void rangeTooLargeWithARetryableCodeIsNotRetried() {
+        server.route("/", r -> Response.ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32005,\"message\":\"query returned more than 10000 results\"}}"));
+        JsonRpcClient rpc = new JsonRpcClient(transport(fastResilience(4, 10)));
+        assertThatThrownBy(() -> rpc.call("eth_getLogs", Json.MAPPER.createObjectNode())).isInstanceOf(JsonRpcException.class)
+                .satisfies(e -> assertThat(((JsonRpcException) e).rangeTooLarge()).isTrue());
+        assertThat(server.hits).hasValue(1);
+    }
+
+    /** Code review I21 (2026-11-13): a response body is bounded before it is parsed. */
+    @Test void anOversizedResponseIsRefusedWithoutRetry() {
+        server.route("/big", r -> Response.ok("{\"v\":\"" + "x".repeat(5_000) + "\"}"));
+        server.route("/small", r -> Response.ok("{\"v\":1}"));
+        HttpJsonTransport t = transport(fastResilience(4, 10)).maxResponseBytes(1_000);
+        assertThatThrownBy(() -> t.get("/big")).isInstanceOf(ProviderException.class).hasMessageContaining("larger than 1000 bytes")
+                .satisfies(e -> assertThat(((ProviderException) e).retryable()).isFalse());
+        assertThat(server.hits).hasValue(1);
+        assertThat(t.get("/small").path("v").asInt()).isEqualTo(1);
     }
 
     @Test void permanentErrorsDoNotFailOver() throws Exception {

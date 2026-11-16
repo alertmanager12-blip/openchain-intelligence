@@ -92,7 +92,8 @@ public final class Dto {
 
     public record NetworkDto(String network, boolean enabled, long headBlock, long finalizedBlock, boolean healthy,
                              String providerId, long latencyMillis, Instant checkedAt, String detail, long lastIndexedBlock,
-                             long indexerLag, boolean simulated,
+                             /** Blocks behind the head; null when the head is unknown (provider failing): not "no lag". */
+                             Long indexerLag, boolean simulated,
                              /** What this instance cannot see or detect on this network (data-source limits). */
                              List<String> limitations) {}
 
@@ -128,7 +129,11 @@ public final class Dto {
                            /** Block of the (latest) triggering event. */
                            Long blockNumber,
                            /** One plain-language line: why the rule fired (technical detail in evidence). */
-                           String evidenceSummary) {}
+                           String evidenceSummary,
+                           /** VALID, PARTIALLY_WITHDRAWN or WITHDRAWN: matched events that left the canonical chain (reorganisation). */
+                           String evidenceState,
+                           /** Matched events withdrawn by a reorganisation and not re-included since. */
+                           List<String> withdrawnEventIds) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,

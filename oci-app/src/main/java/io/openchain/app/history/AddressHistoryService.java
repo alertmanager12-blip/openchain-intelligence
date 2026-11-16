@@ -76,6 +76,8 @@ public final class AddressHistoryService implements AutoCloseable {
     private final Map<Network, Registration> sources = new ConcurrentHashMap<>();
     private final Set<String> queued = ConcurrentHashMap.newKeySet();
     private final Set<Network> simulated = ConcurrentHashMap.newKeySet();
+    /** Last time each address was consulted (wallet, transactions, risk) since start-up: observation only, not persisted. */
+    private final Map<Address, Instant> lastViewed = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
     /**
@@ -131,6 +133,7 @@ public final class AddressHistoryService implements AutoCloseable {
 
     /** Starts (or resumes) the backfill of an address that is not covered yet; no-op when covered, queued or not configured. */
     public void ensure(Address a) {
+        lastViewed.put(a, clock.instant()); // observation only (exempt working-set metrics); no effect on the backfill
         if (!sources.containsKey(a.network())) return;
         String id = AddressHistoryStore.idOf(a.network(), a.value());
         Optional<Progress> p = store.load(id);
@@ -156,6 +159,19 @@ public final class AddressHistoryService implements AutoCloseable {
     }
 
     /** Runs the backfill of {@code id} on the caller's thread (also used by tests). Returns the final progress. */
+    /** Addresses whose history was loaded (any status): their flows are kept in the working set. */
+    /** Every history row, whatever its status (read-only; exempt working-set metrics). */
+    public List<Progress> progressRows() { return store.all(); }
+
+    /** When the address was last consulted since start-up, if it was. */
+    public Optional<Instant> lastViewed(Address a) { return Optional.ofNullable(lastViewed.get(a)); }
+
+    public java.util.Set<Address> historyAddresses() {
+        java.util.Set<Address> out = new java.util.HashSet<>();
+        for (Progress p : store.all()) out.add(new Address(p.network(), p.address()));
+        return out;
+    }
+
     public Progress run(String id) {
         Progress p = store.load(id).orElseThrow(() -> new IllegalArgumentException("unknown history backfill " + id));
         if (p.status().terminal()) return p;

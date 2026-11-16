@@ -159,6 +159,22 @@ class TronGridProviderTest {
         assertThat(r.transfers()).hasSize(1);
     }
 
+    /**
+     * Code review I20 (2026-11-13): a block reference needed by a receipt, a freeze scan or an address history used the
+     * indexer's getBlock, which also fetches the block's full transaction infos (hundreds of kB) and prefetches the next
+     * blocks. Those callers now read the reference only, so they do not burn the TronGrid quota of live indexing.
+     */
+    @Test void aReceiptReadsTheBlockReferenceOnly() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger blocks = new java.util.concurrent.atomic.AtomicInteger(), infos = new java.util.concurrent.atomic.AtomicInteger();
+        server.route("/wallet/getblockbynum", r -> { blocks.incrementAndGet(); return r.body().contains("80000015") ? Response.ok(block(80000015, BLOCK_ID)) : Response.ok("{}"); });
+        server.route("/wallet/gettransactioninfobyblocknum", r -> { infos.incrementAndGet(); return Response.ok("[" + INFO + "]"); });
+        provider.headBlock(); // the head is cached: the indexer path would prefetch the following confirmed blocks
+        assertThat(provider.getTransactionReceipt(TX).orElseThrow().transaction().blockHash()).isEqualTo(BLOCK_ID);
+        Thread.sleep(300);    // let any background prefetch show up
+        assertThat(blocks).as("getblockbynum calls").hasValue(1);
+        assertThat(infos).as("full block infos fetched for a receipt").hasValue(0);
+    }
+
     @Test void blocksAndStatus() {
         assertThat(provider.getBlock(80000015)).get().extracting(BlockRef::hash).isEqualTo(BLOCK_ID);
         assertThat(provider.getBlock(99999999)).isEmpty();

@@ -51,7 +51,9 @@ ChainSentinel's aim is an intelligence engine you can run, read and audit yourse
 - **Programmable:** detection rules are declarative YAML (no user code execution), tested on recorded data before you
   enable them.
 
-The longer-term vision and roadmap are in [docs/strategy](docs/strategy/README.md) (French).
+The longer-term vision and roadmap are in [docs/strategy](docs/strategy/README.md) (French). English translations:
+[vision](docs/strategy/CHAINSENTINEL_VISION.en.md), [market analysis](docs/strategy/MARKET_ANALYSIS.en.md) and
+[roadmap](docs/strategy/FEATURE_ROADMAP.en.md) (the French originals prevail if they differ).
 
 ## What works today
 

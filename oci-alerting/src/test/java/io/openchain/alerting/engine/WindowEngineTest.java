@@ -207,6 +207,64 @@ class WindowEngineTest {
         assertThat(e.metrics().retractions()).isEqualTo(1);
     }
 
+    /**
+     * Code review I3: the threshold re-check after a retraction concludes "no longer met" only on a complete state; a
+     * discarded group key or another rule version gives UNVERIFIABLE, never a false verification.
+     */
+    @Test void thresholdRecheckIsUnverifiableWhenTheStateIsIncomplete() {
+        RuleEngine e = new RuleEngine(EngineConfig.defaults().withMaxGroupKeysPerRule(1));
+        CompiledRule r = countRule("1h", 1);
+        e.register(r);
+        e.process(transfer("a", T0, "TA", "TB", "1"));
+        assertThat(e.process(transfer("b", T0.plusSeconds(60), "TA", "TB", "1")).matches()).hasSize(1);
+        e.process(Fx.removed(transfer("a", T0, "TA", "TB", "1")));
+        Network n = Network.TRON;
+        String v = r.rule().version();
+        // complete state: only b is left, COUNT 1 is not > 1
+        assertThat(e.recheckAggregation("count", v, n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60))).hasValueSatisfying(c -> {
+            assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.NO_LONGER_MET);
+            assertThat(c.value()).isEqualByComparingTo("1");
+            assertThat(c.eventCount()).isEqualTo(1);
+        });
+        assertThat(e.recheckAggregation("count", "0.0.0-other", n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60)))
+                .hasValueSatisfying(c -> assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.UNVERIFIABLE));
+        // another key evicts TA (one key per rule): its state is gone, nothing can be concluded
+        e.process(transfer("z", T0.plusSeconds(90), "TZ", "TB", "1"));
+        assertThat(e.recheckAggregation("count", v, n, "tron|TA", T0.plusSeconds(60), T0.plusSeconds(60)))
+                .hasValueSatisfying(c -> assertThat(c.verdict()).isEqualTo(ThresholdCheck.Verdict.UNVERIFIABLE));
+        assertThat(e.recheckAggregation("unknown-rule", v, n, "tron|TA", T0, T0)).isEmpty();
+    }
+
+    /** Code review I5: undoLast puts the engine back exactly where it was before the event. */
+    @Test void undoLastRestoresWindowsDedupAndEvictedKeys() {
+        RuleEngine e = new RuleEngine(EngineConfig.defaults().withMaxGroupKeysPerRule(1));
+        e.register(countRule("1h", 1));
+        e.process(transfer("a", T0, "TA", "TB", "1"));
+        assertThat(e.process(transfer("b", T0.plusSeconds(60), "TA", "TB", "1")).matches()).hasSize(1);
+        assertThat(e.undoLast("b")).isTrue();
+        // b is not a duplicate any more, and a is still in the window: evaluated again, b triggers again
+        assertThat(e.process(transfer("b", T0.plusSeconds(60), "TA", "TB", "1")).matches()).hasSize(1);
+
+        // a new key evicts TA (one key per rule); undoing it brings TA back with its two events
+        e.process(transfer("z", T0.plusSeconds(90), "TZ", "TB", "1"));
+        assertThat(e.groupKeyCount("count")).isEqualTo(1);
+        assertThat(e.undoLast("z")).isTrue();
+        assertThat(e.process(transfer("c", T0.plusSeconds(120), "TA", "TB", "1")).matches()).singleElement()
+                .satisfies(m -> assertThat(m.matchedEventIds()).containsExactly("a", "b", "c"));
+        assertThat(e.undoLast("z")).isFalse();      // only the last processed event can be undone
+        assertThat(e.undoLast("unknown")).isFalse();
+    }
+
+    @Test void undoLastIsANoOpForRetractionsDuplicatesAndLateEvents() {
+        RuleEngine e = engine(countRule("5m", 1));
+        ChainEvent a = transfer("a", T0, "TA", "TB", "1");
+        e.process(a);
+        assertThat(e.process(a).disposition()).isEqualTo(Disposition.DUPLICATE);
+        assertThat(e.undoLast("a")).isFalse();
+        e.process(Fx.removed(a));
+        assertThat(e.undoLast("a")).isFalse();
+    }
+
     // ---------------------------------------------------------------- bounded memory
 
     @Test void groupByCardinalityIsBoundedWithLruEviction() {

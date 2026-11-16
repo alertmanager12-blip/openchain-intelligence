@@ -54,14 +54,17 @@ class ConnectorsTest {
     static final byte[] SECRET = "s3cr3t-s3cr3t-s3cr3t-s3cr3t-s3cr3t".getBytes(StandardCharsets.UTF_8);
 
     static Notification notification(ActionType type, String connector) {
-        Alert a = Alert.builder().id("alert-1").ruleId("fund-splitting").ruleVersion("1.0.0").title("Fund <!channel> splitting")
+        return Notification.of("delivery-42", type, connector, Map.of(), alert(), T0);
+    }
+
+    static Alert alert() {
+        return Alert.builder().id("alert-1").ruleId("fund-splitting").ruleVersion("1.0.0").title("Fund <!channel> splitting")
                 .severity(Severity.HIGH).priority(Priority.P2).evidenceLevel(EvidenceLevel.ANOMALY).network(Network.TRON)
                 .groupKey("tron|TA").dedupKey("fund-splitting:tron|TA").firstSeen(T0).lastSeen(T0.plusSeconds(60))
                 .occurrenceCount(3).addEventIds(List.of("e1", "e2")).createdAt(T0).updatedAt(T0)
                 .evidence(Map.of("kind", "AGGREGATION", "function", "DISTINCT_COUNT", "field", "transaction.to", "value", "11",
                         "operator", "GREATER_THAN", "threshold", "10", "window", "PT3M"))
                 .build();
-        return Notification.of("delivery-42", type, connector, Map.of(), a, T0);
     }
 
     @Test void webhookSendsSignedIdempotentJson() {
@@ -159,5 +162,20 @@ class ConnectorsTest {
         assertThat(e.type()).isEqualTo(ChainEvent.EventType.DETECTION_SIGNAL);
         assertThat(e.fields()).containsEntry("internal.hop", 1L).containsEntry("internal.origin_chain", "fund-splitting")
                 .containsEntry("alert.rule_id", "fund-splitting");
+    }
+
+    /**
+     * Code review I2 (2026-11-13): the retraction of an alert reaches correlation rules as a REMOVED event with the same
+     * id as the opening one, so the rule engine withdraws its contribution instead of seeing a new signal.
+     */
+    @Test void internalEventOfARetractedAlertIsARemovedEvent() {
+        List<ChainEvent> bus = new ArrayList<>();
+        InternalEventConnector c = new InternalEventConnector("bus", bus::add, CLOCK);
+        c.send(Notification.of("delivery-42", ActionType.INTERNAL_EVENT, "bus", Map.of(), alert(), T0));
+        c.send(Notification.retraction("delivery-43", ActionType.INTERNAL_EVENT, "bus", Map.of(), alert(), T0.plusSeconds(300)));
+        assertThat(bus).hasSize(2);
+        assertThat(bus.get(0).removed()).isFalse();
+        assertThat(bus.get(1).removed()).isTrue();
+        assertThat(bus.get(1).eventId()).isEqualTo(bus.get(0).eventId());
     }
 }

@@ -21,6 +21,7 @@ public final class NotificationFormatter {
     public static byte[] json(Notification n) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("schema", "openchain.io/alert-notification/v1");
+        m.put("event", n.event());
         m.put("deliveryId", n.deliveryId());
         m.put("alertId", n.alertId());
         m.put("rule", Map.of("id", n.ruleId(), "version", n.ruleVersion()));
@@ -43,6 +44,10 @@ public final class NotificationFormatter {
     /** Human readable, single message, bounded length. */
     public static String text(Notification n, int maxLength) {
         StringBuilder sb = new StringBuilder();
+        if (n.retracted()) sb.append("EVIDENCE WITHDRAWN: the transactions behind this alert left the canonical chain (reorganisation). "
+                + "The alert is kept for the record; re-check it before acting.\n");
+        if (n.reinstated()) sb.append("EVIDENCE REINSTATED: this alert, announced earlier as withdrawn by a reorganisation, has valid "
+                + "evidence again (transactions back on the canonical chain, or a new match).\n");
         sb.append('[').append(n.severity()).append('/').append(n.priority()).append("] ").append(n.title())
                 .append(" (").append(n.ruleId()).append('@').append(n.ruleVersion()).append(")\n");
         sb.append("Network: ").append(n.network() == null ? "-" : n.network().id())

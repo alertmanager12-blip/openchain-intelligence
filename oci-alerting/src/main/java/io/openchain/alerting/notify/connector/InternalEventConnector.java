@@ -47,8 +47,10 @@ public final class InternalEventConnector implements NotificationConnector {
         fields.put("alert.group_key", n.groupKey());
         fields.put(RuleEngine.FIELD_HOP, (long) n.hop() + 1);
         fields.put(RuleEngine.FIELD_ORIGIN_CHAIN, String.join(",", chain));
+        // an alert retraction is a REMOVED event with the same id: correlation rules withdraw its contribution (and the
+        // pipeline withdraws alerts built on it) instead of treating it as a new signal
         ChainEvent e = new ChainEvent("internal:alert:" + n.alertId(), EventType.DETECTION_SIGNAL, n.network(), 0L, null,
-                n.lastSeen(), clock.instant(), false, fields);
+                n.lastSeen(), clock.instant(), n.retracted(), fields);
         try {
             sink.accept(e);
             return DeliveryResult.ok(0);

@@ -8,7 +8,7 @@ import java.util.function.Supplier;
 
 /**
  * Consecutive-failure circuit breaker. Only retryable (transient) failures count: a 4xx means the request
- * is wrong, not that the endpoint is unhealthy. When open, calls fail fast with a retryable
+ * is wrong, not that the endpoint is unhealthy (except 429 and 403, which are rate limits or temporary blocks). When open, calls fail fast with a retryable
  * {@link ProviderException} so that {@link HttpJsonTransport} fails over to its next endpoint.
  */
 public final class CircuitBreaker {
@@ -44,7 +44,9 @@ public final class CircuitBreaker {
         } catch (ProviderException e) {
             if (e.retryable()) onFailure(); else onSuccess();
             throw e;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | Error e) {
+            // an Error too (OutOfMemoryError while reading a response): otherwise a half-open probe that dies this way
+            // leaves probeInFlight set, and the endpoint is refused for ever
             onFailure();
             throw e;
         }

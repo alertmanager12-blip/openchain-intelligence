@@ -23,6 +23,15 @@
     @if (a.occurrenceCount && a.occurrenceCount > 1) { <span class="muted"><span class="num">{{ a.occurrenceCount }}</span> occurrences</span> }
     <span [class.muted]="!a.assignee">{{ a.assignee ?? 'Unassigned' }}</span>
   </div>
+  @if (a.evidenceState === 'WITHDRAWN') {
+    <div class="attention" role="status" data-testid="evidence-withdrawn">
+      <p><strong>No valid evidence left.</strong> Every transaction behind this alert left the canonical chain (reorganisation). The alert is kept for the record: re-check it before acting.</p>
+    </div>
+  } @else if (a.evidenceState === 'PARTIALLY_WITHDRAWN') {
+    <div class="attention attention--warn" role="status" data-testid="evidence-partial">
+      <p><strong>Evidence partly withdrawn.</strong> {{ a.withdrawnEventIds?.length ?? 0 }} of {{ a.matchedEventIds?.length ?? 0 }} matched event(s) left the canonical chain (reorganisation); the others still stand.</p>
+    </div>
+  }
   <input class="reason" [value]="reason()" (input)="reason.set($any($event.target).value)" aria-label="Reason for the status change, kept in history"
     placeholder="Reason for the status change (optional, kept in history)" />
   @if (assigning()) {

@@ -227,7 +227,7 @@ triggering event is re-indexed, otherwise these fields stay null.
 |---|---|---|---|
 | POST | `/webhooks` | webhooks:write | Create webhook connector `{ name, url, events[] }` (https only); response includes the signing `secret` **once** and an `id` (`wh-…`, a slug usable as `actions[].connectorId`) |
 | GET | `/webhooks` | webhooks:read | List (secrets never returned) |
-| GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag, provider health |
+| GET | `/networks` | wallet:read | Supported networks, enabled flag, head/finalized block, indexer lag (`indexerLag`, `null` when the chain head is unknown: provider failing; not "no lag"), provider health |
 | GET | `/graph/{address}?network=&depth=1..3&token=&from=&to=&limit=` | investigation:read | Nodes (address, labels, risk level) + aggregated edges (count, total amount); `truncated` flag when fan-out caps hit |
 | GET | `/labels?network=&address=&category=` | wallet:read | Labels with source, evidence level, status |
 | GET | `/watchlist` | wallet:read | The organisation's own wallets `[{ id, network, address, name, createdBy, createdAt }]`, oldest first |
@@ -270,7 +270,16 @@ X-OCI-Signature: t=1762423200,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56f
 {"id":"...","type":"alert.opened","createdAt":"2026-11-06T10:00:00Z","data":{"alert":{...}}}
 ```
 
-Events: `alert.opened`, `alert.updated`, `alert.retracted`, `alert.status_changed`, `webhook.test`.
+Events: `alert.opened`, `alert.updated`, `alert.retracted`, `alert.reinstated`, `alert.status_changed`, `webhook.test`.
+
+- `alert.retracted`: every valid piece of evidence of the alert left the canonical chain (reorganisation), or, for an
+  aggregation rule, the remaining events no longer reach the threshold. The alert is kept; re-check it before acting.
+- `alert.reinstated`: an alert announced by `alert.retracted` has valid evidence again (its transactions are back on the
+  canonical chain, or a new match was grouped into it). Sent once per such transition, to the same channels.
+
+Alert notifications go to the channels of the rule's actions. The `events` list of a webhook is stored and returned, but
+is **not yet used to filter** deliveries: a receiver must accept (or ignore) every event type above, and should ignore
+types it does not know.
 
 Signature: `v1 = hex(HMAC_SHA256(secret, t + "." + rawBody))`. Verify over the **raw** request body bytes, compare in constant time, reject if `|now − t| > 300 s`, and deduplicate on `X-OCI-Delivery-Id` (deliveries are at-least-once). During secret rotation the header may contain two `v1=` values; accept if any matches.
 

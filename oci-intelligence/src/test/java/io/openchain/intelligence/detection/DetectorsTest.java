@@ -59,7 +59,38 @@ class DetectorsTest {
         @Test void constantHistoryUsesFallbackScale() {
             for (int i = 0; i < 12; i++) fx.flow(src, me, "100", min(i));
             assertThat(d.detect(fx.ctx(me, fx.flow(src, me, "100", min(50))))).isEmpty();
-            assertThat(d.detect(fx.ctx(me, fx.flow(src, me, "900", min(60))))).hasSize(1);
+            assertThat(d.detect(fx.ctx(me, fx.flow(src, me, "900", min(60))))).singleElement()
+                    .satisfies(s -> assertThat(s.evidence()).anyMatch(e -> e.description().contains("dominant amount")));
+        }
+
+        /** Step 2 regression: a constant baseline has no z-score; 50 then 60 must not be "infinitely" unusual. */
+        @Test void constantHistoryNeedsARealRelativeDeviation() {
+            for (String amount : new String[] {"60", "149"}) {
+                Fx w = new Fx();
+                for (int i = 0; i < 15; i++) w.flow(src, me, "50", min(i));
+                assertThat(d.detect(w.ctx(me, w.flow(src, me, amount, min(60))))).as(amount).isEmpty();
+            }
+            Fx w = new Fx();
+            for (int i = 0; i < 15; i++) w.flow(src, me, "50", min(i));
+            assertThat(d.detect(w.ctx(me, w.flow(src, me, "150", min(60))))).hasSize(1);
+        }
+
+        /** Step 2 regression: a dominant amount (MAD = 0) with a few other values must not give a huge z. */
+        @Test void dominantAmountDoesNotInflateTheScore() {
+            for (int i = 0; i < 20; i++) fx.flow(me, a("f" + i), "5000", min(i));
+            fx.flow(me, a("g1"), "9500", min(30));
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, a("g2"), "9600", min(40))))).isEmpty();
+        }
+
+        /** Step 2 regression: a collector forwarding the sum of its deposits is compared with what it sends, not what it receives. */
+        @Test void baselineIsPerDirection() {
+            for (int i = 0; i < 12; i++) fx.flow(a("d" + i), me, "4990", min(i));
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, a("c01"), "20000", min(30))))).isEmpty();
+            // an outgoing amount far above the wallet's own outgoing baseline is still unusual
+            Fx out = new Fx();
+            for (int i = 0; i < 12; i++) out.flow(me, a("e" + i), String.valueOf(100 + i), min(i));
+            assertThat(d.detect(out.ctx(me, out.flow(me, a("e99"), "5000", min(100))))).singleElement()
+                    .satisfies(s -> assertThat(s.summary()).startsWith("Sent 5,000 USDT").contains("usually sends"));
         }
     }
 
@@ -84,6 +115,21 @@ class DetectorsTest {
             ValueFlow last = fx.flow(me, a("4"), "9900", min(60));
             assertThat(d.detect(fx.ctx(me, last))).isEmpty();
         }
+
+        /** Step 2 regression: the 10,000 reporting threshold is a USD stablecoin rule, not a rule for any token. */
+        @Test void noThresholdForAssetsWithoutOne() {
+            Token link = new Token(NET, "0xdemo0000000000000000000000000000000link", "LINK", 18);
+            fx.flow(me, a("1"), "9500", link, min(0));
+            fx.flow(me, a("2"), "9600", link, min(30));
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, a("3"), "9700", link, min(60))))).isEmpty();
+        }
+
+        /** USD stablecoins other than USDT keep the threshold (no recall lost on DAI). */
+        @Test void otherUsdStablecoinsKeepTheThreshold() {
+            fx.flow(me, a("1"), "9500", DAI, min(0));
+            fx.flow(me, a("2"), "9600", DAI, min(30));
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, a("3"), "9700", DAI, min(60))))).hasSize(1);
+        }
     }
 
     @Nested class FastForwarding {
@@ -106,6 +152,20 @@ class DetectorsTest {
             Fx late = new Fx();
             late.flow(src, me, "1000", min(0));
             assertThat(d.detect(late.ctx(me, late.flow(me, dst, "1000", min(120))))).isEmpty();
+        }
+
+        /** Step 2 regression: receipts that do not explain the payment are not a pass-through. */
+        @Test void smallReceiptBeforeALargerPaymentIsNotForwarding() {
+            fx.flow(a("f1"), me, "10000", min(0));          // funded long before the window
+            fx.flow(a("f2"), me, "1", min(180));            // 1 USDT from a stranger
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, dst, "1000", min(185))))).isEmpty();
+        }
+
+        /** The forwarded share never exceeds what was received; a full pass-through with a small top-up is still flagged. */
+        @Test void forwardedShareIsCappedAtTheReceivedAmount() {
+            fx.flow(src, me, "1000", min(0));
+            assertThat(d.detect(fx.ctx(me, fx.flow(me, dst, "1500", min(5))))).singleElement()
+                    .satisfies(s -> assertThat(s.summary()).startsWith("Forwarded 100%"));
         }
     }
 
@@ -204,6 +264,21 @@ class DetectorsTest {
             deep.flow(b, c, "99", min(10));
             assertThat(d.detect(deep.ctx(me, deep.flow(c, me, "98", min(20))))).isEmpty();
         }
+
+        /** Step 2 regression: one return closing several paths is one behaviour, reported once with every path. */
+        @Test void oneSignalPerReturnListingEveryPath() {
+            Address col = a("c0");
+            for (int i = 0; i < 6; i++) {
+                Address w = a("e" + i);
+                fx.flow(me, w, "1000", min(i));
+                fx.flow(w, col, "990", min(10 + i));
+            }
+            ValueFlow back = fx.flow(col, me, "5900", min(30));
+            assertThat(d.detect(fx.ctx(me, back))).singleElement().satisfies(s -> {
+                assertThat(s.evidence().stream().filter(e -> e.kind().equals("path"))).hasSize(6); // 5 paths + "1 more"
+                assertThat(s.summary()).contains("on 6 paths").contains("7 intermediary addresses");
+            });
+        }
     }
 
     @Nested class Exposure {
@@ -267,6 +342,33 @@ class DetectorsTest {
             ValueFlow f = fx.flow(h1, me, "800", min(0));
             fx.flow(sanctioned, h1, "1000", min(30)); // arrived at h1 AFTER h1 paid me
             assertThat(d.detect(fx.ctx(me, f))).noneMatch(s -> s.type() == SignalType.INDIRECT_EXPOSURE);
+        }
+
+        /**
+         * Code review I7 (2026-11-13): when an intermediary paid the wallet several times, the trace kept its OLDEST
+         * payment, so tainted value that reached the intermediary between two payments was never found. The latest
+         * payment not after the downstream hop is the one that admits every time-consistent upstream flow.
+         */
+        @Test void indirectExposureIsFoundWhenTheIntermediaryPaidBeforeAndAfterReceivingTaintedValue() {
+            fx.label(sanctioned, LabelCategory.SANCTIONED, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            Address h1 = a("h1"), h2 = a("h2");
+            fx.flow(h1, me, "100", min(0));                            // an old, clean payment
+            ValueFlow tainted = fx.flow(sanctioned, h1, "1000", min(30));
+            ValueFlow paid = fx.flow(h1, me, "800", min(50));          // paid after receiving the tainted value
+            assertThat(d.detect(fx.ctx(me, paid))).singleElement().satisfies(s -> {
+                assertThat(s.type()).isEqualTo(SignalType.INDIRECT_EXPOSURE);
+                assertThat(s.evidence().stream().filter(e -> e.kind().equals("flow")).map(Signal.Evidence::reference))
+                        .containsExactly(tainted.txHash(), paid.txHash());
+            });
+            // same at the second hop: h2 paid h1 before and after receiving from the listed address
+            Address me2 = a("me2"), k1 = a("k1");
+            fx.flow(h2, k1, "100", min(0));
+            ValueFlow t2 = fx.flow(sanctioned, h2, "1000", min(10));
+            ValueFlow mid = fx.flow(h2, k1, "900", min(20));
+            ValueFlow last = fx.flow(k1, me2, "800", min(40));
+            assertThat(d.detect(fx.ctx(me2, last))).singleElement().satisfies(s ->
+                    assertThat(s.evidence().stream().filter(e -> e.kind().equals("flow")).map(Signal.Evidence::reference))
+                            .containsExactly(t2.txHash(), mid.txHash(), last.txHash()));
         }
 
         @Test void beyondMaxHopsAndThroughExchangesIsNotPropagated() {

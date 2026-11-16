@@ -4,7 +4,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ALERT_STATUSES, NetworkId, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
-import { shortHash, timeAgo } from '../../shared/format';
+import { indexerLag, shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { RISK_THRESHOLDS, levelLabel } from '../../shared/risk-gauge';
@@ -65,7 +65,10 @@ export class OverviewPage {
   readonly health = computed(() => {
     const nets = this.dash.value()?.networks ?? [];
     const lags = nets.map((x) => this.lag(x));
-    return { healthy: nets.filter((x) => x.healthy).length, total: nets.length, maxLag: lags.length ? Math.max(...lags) : 0 };
+    const known = lags.filter((l): l is number => l !== null);
+    // unknownLag: networks whose head is unknown (provider failing); their lag is not 0 and is reported apart
+    return { healthy: nets.filter((x) => x.healthy).length, total: nets.length, maxLag: known.length ? Math.max(...known) : null,
+      unknownLag: lags.length - known.length };
   });
   readonly dist = computed(() => {
     const r = this.dash.value()?.riskDistribution;
@@ -75,8 +78,8 @@ export class OverviewPage {
   readonly distTotal = computed(() => this.dist().reduce((s, b) => s + b.count, 0));
   readonly distAria = computed(() => 'Risk distribution: ' + this.dist().map((b) => `${b.label} ${b.count}`).join(', '));
 
-  lag(x: NetworkStatus): number {
-    return x.indexerLag ?? x.headBlock - x.finalizedBlock;
+  lag(x: NetworkStatus): number | null {
+    return indexerLag(x);
   }
 
   /** Whole-row navigation (the row also holds a real link for keyboard and assistive tech). */

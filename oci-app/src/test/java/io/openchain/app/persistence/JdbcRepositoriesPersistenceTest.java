@@ -78,13 +78,13 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(9);
-        assertThat(first.targetSchemaVersion).isEqualTo("9");
+        assertThat(first.migrationsExecuted).isEqualTo(11); // V1..V11 (V11: working-set snapshot)
+        assertThat(first.targetSchemaVersion).isEqualTo("11");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
                 "alert_comments", "deliveries", "label_reports", "backfill_progress", "backfill_freeze_events", "address_history_progress",
-                "address_history_events", "flyway_schema_history");
+                "address_history_events", "working_set_snapshots", "working_set_snapshot_chunks", "flyway_schema_history");
         assertThat(PostgresSupport.migrate(fresh).migrationsExecuted).isZero();
     }
 
@@ -283,6 +283,48 @@ class JdbcRepositoriesPersistenceTest {
 
     // ---- alerts -------------------------------------------------------------------------------------------------
 
+    /**
+     * Code review I24 (2026-11-13): the alert list and the dashboard loaded every alert. Paging, filters and counts now
+     * run in SQL and must give exactly what the reference in-memory implementation gives.
+     */
+    @Test
+    void alertPagesAndCountsMatchTheInMemoryReference() {
+        JdbcAlertRepository repo = new JdbcAlertRepository(jdbc, tx);
+        var reference = new io.openchain.alerting.alert.InMemoryAlertRepository();
+        AlertStatus[] statuses = {AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED, AlertStatus.ACKNOWLEDGED, AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE};
+        Severity[] severities = {Severity.CRITICAL, Severity.HIGH, Severity.LOW};
+        for (int i = 0; i < 23; i++) {
+            Alert a = alert("p" + String.format("%02d", i), "pk" + i, List.of("pe" + i)).toBuilder()
+                    .status(statuses[i % statuses.length]).severity(severities[i % severities.length])
+                    .ruleId(i % 4 == 0 ? "rule-b" : "rule-a").network(i % 5 == 0 ? Network.ETHEREUM : Network.TRON)
+                    .createdAt(T0.plusSeconds(i / 2 * 60L)) // pairs share a creation time: the id breaks the tie
+                    .subject(new io.openchain.alerting.alert.AlertSubject("pe" + i, "TOKEN_TRANSFER", i % 3 == 0 ? "TAddrX" : "TAddrY", null,
+                            "0xtx" + i, 100L + i, T0, Map.of())).build();
+            reference.save(a);
+            repo.save(a);
+        }
+        var Q = io.openchain.alerting.alert.AlertRepository.AlertQuery.class;
+        List<io.openchain.alerting.alert.AlertRepository.AlertQuery> queries = List.of(
+                io.openchain.alerting.alert.AlertRepository.AlertQuery.any(),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(java.util.EnumSet.of(AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED), null, null, null, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, Severity.CRITICAL, "rule-a", null, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, Network.ETHEREUM, null, null, null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, null, T0.plusSeconds(180), T0.plusSeconds(480), null),
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(null, null, null, null, null, null, "taddrx"), // case-insensitive
+                new io.openchain.alerting.alert.AlertRepository.AlertQuery(java.util.EnumSet.noneOf(AlertStatus.class), null, null, null, null, null, null));
+        assertThat(Q).isNotNull();
+        for (var q : queries) {
+            for (int[] page : new int[][] {{0, 5}, {5, 5}, {20, 10}, {0, 100}, {40, 5}}) {
+                assertThat(repo.findPage(q, page[0], page[1])).extracting(Alert::id).as(q + " offset " + page[0] + " limit " + page[1])
+                        .containsExactlyElementsOf(reference.findPage(q, page[0], page[1]).stream().map(Alert::id).toList());
+            }
+        }
+        // a page carries its history (loaded for the page only)
+        assertThat(repo.findPage(io.openchain.alerting.alert.AlertRepository.AlertQuery.any(), 0, 3)).allSatisfy(a -> assertThat(a.history()).isNotEmpty());
+        assertThat(repo.countByStatusAndSeverity()).containsExactlyInAnyOrderElementsOf(reference.countByStatusAndSeverity());
+        assertThat(repo.createdAtSince(T0.plusSeconds(300))).containsExactlyInAnyOrderElementsOf(reference.createdAtSince(T0.plusSeconds(300)));
+    }
+
     static Alert alert(String id, String dedup, List<String> events) {
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("kind", "AGGREGATION");
@@ -468,6 +510,29 @@ class JdbcRepositoriesPersistenceTest {
         AlertService afterRestart = new AlertService(new JdbcAlertRepository(jdbc, tx), Clock.systemUTC());
         assertThat(afterRestart.onMatch(m, Duration.ofMinutes(5)).created()).isFalse();
         assertThat(afterRestart.repository().findAll()).hasSize(1);
+    }
+
+    /** V10 (docs/P0_REORG_DESIGN.md): the evidence state of an alert survives a restart; the alert itself is never deleted. */
+    @Test
+    void alertEvidenceStateRoundTrips() {
+        JdbcAlertRepository repo = new JdbcAlertRepository(jdbc, tx);
+        AlertService service = new AlertService(repo, Clock.systemUTC());
+        RuleMatch m1 = new RuleMatch("rule-a", "1.0.0", "Rule A", Severity.HIGH, EvidenceLevel.RISK_SIGNAL, Network.TRON, "tron|TA", "k-ev",
+                "tron:0xev1:0", T0, List.of("tron:0xev1:0"), Map.of("kind", "STATELESS"), List.of(), 0);
+        RuleMatch m2 = new RuleMatch("rule-a", "1.0.0", "Rule A", Severity.HIGH, EvidenceLevel.RISK_SIGNAL, Network.TRON, "tron|TA", "k-ev",
+                "tron:0xev2:0", T0.plusSeconds(30), List.of("tron:0xev2:0"), Map.of("kind", "STATELESS"), List.of(), 0);
+        Alert a = service.onMatch(m1, Duration.ofMinutes(5)).alert();
+        service.onMatch(m2, Duration.ofMinutes(5));
+        assertThat(repo.findById(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.VALID);
+        service.onRetraction("tron:0xev1:0");
+        AlertService afterRestart = new AlertService(new JdbcAlertRepository(jdbc, tx), Clock.systemUTC());
+        Alert partial = afterRestart.find(a.id()).orElseThrow();
+        assertThat(partial.evidenceState()).isEqualTo(Alert.EvidenceState.PARTIALLY_WITHDRAWN);
+        assertThat(partial.withdrawnEventIds()).containsExactly("tron:0xev1:0");
+        assertThat(afterRestart.onRetraction("tron:0xev1:0")).as("idempotent across restarts").isEmpty();
+        assertThat(afterRestart.onRetraction("tron:0xev2:0")).singleElement().satisfies(c -> assertThat(c.becameWithdrawn()).isTrue());
+        assertThat(afterRestart.find(a.id()).orElseThrow().evidenceState()).isEqualTo(Alert.EvidenceState.WITHDRAWN);
+        assertThat(jdbc.queryForObject("select count(*) from alerts where evidence_state = 'WITHDRAWN'", Map.of(), Integer.class)).isEqualTo(1);
     }
 
     // ---- deliveries (outbox) ------------------------------------------------------------------------------------

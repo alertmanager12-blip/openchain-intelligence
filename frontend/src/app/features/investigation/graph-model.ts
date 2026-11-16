@@ -19,3 +19,17 @@ export function edgeWidths(edges: KeyedEdge[]): Map<string, number> {
   }
   return out;
 }
+
+/**
+ * What to change in the drawn graph so that it shows exactly `wanted` (ids of nodes and edges): elements to add and ids
+ * to remove. Removing matters: on the same root, a narrower token, date range or depth must take away what no longer
+ * matches; drawing only additions left stale transfers on screen (code review I11, 2026-11-13).
+ */
+export function graphDiff<T extends { data: { id?: string } }>(existingIds: Iterable<string>, wanted: T[]): { add: T[]; removeIds: string[] } {
+  const want = new Set(wanted.map((e) => e.data.id!));
+  const have = new Set(existingIds);
+  return {
+    add: wanted.filter((e) => !have.has(e.data.id!)),
+    removeIds: [...have].filter((id) => !want.has(id)),
+  };
+}

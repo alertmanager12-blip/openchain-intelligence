@@ -1,0 +1,8 @@
+# Used only by deploy/smoke-test.sh (through COMPOSE_FILE): the smoke stack builds its images under its own tags.
+# Without it, `up --build` rebuilt openchain-intelligence/app and /frontend under the tags of the real deployment, so
+# the next `docker compose up -d` of that deployment silently ran the code of whatever branch was checked out.
+services:
+  app:
+    image: openchain-intelligence/app:smoke
+  frontend:
+    image: openchain-intelligence/frontend:smoke

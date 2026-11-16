@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # a newer push cancels the run of a branch or pull request, never a run on main: every commit of main keeps its result
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   backend:
@@ -19,17 +20,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
       - name: Build and test
         run: mvn -B -ntp verify
+      - name: No skipped test
+        # the PostgreSQL integration tests skip themselves without Docker; in CI Docker is there, so a skipped test means
+        # that a restart or persistence test silently did not run (phase 1 exit criterion: "Skipped: 0")
+        run: |
+          skipped=$(grep -ho 'skipped="[0-9]*"' $(find . -path '*/target/surefire-reports/TEST-*.xml') | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "skipped tests: ${skipped:-0}"
+          if [ "${skipped:-0}" -ne 0 ]; then
+            grep -l 'skipped="[1-9]' $(find . -path '*/target/surefire-reports/TEST-*.xml')
+            echo "::error::${skipped} test(s) skipped"; exit 1
+          fi
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: surefire-reports
           path: "**/target/surefire-reports/*.xml"
@@ -43,8 +54,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: npm
@@ -61,13 +72,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       # Enforces ADR-0012: the job fails on any runtime dependency without an allowed licence.
@@ -81,9 +92,9 @@ jobs:
           npm ci --no-audit --no-fund --ignore-scripts
           # ADR-0012 amendment 1: OFL-1.1 is allowed for these font packages only; everything else uses the base allowlist.
           FONT_PACKAGES="@fontsource-variable/ibm-plex-sans@5.3.0;@fontsource/ibm-plex-mono@5.3.0"
-          npx --yes license-checker-rseidelsohn@4 --production --summary --excludePrivatePackages --excludePackages "$FONT_PACKAGES" \
+          npx --no-install license-checker-rseidelsohn --production --summary --excludePrivatePackages --excludePackages "$FONT_PACKAGES" \
             --onlyAllow "Apache-2.0;MIT;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Python-2.0;BlueOak-1.0.0;Unlicense"
-          npx --yes license-checker-rseidelsohn@4 --production --summary --includePackages "$FONT_PACKAGES" --onlyAllow "OFL-1.1"
+          npx --no-install license-checker-rseidelsohn --production --summary --includePackages "$FONT_PACKAGES" --onlyAllow "OFL-1.1"
 
   docker:
     name: Docker images
@@ -91,7 +102,7 @@ jobs:
     needs: [backend, frontend]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Validate compose file
         run: docker compose -f docker-compose.yml --profile observability config -q
@@ -133,14 +144,14 @@ jobs:
           - language: javascript-typescript
             build-mode: none
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         if: matrix.language == 'java-kotlin'
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -148,6 +159,6 @@ jobs:
       - name: Build (Java)
         if: matrix.build-mode == 'manual'
         run: mvn -B -ntp -DskipTests package
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: "/language:${{ matrix.language }}"

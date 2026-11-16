@@ -34,6 +34,11 @@ public record DetectionContext(Address subject, ValueFlow trigger, ChainEvent ev
         Objects.requireNonNull(now, "now");
     }
 
+    /** The same context over another flow store (e.g. the verified-token view of {@link DetectionEngine}). */
+    public DetectionContext withFlows(FlowStore other) {
+        return new DetectionContext(subject, trigger, event, profile, other, labels, config, now, balances);
+    }
+
     /** On-chain time of the trigger/event, falling back to {@code now}. */
     public Instant referenceTime() {
         if (trigger != null) return trigger.timestamp();

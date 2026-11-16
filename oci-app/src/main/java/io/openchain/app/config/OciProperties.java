@@ -106,6 +106,42 @@ public class OciProperties {
         /** Recorded (enriched) events kept in memory for alert context and dry runs. */
         private int eventHistorySize = 100_000;
         /**
+         * In-memory working set bounds (ADR-0024 step 3), except for watched wallets and addresses with loaded history:
+         * flows older than {@code workingSetFlowRetention}, signals older than {@code workingSetSignalRetention} (HIGH and
+         * CRITICAL kept) and profiles of wallets idle for {@code workingSetProfileIdle}; trimmed every {@code workingSetTrimInterval}.
+         */
+        private Duration workingSetFlowRetention = Duration.ofHours(24);
+        private Duration workingSetSignalRetention = Duration.ofHours(48);
+        private Duration workingSetProfileIdle = Duration.ofDays(7);
+        private Duration workingSetTrimInterval = Duration.ofMinutes(10);
+        /**
+         * Hard caps on the working set (ADR-0024 step 3b), applied after the time windows: the oldest items beyond them are
+         * removed. Sized for a 3 GB heap with Ethereum mainnet and TRON indexed at the head; raise them with the heap.
+         */
+        private int workingSetMaxFlows = 400_000;
+        private int workingSetMaxSignals = 150_000;
+        private int workingSetMaxProfiles = 300_000;
+
+        public int getWorkingSetMaxFlows() { return workingSetMaxFlows; }
+        public void setWorkingSetMaxFlows(int v) { this.workingSetMaxFlows = v; }
+        /** Signals kept per wallet (P0 item 3): lowest severity, then oldest, removed first; HIGH/CRITICAL last. */
+        private int workingSetMaxSignalsPerWallet = 64;
+        public int getWorkingSetMaxSignalsPerWallet() { return workingSetMaxSignalsPerWallet; }
+        public void setWorkingSetMaxSignalsPerWallet(int v) { this.workingSetMaxSignalsPerWallet = v; }
+        public int getWorkingSetMaxSignals() { return workingSetMaxSignals; }
+        public void setWorkingSetMaxSignals(int v) { this.workingSetMaxSignals = v; }
+        public int getWorkingSetMaxProfiles() { return workingSetMaxProfiles; }
+        public void setWorkingSetMaxProfiles(int v) { this.workingSetMaxProfiles = v; }
+
+        public Duration getWorkingSetFlowRetention() { return workingSetFlowRetention; }
+        public void setWorkingSetFlowRetention(Duration v) { this.workingSetFlowRetention = v; }
+        public Duration getWorkingSetSignalRetention() { return workingSetSignalRetention; }
+        public void setWorkingSetSignalRetention(Duration v) { this.workingSetSignalRetention = v; }
+        public Duration getWorkingSetProfileIdle() { return workingSetProfileIdle; }
+        public void setWorkingSetProfileIdle(Duration v) { this.workingSetProfileIdle = v; }
+        public Duration getWorkingSetTrimInterval() { return workingSetTrimInterval; }
+        public void setWorkingSetTrimInterval(Duration v) { this.workingSetTrimInterval = v; }
+        /**
          * Observation time a real chain needs before "first seen by the platform" fields (wallet.age_days, wallet.tx_count,
          * counterparty.age_days, approval.spender_age_days) are emitted (OCI_INGESTION_AGE_WARMUP, default 30 days).
          */
@@ -113,6 +149,16 @@ public class OciProperties {
 
         public Duration getAgeWarmup() { return ageWarmup; }
         public void setAgeWarmup(Duration ageWarmup) { this.ageWarmup = ageWarmup; }
+
+        /**
+         * Size in bits of the "address already seen" filter (OCI_INGESTION_SEEN_ADDRESSES_BITS, default 2^28 = 32 MB of
+         * heap, about 28 million addresses at a 1 % error rate). It tells a genuinely new wallet (age 0) from an old one
+         * whose profile left the bounded working set (age unknown, age fields absent). When it fills up, more new wallets
+         * are reported with an unknown age (never a wrong one): watch oci_seen_addresses_fill_ratio and raise it.
+         */
+        private long seenAddressesBits = 1L << 28;
+        public long getSeenAddressesBits() { return seenAddressesBits; }
+        public void setSeenAddressesBits(long v) { this.seenAddressesBits = v; }
 
         public Duration getPollInterval() { return pollInterval; }
         public void setPollInterval(Duration pollInterval) { this.pollInterval = pollInterval; }
@@ -360,6 +406,30 @@ public class OciProperties {
          * reload does not scale to the retention period yet (ADR-0024 step 2 follow-up: watchlist scope, profile snapshots).
          */
         private boolean intelligenceJournal = false;
+
+        /**
+         * Working-set snapshot (OCI_PERSISTENCE_WORKING_SET_SNAPSHOT, default false; ADR-0024 step 3d): at an orderly
+         * shutdown the bounded working set (flows, wallet profiles, signals, scores, remembered balances) is written to
+         * PostgreSQL, and reloaded at start-up before the indexers if they have not moved since. PostgreSQL mode only,
+         * real chains only; incompatible with the intelligence journal. Needs a container stop grace period longer than
+         * {@link #snapshotShutdownTimeout} plus the write time (Docker's default is 10 s).
+         */
+        private boolean workingSetSnapshot = false;
+        /** How long an orderly shutdown waits for indexer polls in progress before writing the snapshot. */
+        private Duration snapshotShutdownTimeout = Duration.ofSeconds(20);
+        /**
+         * Interval of the periodic snapshots taken while indexing (0 = at shutdown only). After a crash, the last one is
+         * reloaded and the blocks indexed since its watermark are indexed again: at most one interval of blocks.
+         */
+        private Duration snapshotInterval = Duration.ofMinutes(30);
+
+        public Duration getSnapshotInterval() { return snapshotInterval; }
+        public void setSnapshotInterval(Duration v) { this.snapshotInterval = v == null ? Duration.ZERO : v; }
+
+        public boolean isWorkingSetSnapshot() { return workingSetSnapshot; }
+        public void setWorkingSetSnapshot(boolean v) { this.workingSetSnapshot = v; }
+        public Duration getSnapshotShutdownTimeout() { return snapshotShutdownTimeout; }
+        public void setSnapshotShutdownTimeout(Duration v) { this.snapshotShutdownTimeout = v; }
 
         public boolean isIntelligenceJournal() { return intelligenceJournal; }
         public void setIntelligenceJournal(boolean v) { this.intelligenceJournal = v; }
