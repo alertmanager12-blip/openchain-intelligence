@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (address histories could stop live indexing)
+
+- **Address histories and the freeze backfill no longer share live indexing's provider client.** On 2026-11-16 several TRON address histories made TronGrid refuse requests and opened the circuit breaker that live indexing also used: TRON stopped for about 80 minutes. Each real network now has two clients on the same endpoints, each with its own circuit breaker and rate limiter: live indexing (8 requests/s, burst 16) and background work (2 requests/s, burst 4). Together they send no more requests than the previous single client (10/s). A background breaker is named `<network>-background-primary` in the logs.
+
 ### Changed (phase 2 — console on the directed graph, Fund Flow Trace P0-C, console part)
 
 - **The fund flow graph page uses the directed graph.** A direction selector (Out, In, Both; Both by default) replaces the undirected view: only links value could have taken are drawn, and the page says so. "Highlight path from root" asks the server for a path value could have taken (directed, chronological, one token) and highlights its transfers; it no longer computes a shortest path in the browser that ignored direction and time. The status line says when the graph is partial, and "Where the graph stops" lists the reasons per wallet (depth, budget, likely service, coverage gap, exchange or bridge, loop), leaving out the near-universal unknown opening balance. The date filter keeps an edge when its first-to-last transfer span overlaps the range, not only by its last transfer. Expanding a wallet keeps the graph's direction. "Check for changes" asks the server which transfers shown are no longer held (reorganisation, trimmed working set).

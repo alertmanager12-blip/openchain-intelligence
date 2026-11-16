@@ -451,23 +451,15 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                 log.warn("chain {} is already simulated (demo mode); real provider ignored", id);
                 return;
             }
-            Map<String, String> headers = c.getApiKeyHeader() != null && c.getApiKey() != null && !c.getApiKey().isBlank()
-                    ? Map.of(c.getApiKeyHeader(), c.getApiKey()) : Map.of();
-            List<RpcEndpoint> endpoints = new java.util.ArrayList<>();
-            endpoints.add(new RpcEndpoint(n.id() + "-primary", URI.create(c.getUrl()), headers, null, null, null));
-            int k = 0;
-            for (String u : c.getFallbackUrls()) {
-                if (u == null || u.isBlank()) continue;
-                endpoints.add(new RpcEndpoint(n.id() + "-fallback-" + (++k), URI.create(u.strip()), Map.of(), null, null, null));
-            }
-            HttpJsonTransport http = new HttpJsonTransport(endpoints, java.time.Clock.systemUTC(), io.openchain.blockchain.transport.Sleeper.SYSTEM);
-            if (k > 0) log.info("chain {}: {} fallback endpoint(s) configured", id, k);
-            BlockchainProvider p = switch (n) {
-                case TRON -> new TronGridProvider("tron-trongrid", http, tokens, TronConfig.defaults());
-                case ETHEREUM, BSC, POLYGON -> new EvmJsonRpcProvider(n.id() + "-rpc", n, new JsonRpcClient(http), tokens,
-                        EvmConfig.defaults(n).withHistoryChunks(c.getHistory().getChunkSize(), c.getHistory().getMinChunkSize()));
-                default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
-            };
+            // two clients on the same endpoints: live indexing, and background work (address histories, freeze backfill),
+            // each with its own circuit breaker and rate limiter, so that a history hammering the provider can no longer
+            // open the breaker that live indexing depends on (production 2026-11-16, TRON stalled ~80 min). The rates add
+            // up to the previous single budget, so the provider sees no more requests than before.
+            HttpJsonTransport http = transport(n, c, "", LIVE_RESILIENCE);
+            HttpJsonTransport background = transport(n, c, "-background", BACKGROUND_RESILIENCE);
+            if (!c.getFallbackUrls().isEmpty()) log.info("chain {}: {} fallback endpoint(s) configured", id, c.getFallbackUrls().stream().filter(u -> u != null && !u.isBlank()).count());
+            BlockchainProvider p = provider(n, c, http, "");
+            BlockchainProvider bg = provider(n, c, background, "-background");
             long start = c.getStartBlock();
             if (start < 0) {
                 // relative start: needs the real head. An unreachable provider reports an unhealthy status with head 0
@@ -488,9 +480,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                     .withMaxBlocksPerPoll(c.getMaxBlocksPerPoll());
             ChainIngestionService.NetworkRuntime rt = chains.register(p, null, null, cfg, null);
             chains.setBalanceBudget(n, new ChainIngestionService.BalanceBudget(c.getRealBalanceMaxLookupsPerBlock(), c.getRealBalanceMaxLag()));
-            startFreezeBackfill(n, p, c.getFreezeBackfill());
+            startFreezeBackfill(n, bg, c.getFreezeBackfill());
             OciProperties.History h = c.getHistory();
-            if (h.isEnabled() && p instanceof io.openchain.core.history.AddressHistorySource src) {
+            if (h.isEnabled() && bg instanceof io.openchain.core.history.AddressHistorySource src) {
                 history.register(src, new io.openchain.app.history.AddressHistoryService.Config(h.getMaxBlocks(), h.getMaxPages(),
                         h.getMaxEvents(), h.getPause()));
             }
@@ -499,6 +491,40 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         } catch (RuntimeException e) {
             log.error("chain {} not started: {}", id, e.getMessage());
         }
+    }
+
+    /** Live indexing: 8 requests/s (burst 16); with {@link #BACKGROUND_RESILIENCE}, the previous shared budget of 10/s. */
+    static final io.openchain.blockchain.transport.ResilienceConfig LIVE_RESILIENCE = withRate(8, 16);
+    /** Address histories and freeze backfill: 2 requests/s (burst 4), their own circuit breaker. */
+    static final io.openchain.blockchain.transport.ResilienceConfig BACKGROUND_RESILIENCE = withRate(2, 4);
+
+    private static io.openchain.blockchain.transport.ResilienceConfig withRate(double perSecond, int burst) {
+        var d = io.openchain.blockchain.transport.ResilienceConfig.defaults();
+        return new io.openchain.blockchain.transport.ResilienceConfig(d.maxAttempts(), d.initialBackoff(), d.maxBackoff(), d.jitter(),
+                perSecond, burst, d.failureThreshold(), d.openDuration());
+    }
+
+    /** One client on the chain's endpoints (primary with the API key, then fallbacks); {@code suffix} names its breakers. */
+    static HttpJsonTransport transport(Network n, OciProperties.Chain c, String suffix, io.openchain.blockchain.transport.ResilienceConfig r) {
+        Map<String, String> headers = c.getApiKeyHeader() != null && c.getApiKey() != null && !c.getApiKey().isBlank()
+                ? Map.of(c.getApiKeyHeader(), c.getApiKey()) : Map.of();
+        List<RpcEndpoint> endpoints = new java.util.ArrayList<>();
+        endpoints.add(new RpcEndpoint(n.id() + suffix + "-primary", URI.create(c.getUrl()), headers, null, null, r));
+        int k = 0;
+        for (String u : c.getFallbackUrls()) {
+            if (u == null || u.isBlank()) continue;
+            endpoints.add(new RpcEndpoint(n.id() + suffix + "-fallback-" + (++k), URI.create(u.strip()), Map.of(), null, null, r));
+        }
+        return new HttpJsonTransport(endpoints, java.time.Clock.systemUTC(), io.openchain.blockchain.transport.Sleeper.SYSTEM);
+    }
+
+    private BlockchainProvider provider(Network n, OciProperties.Chain c, HttpJsonTransport http, String suffix) {
+        return switch (n) {
+            case TRON -> new TronGridProvider("tron-trongrid" + suffix, http, tokens, TronConfig.defaults());
+            case ETHEREUM, BSC, POLYGON -> new EvmJsonRpcProvider(n.id() + "-rpc" + suffix, n, new JsonRpcClient(http), tokens,
+                    EvmConfig.defaults(n).withHistoryChunks(c.getHistory().getChunkSize(), c.getHistory().getMinChunkSize()));
+            default -> throw new IllegalArgumentException("no provider adapter for " + n.id());
+        };
     }
 
     /** Registers (re-applying stored freezes) and, if configured, starts the freeze backfill of a real network. */
