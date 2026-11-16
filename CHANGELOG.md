@@ -11,6 +11,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 ### Added (phase 2 — fund flow trace engine, Fund Flow Trace P0-D, first part)
 
 - **Pure trace engine** (`oci-intelligence`, `io.openchain.intelligence.trace`; not exposed by the API yet). Follows value forward from an address or backward to its sources, per token (never mixing assets), within depth, node and flows-read limits. Attribution by pool replay in exact fractions, `PROPORTIONAL` (default) or `FIFO`, both stated as conventions; an unknown opening balance gives an interval with lower bound 0. Duplicates and a TRC-20 transfer seen live and by history count once, with both ids kept as evidence. Every stop has a reason (depth, nodes, flows read, exchange or bridge, minimum share, dust, unverified token, coverage gap, return to the seed, unknown opening balance, same-instant order); the result is `COMPLETE` only when no stop is caused by missing data. Deterministic: same request and flows, same result.
+- **Patterns on the traced graph** (P0-D, second part), always `INFERRED` and citing their flows: dispersion and consolidation (20 distinct counterparties, as the FanOut detector), circulation, peel chain (at least 3 detachments of at most 20 % each, the largest at most 1.5 times the smallest). Value that comes back to an address already on the way keeps moving but is not counted as received twice.
 
 ### Added (phase 2 — coverage of an answer, Fund Flow Trace P0-B, third part)
 

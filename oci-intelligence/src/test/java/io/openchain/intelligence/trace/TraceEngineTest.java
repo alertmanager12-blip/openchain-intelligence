@@ -36,10 +36,10 @@ class TraceEngineTest {
     static final String K = Trace.tokenKey(USD);
     static final Instant T0 = Instant.parse("2026-11-01T00:00:00Z");
 
-    static Address a(String s) { return new Address(NET, "0x" + s); }
+    public static Address a(String s) { return new Address(NET, "0x" + s); }
 
     /** In-memory source: flows, coverage, opening balances (default 0, i.e. known empty), labels. */
-    static final class Src implements Trace.Source {
+    public static final class Src implements Trace.Source {
         final List<ValueFlow> flows = new ArrayList<>();
         final Set<Address> incomplete = new HashSet<>();
         final Map<Address, Optional<BigInteger>> opening = new HashMap<>();
@@ -70,7 +70,7 @@ class TraceEngineTest {
     final Address A = a("a"), B = a("b"), C = a("c"), D = a("d"), E = a("e"), S = a("5"), S1 = a("51"), S2 = a("52"), X = a("ee"),
             Y = a("ff"), Z = a("2"), P = a("99");
 
-    static Trace.Attribution at(Trace.Result r, Address x) {
+    public static Trace.Attribution at(Trace.Result r, Address x) {
         return r.attributions().stream().filter(t -> t.address().equals(x)).findFirst().orElse(null);
     }
 

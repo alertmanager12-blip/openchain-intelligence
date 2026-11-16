@@ -55,6 +55,8 @@ public final class TraceEngine {
     private final boolean forward;
 
     private final Map<Address, Integer> depth = new LinkedHashMap<>();
+    /** The address through which each address was first reached (closer to the seed): back edges are recognised with it. */
+    private final Map<Address, Address> parent = new HashMap<>();
     private final Map<Address, Loaded> loaded = new HashMap<>();
     private final Set<Address> partialNodes = new HashSet<>();
     private final Map<String, Pool> pools = new HashMap<>(); // address|tokenKey
@@ -271,7 +273,20 @@ public final class TraceEngine {
             return false;
         }
         depth.put(a, d);
+        parent.put(a, from);
         return true;
+    }
+
+    /** True when {@code x} is {@code a} or one of the addresses the trace went through to reach {@code a}. */
+    private boolean onPathTo(Address x, Address a) {
+        for (Address c = a; c != null; c = parent.get(c)) if (c.equals(x)) return true;
+        return false;
+    }
+
+    /** A flow that brings traced value back to an address the trace already went through on the way: circulation. */
+    private boolean backEdge(Edge e) {
+        Address near = forward ? e.from() : e.to(), far = forward ? e.to() : e.from();
+        return depth.containsKey(near) && onPathTo(far, near);
     }
 
     /** One FORWARD round from the values of the previous round. */
@@ -428,6 +443,86 @@ public final class TraceEngine {
         stops.putIfAbsent(r + "|" + a.value() + "|" + (tokenKey == null ? "" : tokenKey), new Stop(a, tokenKey, r, detail));
     }
 
+    // ---- patterns (all INFERRED) -----------------------------------------------------------------------------------
+
+    private List<Trace.Finding> findings(List<Edge> edges) {
+        List<Trace.Finding> out = new ArrayList<>();
+        var pt = req.patterns();
+        List<Edge> ahead = new ArrayList<>();
+        for (Edge e : edges) {
+            if (backEdge(e)) {
+                Address far = forward ? e.to() : e.from(), near = forward ? e.from() : e.to();
+                List<Address> loop = new ArrayList<>();
+                for (Address c = near; c != null; c = parent.get(c)) { loop.add(0, c); if (c.equals(far)) break; }
+                out.add(new Trace.Finding(Trace.FindingType.CIRCULATION, "INFERRED", List.copyOf(loop), List.of(e.eventId()),
+                        "traced value returns to " + far.value() + " after " + (loop.size() - 1) + " hop(s)"));
+            } else {
+                ahead.add(e);
+            }
+        }
+        // dispersion (forward) / consolidation (backward): one address, many distinct counterparties of traced value
+        Map<String, List<Edge>> byHub = new TreeMap<>();
+        for (Edge e : ahead) byHub.computeIfAbsent((forward ? e.from() : e.to()).value() + "|" + e.tokenKey(), k -> new ArrayList<>()).add(e);
+        for (List<Edge> group : byHub.values()) {
+            Address hub = forward ? group.getFirst().from() : group.getFirst().to();
+            long distinct = group.stream().map(e -> forward ? e.to() : e.from()).distinct().count();
+            if (forward && distinct >= pt.minFanOut()) {
+                out.add(new Trace.Finding(Trace.FindingType.DISPERSION, "INFERRED", List.of(hub), group.stream().map(Edge::eventId).toList(),
+                        "traced value sent to " + distinct + " distinct addresses"));
+            } else if (!forward && distinct >= pt.minFanIn()) {
+                out.add(new Trace.Finding(Trace.FindingType.CONSOLIDATION, "INFERRED", List.of(hub), group.stream().map(Edge::eventId).toList(),
+                        "traced value received from " + distinct + " distinct addresses"));
+            }
+        }
+        if (forward) out.addAll(peelChains(ahead));
+        return List.copyOf(out);
+    }
+
+    /**
+     * Peel chain: consecutive addresses that each pass most of the value on to the next one and detach a small, regular
+     * part elsewhere. A step: exactly two traced outflows of one token, the smaller at most {@code maxPeelShare} of both.
+     */
+    private List<Trace.Finding> peelChains(List<Edge> ahead) {
+        var pt = req.patterns();
+        Map<String, List<Edge>> outs = new TreeMap<>();
+        for (Edge e : ahead) outs.computeIfAbsent(e.from().value() + "|" + e.tokenKey(), k -> new ArrayList<>()).add(e);
+        Map<String, Edge[]> steps = new TreeMap<>(); // from|token -> {main, peel}
+        for (var en : outs.entrySet()) {
+            List<Edge> o = en.getValue();
+            if (o.size() != 2) continue;
+            Edge big = o.get(0).rawAmount().compareTo(o.get(1).rawAmount()) >= 0 ? o.get(0) : o.get(1);
+            Edge small = big == o.get(0) ? o.get(1) : o.get(0);
+            Fraction share = Fraction.of(small.rawAmount()).dividedBy(Fraction.of(small.rawAmount().add(big.rawAmount())));
+            if (share.compareTo(pt.maxPeelShare()) <= 0) steps.put(en.getKey(), new Edge[]{big, small});
+        }
+        Set<String> continued = new HashSet<>();
+        for (Edge[] st : steps.values()) continued.add(st[0].to().value() + "|" + st[0].tokenKey());
+        List<Trace.Finding> out = new ArrayList<>();
+        for (var en : steps.entrySet()) {
+            if (continued.contains(en.getKey())) continue; // not the start of a chain
+            List<Address> chain = new ArrayList<>();
+            List<Edge> peels = new ArrayList<>(), mains = new ArrayList<>();
+            String k = en.getKey();
+            Set<String> seen = new HashSet<>();
+            while (steps.containsKey(k) && seen.add(k)) {
+                Edge[] st = steps.get(k);
+                chain.add(st[0].from());
+                mains.add(st[0]);
+                peels.add(st[1]);
+                k = st[0].to().value() + "|" + st[0].tokenKey();
+            }
+            if (peels.size() < pt.minPeels()) continue;
+            BigInteger min = peels.stream().map(Edge::rawAmount).min(BigInteger::compareTo).orElseThrow();
+            BigInteger max = peels.stream().map(Edge::rawAmount).max(BigInteger::compareTo).orElseThrow();
+            if (min.signum() == 0 || new Fraction(max, min).compareTo(pt.maxPeelSpread()) > 0) continue; // irregular
+            List<String> ids = new ArrayList<>();
+            for (int i = 0; i < peels.size(); i++) { ids.add(mains.get(i).eventId()); ids.add(peels.get(i).eventId()); }
+            out.add(new Trace.Finding(Trace.FindingType.PEEL_CHAIN, "INFERRED", List.copyOf(chain), List.copyOf(ids),
+                    peels.size() + " regular detachments (" + min + " to " + max + " raw units) along " + chain.size() + " addresses"));
+        }
+        return out;
+    }
+
     /** Depth of a reached address, or one more than the address it got value from (not followed: dust, share, budget). */
     private int depthOf(Address a, List<Edge> edges) {
         Integer d = depth.get(a);
@@ -450,9 +545,11 @@ public final class TraceEngine {
             // a dust or unverified flow into the seed is not part of a backward trace
             if (!forward && f.to().equals(req.seed()) && !followsQuiet(f)) continue;
             Address at = forward ? f.to() : f.from();
-            edges.add(new Edge(f.eventId(), List.copyOf(aliases.getOrDefault(f.eventId(), List.of())), f.txHash(), f.timestamp(), f.from(), f.to(),
-                    Trace.tokenKey(f.token()), f.rawAmount(), t.low(), t.high()));
-            if (!at.equals(req.seed())) perAddress.merge(at.value() + "|" + Trace.tokenKey(f.token()), t, Traced::plus);
+            Edge edge = new Edge(f.eventId(), List.copyOf(aliases.getOrDefault(f.eventId(), List.of())), f.txHash(), f.timestamp(), f.from(), f.to(),
+                    Trace.tokenKey(f.token()), f.rawAmount(), t.low(), t.high());
+            edges.add(edge);
+            // value coming back to an address already on the way is not received a second time (circulation finding)
+            if (!at.equals(req.seed()) && !backEdge(edge)) perAddress.merge(at.value() + "|" + Trace.tokenKey(f.token()), t, Traced::plus);
         }
         edges.sort(Comparator.comparing(Edge::timestamp).thenComparing(Edge::eventId));
         List<Attribution> attributions = new ArrayList<>();
@@ -473,7 +570,16 @@ public final class TraceEngine {
         nodes.sort(Comparator.comparingInt(Node::depth).thenComparing(n -> n.address().value()));
         List<Stop> st = new ArrayList<>(stops.values());
         boolean complete = st.stream().allMatch(s -> s.reason().benign()) && !readLimitHit;
+        List<Trace.Finding> findings = findings(edges);
+        for (Trace.Finding x : findings) {
+            if (x.type() == Trace.FindingType.CIRCULATION && !x.addresses().isEmpty()) {
+                stop(x.addresses().getFirst(), null, StopReason.CYCLE, "traced value comes back to this address (" + x.eventIds() + ")");
+            }
+        }
+        st = new ArrayList<>(stops.values());
+        complete = st.stream().allMatch(s -> s.reason().benign()) && !readLimitHit;
         return new Trace.Result(complete ? Trace.Status.COMPLETE : Trace.Status.PARTIAL, req.direction(), req.method(), List.copyOf(nodes),
-                List.copyOf(edges), List.copyOf(attributions), List.copyOf(st), new Trace.Counters(depth.size(), flowsRead, rounds), Trace.ENGINE_VERSION);
+                List.copyOf(edges), List.copyOf(attributions), List.copyOf(st), findings, new Trace.Counters(depth.size(), flowsRead, rounds),
+                Trace.ENGINE_VERSION);
     }
 }

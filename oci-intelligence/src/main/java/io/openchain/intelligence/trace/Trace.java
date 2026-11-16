@@ -51,17 +51,45 @@ public final class Trace {
      * @param dust      per-symbol thresholds (human units) below which a flow is not followed ({@code DetectionConfig})
      */
     public record Request(Network network, Address seed, Direction direction, Window window, String tokenKey, Method method,
-                          Limits limits, Set<LabelCategory> stopAt, Fraction minShare, Map<String, BigDecimal> dust) {
+                          Limits limits, Set<LabelCategory> stopAt, Fraction minShare, Map<String, BigDecimal> dust, Patterns patterns) {
         public static Request of(Address seed, Direction direction) {
             return new Request(seed.network(), seed, direction, Window.ALL, null, Method.PROPORTIONAL, Limits.DEFAULTS,
-                    Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE), new Fraction(BigInteger.ONE, BigInteger.valueOf(1_000)), Map.of());
+                    Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE), new Fraction(BigInteger.ONE, BigInteger.valueOf(1_000)), Map.of(),
+                    Patterns.DEFAULTS);
         }
-        public Request withMethod(Method m) { return new Request(network, seed, direction, window, tokenKey, m, limits, stopAt, minShare, dust); }
-        public Request withLimits(Limits l) { return new Request(network, seed, direction, window, tokenKey, method, l, stopAt, minShare, dust); }
-        public Request withDust(Map<String, BigDecimal> d) { return new Request(network, seed, direction, window, tokenKey, method, limits, stopAt, minShare, d); }
-        public Request withMinShare(Fraction f) { return new Request(network, seed, direction, window, tokenKey, method, limits, stopAt, f, dust); }
-        public Request withToken(String key) { return new Request(network, seed, direction, window, key, method, limits, stopAt, minShare, dust); }
+        public Request(Network network, Address seed, Direction direction, Window window, String tokenKey, Method method, Limits limits,
+                       Set<LabelCategory> stopAt, Fraction minShare, Map<String, BigDecimal> dust) {
+            this(network, seed, direction, window, tokenKey, method, limits, stopAt, minShare, dust, Patterns.DEFAULTS);
+        }
+        public Request withMethod(Method m) { return new Request(network, seed, direction, window, tokenKey, m, limits, stopAt, minShare, dust, patterns); }
+        public Request withLimits(Limits l) { return new Request(network, seed, direction, window, tokenKey, method, l, stopAt, minShare, dust, patterns); }
+        public Request withDust(Map<String, BigDecimal> d) { return new Request(network, seed, direction, window, tokenKey, method, limits, stopAt, minShare, d, patterns); }
+        public Request withMinShare(Fraction f) { return new Request(network, seed, direction, window, tokenKey, method, limits, stopAt, f, dust, patterns); }
+        public Request withPatterns(Patterns p) { return new Request(network, seed, direction, window, tokenKey, method, limits, stopAt, minShare, dust, p); }
+        public Request withToken(String key) { return new Request(network, seed, direction, window, key, method, limits, stopAt, minShare, dust, patterns); }
     }
+
+    /**
+     * Thresholds of the patterns found on the bounded graph (all INFERRED findings).
+     *
+     * @param minFanOut     distinct recipients of traced value for a dispersion (as the FanOut detector: 20)
+     * @param minFanIn      distinct senders for a consolidation
+     * @param minPeels      consecutive detachments for a peel chain
+     * @param maxPeelShare  largest share of the value passing through that a detachment may take
+     * @param maxPeelSpread largest ratio between the biggest and the smallest detachment (regularity)
+     */
+    public record Patterns(int minFanOut, int minFanIn, int minPeels, Fraction maxPeelShare, Fraction maxPeelSpread) {
+        public static final Patterns DEFAULTS = new Patterns(20, 20, 3, new Fraction(BigInteger.ONE, BigInteger.valueOf(5)),
+                new Fraction(BigInteger.valueOf(3), BigInteger.TWO));
+    }
+
+    public enum FindingType { DISPERSION, CONSOLIDATION, CIRCULATION, PEEL_CHAIN }
+
+    /**
+     * A pattern on the traced graph. Always an inference (ADR-0023 amendment 1: {@code INFERRED}), never an identity or an
+     * intent; cites the flows it rests on.
+     */
+    public record Finding(FindingType type, String level, List<Address> addresses, List<String> eventIds, String detail) {}
 
     /** What the engine reads. Implemented by the application (memory, journal, history); a list in tests. */
     public interface Source {
@@ -111,5 +139,5 @@ public final class Trace {
     public record Counters(int nodes, int flowsRead, int rounds) {}
 
     public record Result(Status status, Direction direction, Method method, List<Node> nodes, List<Edge> edges,
-                         List<Attribution> attributions, List<Stop> stops, Counters counters, String engineVersion) {}
+                         List<Attribution> attributions, List<Stop> stops, List<Finding> findings, Counters counters, String engineVersion) {}
 }
