@@ -1,6 +1,15 @@
 # Fund Flow Trace P0-D — moteur de traçage pur
 
-Statut : **conception, aucune implémentation** (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
+Statut : **première partie implémentée le 2026-11-16** (D-1, paquet `io.openchain.intelligence.trace` : `Trace`,
+`TraceEngine`, `Fraction`). Scénarios 1, 2, 5, 8 à 13, déterminisme, limites et exactitude sur 8 sauts
+(`TraceEngineTest`). Écarts au contrat : flux = `ValueFlow` (bloc et index de log absents tant que D7 option a n'est pas
+faite ; l'ordre à instant égal est supposé et signalé `SAME_TIME_ORDER`) ; couverture lue comme un booléen par adresse
+(`Source.complete`) ; solde d'ouverture inconnu = intervalle [0 ; valeur avec le plus petit solde cohérent] ; arrêt
+`CYCLE` seulement pour un retour à la graine (une boucle entre deux autres adresses peut compter deux fois la même valeur,
+à traiter avec les motifs, D-2) ; `ASSET_CHANGE` jamais émis (aucun échange d'actif détecté). Restent : D-2 motifs
+(scénarios 3, 4, 6, 7), D-3 `TraceDiff` (14, 15). Aucun branchement à l'API.
+
+Conception (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
 
 Précision : ChainSentinel n'utilise **pas MongoDB**. La persistance est PostgreSQL (Flyway, `oci-app`) ; les flux de travail
 sont en mémoire (`oci-intelligence`). Le moteur est indépendant de PostgreSQL, du RPC, du HTTP et d'Angular.

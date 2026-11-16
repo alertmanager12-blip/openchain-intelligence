@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 2 — fund flow trace engine, Fund Flow Trace P0-D, first part)
+
+- **Pure trace engine** (`oci-intelligence`, `io.openchain.intelligence.trace`; not exposed by the API yet). Follows value forward from an address or backward to its sources, per token (never mixing assets), within depth, node and flows-read limits. Attribution by pool replay in exact fractions, `PROPORTIONAL` (default) or `FIFO`, both stated as conventions; an unknown opening balance gives an interval with lower bound 0. Duplicates and a TRC-20 transfer seen live and by history count once, with both ids kept as evidence. Every stop has a reason (depth, nodes, flows read, exchange or bridge, minimum share, dust, unverified token, coverage gap, return to the seed, unknown opening balance, same-instant order); the result is `COMPLETE` only when no stop is caused by missing data. Deterministic: same request and flows, same result.
+
 ### Added (phase 2 — coverage of an answer, Fund Flow Trace P0-B, third part)
 
 - **`/exposure` says which blocks it rests on.** `coverage` gains `fromBlock`/`toBlock`, `segments` (address history, blocks indexed live) and `knownGaps` (blocks not indexed). It is `COMPLETE` only when the address history covers token and native transfers, joins without a hole the first block indexed live, no recorded gap falls in the range and the address keeps all its flows in memory; otherwise `PARTIAL` with the reasons (truncated or missing history, hole between history and live indexing, gap, trimmed working set, source without native transfers). The Exposure tab says "no exposure in blocks X to Y" only with complete coverage, and lists the blocks not indexed. Ethereum histories (`eth_getLogs`) have no native transfers, so an Ethereum answer stays partial; EVM internal transactions and TRC-10 remain listed as limits.

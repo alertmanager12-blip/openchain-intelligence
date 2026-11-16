@@ -25,13 +25,13 @@ public final class TransferIdentity {
     private static final Pattern LIVE = Pattern.compile("^[a-z0-9-]+:[^:]+:(\\d+)$");
 
     /** Rank of a history token transfer without log index ({@code n} of its id), empty for any other flow. */
-    static OptionalInt historyRank(ValueFlow f) {
+    public static OptionalInt historyRank(ValueFlow f) {
         Matcher m = HISTORY.matcher(f.eventId());
         return m.matches() ? OptionalInt.of(Integer.parseInt(m.group(1))) : OptionalInt.empty();
     }
 
     /** Log index of a live token transfer, empty for native transfers and history ids. */
-    static OptionalInt liveLogIndex(ValueFlow f) {
+    public static OptionalInt liveLogIndex(ValueFlow f) {
         if (f.token().isNative()) return OptionalInt.empty();
         Matcher m = LIVE.matcher(f.eventId());
         return m.matches() ? OptionalInt.of(Integer.parseInt(m.group(1))) : OptionalInt.empty();
@@ -47,10 +47,16 @@ public final class TransferIdentity {
      * for a live one), if any. Reads only the sender's outgoing flows.
      */
     public static Optional<ValueFlow> counterpart(ValueFlow f, FlowStore store) {
+        if (historyRank(f).isEmpty() && liveLogIndex(f).isEmpty()) return Optional.empty();
+        return counterpartIn(f, store.outgoing(f.from()));
+    }
+
+    /** Same as {@link #counterpart(ValueFlow, FlowStore)} among {@code candidates} (the trace engine's normalisation). */
+    public static Optional<ValueFlow> counterpartIn(ValueFlow f, java.util.Collection<ValueFlow> candidates) {
         OptionalInt rank = historyRank(f);
         OptionalInt logIndex = liveLogIndex(f);
         if (rank.isEmpty() && logIndex.isEmpty()) return Optional.empty();
-        List<ValueFlow> same = store.outgoing(f.from()).stream()
+        List<ValueFlow> same = candidates.stream()
                 .filter(g -> !g.eventId().equals(f.eventId()) && sameTransfer(f, g)).toList();
         if (same.isEmpty()) return Optional.empty();
         if (rank.isPresent()) {
