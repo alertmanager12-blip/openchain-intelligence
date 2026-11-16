@@ -27,7 +27,7 @@ lignes de specs.
 | 1 — Exactitude | B1, B2, B3, I1, I2, I11 | **corrigé**, commit `444e423` (570 tests Java, 145 frontend) |
 | 2 — Disponibilité | I15, I16, I17, I18, I24 | **corrigé** le 2026-11-13 (voir CHANGELOG) |
 | 2 (commit) | — | commit `2719814` (577 tests Java) |
-| 3 — Sécurité et exploitation | I31 | **corrigé** le 2026-11-13 ; I27, I28, I29, I30 attendent une décision ; I32 (SHA des actions CI) à faire par Dependabot |
+| 3 — Sécurité et exploitation | I31 | **corrigé** le 2026-11-13 ; I27, I28, I29, I30 attendent une décision ; I32 (SHA des actions CI) **corrigé** le 2026-11-16 |
 | 4 — Fournisseurs | I10, I19, I20, I21, I22 | **corrigé** le 2026-11-13 (I22 le 2026-11-16, après vérification à la source) |
 | 3 et 4 (commit) | — | commit `3580931` (583 tests Java) |
 | 5 — Reste, première partie | I6, I7, I12, I13, I23, I35, jauge de retard (tête inconnue) | **corrigé** le 2026-11-13 (voir CHANGELOG) |
@@ -161,7 +161,7 @@ notifications séquentiels.
 | I29 | Clés API statiques de configuration sans expiration, et jamais révoquées quand on les retire de la configuration | `ApiKeyService.java:101-104, 157-158` | [R] |
 | I30 | Console et proxy API publiés sur **toutes les interfaces** en HTTP (`"4200:8080"`), alors que l'API seule est limitée à 127.0.0.1 | `docker-compose.yml:114` | [V] |
 | I31 | `deploy/smoke-test.sh` reconstruit les images **sous les tags de production** : sur cette machine, le redémarrage suivant lancerait la branche en cours | `smoke-test.sh:28` + tags fixes de `docker-compose.yml` | [V] |
-| I32 | Actions CI épinglées par tag (pas par SHA) pour `checkout`, `setup-java`, `setup-node`, `upload-artifact` et `codeql` ; `npx license-checker` hors lockfile | `ci.yml:22-151, 84` | [R] |
+| I32 | Actions CI épinglées par tag (pas par SHA) pour `checkout`, `setup-java`, `setup-node`, `upload-artifact` et `codeql` ; `npx license-checker` hors lockfile | `ci.yml:22-151, 84` ; **corrigé** le 2026-11-16 : toutes les actions épinglées par SHA (version en commentaire, Dependabot `github-actions` les met à jour), `license-checker-rseidelsohn` 4.4.2 en dépendance de développement verrouillée, appelé par `npx --no-install` | [V] |
 | I33 | `Bearer oci_…` probablement refusé quand OIDC est actif (le filtre JWT passe avant le filtre clé API) | `ApiKeyAuthenticationFilter.java:71`, `SecurityConfiguration.java:65` | [?] |
 | I34 | Démo non isolée de la production sur la même base (`pgdata`) : historiques et journal restaurés sans vérifier le mode | `AddressHistoryService.java:123-126` | [R] |
 | I35 | La liste de surveillance modifie la portée des règles comportementales sans audit (`watchlist:write` est un droit d'analyste) | `WatchlistController.java` | [R] |
