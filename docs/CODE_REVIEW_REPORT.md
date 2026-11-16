@@ -28,7 +28,7 @@ lignes de specs.
 | 2 — Disponibilité | I15, I16, I17, I18, I24 | **corrigé** le 2026-11-13 (voir CHANGELOG) |
 | 2 (commit) | — | commit `2719814` (577 tests Java) |
 | 3 — Sécurité et exploitation | I31 | **corrigé** le 2026-11-13 ; I27, I28, I29, I30 attendent une décision ; I32 (SHA des actions CI) à faire par Dependabot |
-| 4 — Fournisseurs | I10, I19, I20, I21 | **corrigé** le 2026-11-13 ; I22 (HTTP 403 de TronGrid) non traité : comportement à vérifier à la source |
+| 4 — Fournisseurs | I10, I19, I20, I21, I22 | **corrigé** le 2026-11-13 (I22 le 2026-11-16, après vérification à la source) |
 | 3 et 4 (commit) | — | commit `3580931` (583 tests Java) |
 | 5 — Reste, première partie | I6, I7, I12, I13, I23, I35, jauge de retard (tête inconnue) | **corrigé** le 2026-11-13 (voir CHANGELOG) |
 | 5 (commit, première partie) | — | commit `aab3f8a` (589 tests Java, 146 console) |
@@ -146,7 +146,7 @@ notifications séquentiels.
 | I19 | Erreurs JSON-RPC renvoyées en HTTP 200 (par exemple -32005, limite de débit) traitées comme succès par retry, disjoncteur et basculement | `JsonRpcClient.java:39-46`, `HttpJsonTransport.java:126-127` | [R] |
 | I20 | `TronGridProvider.getBlock` appelé hors indexeur déclenche préchargements et appels lourds et vole le memo de l'indexeur : quota TronGrid épuisé | `TronGridProvider.java:159-162, 205, 400, 413` | [R] |
 | I21 | Réponses HTTP lues sans limite de taille | `HttpJsonTransport.java:109` | [R] |
-| I22 | Limitation de débit TronGrid (HTTP 403) possiblement classée comme permanente | `HttpJsonTransport.java:123-128` | [?] |
+| I22 | Limitation de débit TronGrid (HTTP 403) classée comme permanente : pas de nouvel essai, et le disjoncteur la comptait comme un succès, donc l'interrogation continuait au même rythme pendant le blocage. Confirmé par la documentation TronGrid (« Rate limits », consultée le 2026-11-16 : 429 ou 403, à retenter avec attente) ; **corrigé** le 2026-11-16 : 403 transitoire (attente, `Retry-After` respecté, disjoncteur, basculement) | `HttpJsonTransport.java:158-163` | [V] |
 | I23 | Un échec de la restauration du journal empêche la reprise des historiques et la purge | `Bootstrap.java:139-143, 388-404` | [R] |
 | I24 | `GET /alerts` et le tableau de bord chargent **toutes** les alertes et tout leur historique, puis paginent en mémoire ; aucune rétention des alertes ni des livraisons | `AlertFacade.java:73`, `JdbcAlertRepository.java:125, 150-162` | [V] |
 | I25 | Plafonds mémoire du moteur de règles par règle (pas de plafond global) ; l'éviction LRU des clés de groupe est exploitable pour échapper à un seuil | `RuleEngine.java:348-355`, `EngineConfig.java:29` | [R] |

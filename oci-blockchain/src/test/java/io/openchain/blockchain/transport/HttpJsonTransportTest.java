@@ -41,6 +41,36 @@ class HttpJsonTransportTest {
         assertThat(sleeper.sleeps).containsExactly(Duration.ofSeconds(2));
     }
 
+    /**
+     * Review item I22: TronGrid answers abnormally frequent polling with HTTP 403 and a temporary block (TRON Developer Hub,
+     * "Rate limits", checked 2026-11-16: "Rate-limited requests usually return 429 or 403 and should be retried with
+     * backoff"). A 403 is therefore transient: retried with backoff (Retry-After honoured), counted by the circuit breaker
+     * so that polling slows down instead of prolonging the block, and a reason to fail over.
+     */
+    @Test void a403IsATemporaryBlockRetriedWithBackoff() {
+        AtomicInteger n = new AtomicInteger();
+        server.route("/x", r -> n.incrementAndGet() == 1 ? new Response(403, "{}", Map.of("Retry-After", "3")) : Response.ok("{}"));
+        transport(fastResilience(3, 10)).get("/x");
+        assertThat(n).hasValue(2);
+        assertThat(sleeper.sleeps).containsExactly(Duration.ofSeconds(3));
+    }
+
+    @Test void repeated403sOpenTheCircuitAndFailOver() throws Exception {
+        server.route("/x", r -> Response.status(403));
+        HttpJsonTransport t = transport(fastResilience(1, 3));
+        for (int i = 0; i < 3; i++) {
+            assertThatThrownBy(() -> t.get("/x")).isInstanceOf(ProviderException.class).hasMessageContaining("HTTP 403")
+                    .satisfies(e -> assertThat(((ProviderException) e).retryable()).isTrue());
+        }
+        assertThat(t.circuitState()).isEqualTo(CircuitBreaker.State.OPEN);
+        try (StubHttpServer backup = new StubHttpServer()) {
+            backup.route("/x", r -> Response.ok("{\"v\":2}"));
+            HttpJsonTransport two = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), fastResilience(1, 10)),
+                    endpoint("backup", backup.url(), fastResilience(1, 10))), Clock.systemUTC(), sleeper);
+            assertThat(two.get("/x").path("v").asInt()).isEqualTo(2);
+        }
+    }
+
     @Test void doesNotRetryClientErrors() {
         server.route("/x", r -> Response.status(400));
         assertThatThrownBy(() -> transport(fastResilience(4, 10)).get("/x"))

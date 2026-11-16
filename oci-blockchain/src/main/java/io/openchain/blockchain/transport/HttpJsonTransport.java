@@ -155,6 +155,12 @@ public final class HttpJsonTransport {
             if (status == 429) {
                 throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 429 rate limited", retryAfter(resp));
             }
+            if (status == 403) {
+                // TronGrid answers abnormally frequent polling with 403 and a temporary block, to be retried with backoff
+                // (TRON Developer Hub, "Rate limits"). Treated as transient so that the breaker counts it and polling slows
+                // down; a 403 that lasts (key refused) opens the circuit and fails over instead of hammering the endpoint.
+                throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 403 forbidden or temporarily blocked", retryAfter(resp));
+            }
             if (status >= 500) throw new ProviderException(endpoint.name() + ": HTTP " + status, true);
             if (status >= 400) {
                 // some JSON-RPC gateways answer a JSON-RPC error with HTTP 400 (e.g. dRPC "ranges over 10000 blocks are not
