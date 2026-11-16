@@ -3,6 +3,7 @@ package io.openchain.app.api;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.openchain.app.config.OciProperties;
 import io.openchain.app.security.ApiKeyService;
+import io.openchain.app.security.ClientScope;
 import io.openchain.app.security.Scopes;
 import io.openchain.app.security.UserDirectory;
 import java.time.Duration;
@@ -39,14 +40,17 @@ public class AdminController {
     }
 
     public record ApiKeyDto(String id, String name, String prefix, List<String> scopes, Instant createdAt, Instant lastUsedAt,
-                            Instant expiresAt, boolean revoked, Instant revokedAt, String createdBy,
+                            Instant expiresAt, boolean revoked, Instant revokedAt, String createdBy, String clientScope,
                             @JsonInclude(JsonInclude.Include.NON_NULL) String secret) {}
 
     /** {@code expiresAt} (RFC 3339) or {@code expiresInDays}; default {@code oci.security.default-key-ttl}. */
     public record CreateKeyRequest(String name, List<String> scopes, String expiresAt, Integer expiresInDays) {}
 
+    /** Keys of the caller's client scope only (decision D1): an administrator never sees another client's keys. */
     @GetMapping("/api-keys")
-    public List<ApiKeyDto> listKeys() { return keys.list().stream().map(k -> dto(k, null)).toList(); }
+    public List<ApiKeyDto> listKeys(Authentication auth) {
+        return keys.list(ClientScope.of(auth)).stream().map(k -> dto(k, null)).toList();
+    }
 
     @PostMapping("/api-keys")
     @ResponseStatus(HttpStatus.CREATED)
@@ -81,13 +85,14 @@ public class AdminController {
         else if (ttl.compareTo(props.getSecurity().getMaxKeyTtl()) > 0)
             errors.add(new ApiException.FieldError("/expiresAt", "max_exceeded", "expiry must be <= " + props.getSecurity().getMaxKeyTtl().toDays() + " days"));
         if (!errors.isEmpty()) throw ApiException.validation("API key request is invalid", errors);
-        ApiKeyService.Created c = keys.create(name, scopes, ttl, auth.getName());
+        ApiKeyService.Created c = keys.create(name, scopes, ttl, auth.getName(), ClientScope.of(auth));
         return dto(c.key(), c.plaintext());
     }
 
     @PostMapping("/api-keys/{id}/revoke")
     public ApiKeyDto revoke(@PathVariable String id, Authentication auth) {
-        keys.find(id).orElseThrow(() -> ApiException.notFound("API key " + id + " does not exist"));
+        // another client's key gets the same answer as a key that does not exist (no disclosure)
+        keys.find(id, ClientScope.of(auth)).orElseThrow(() -> ApiException.notFound("API key " + id + " does not exist"));
         return dto(keys.revoke(id, auth.getName()), null);
     }
 
@@ -97,7 +102,7 @@ public class AdminController {
 
     private static ApiKeyDto dto(ApiKeyService.StoredKey k, String secret) {
         return new ApiKeyDto(k.id(), k.name(), k.displayPrefix(), List.copyOf(k.scopes()), k.createdAt(), k.lastUsedAt(), k.expiresAt(),
-                k.revoked(), k.revokedAt(), k.createdBy(), secret);
+                k.revoked(), k.revokedAt(), k.createdBy(), k.clientScope(), secret);
     }
 
     // ---- users --------------------------------------------------------------------------------------------------

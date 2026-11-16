@@ -7,7 +7,7 @@ import { Router } from '@angular/router';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EnabledNetworks } from '../../core/enabled-networks';
-import { Graph, GraphNode, NETWORKS, NetworkId, RiskLevel } from '../../core/models';
+import { Graph, GraphDirection, GraphNode, GraphStop, NETWORKS, NetworkId, RiskLevel } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
 import { ThemeService } from '../../core/theme.service';
 import { Toasts } from '../../core/toasts';
@@ -32,10 +32,20 @@ function dayOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
+/**
+ * Edges with at least one transfer in the range: an edge spans its first to its last transfer, so it is kept when that
+ * span overlaps the range (filtering on the last transfer only dropped edges with earlier transfers in range, G10).
+ */
+export function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
   return g.edges
-    .filter((e) => !((range.from && e.timestamp < range.from) || (range.to && e.timestamp > range.to)))
-    .map((edge) => ({ key: `${edge.id}:${edge.txHash}`, edge }));
+    .filter((e) => !((range.from && e.timestamp < range.from) || (range.to && (e.firstTimestamp ?? e.timestamp) > range.to)))
+    .map((edge) => ({ key: `${edge.source}>${edge.target}>${edge.token.network}:${edge.token.contract ?? edge.token.symbol}`, edge }));
+}
+
+/** Stops that tell where the graph is incomplete (not the near-universal unknown opening balance or same-instant order). */
+const QUIET_STOPS = new Set(['UNKNOWN_OPENING_BALANCE', 'SAME_TIME_ORDER', 'BELOW_MIN_SHARE', 'DUST', 'UNVERIFIED_TOKEN']);
+export function structuralStops(stops: GraphStop[] | null | undefined): GraphStop[] {
+  return (stops ?? []).filter((s) => !QUIET_STOPS.has(s.reason));
 }
 
 @Component({
@@ -60,6 +70,11 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
         <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">Load graph</button>
       </form>
         <div class="tools" role="toolbar" aria-label="Graph options">
+          <mat-button-toggle-group aria-label="Direction" [value]="direction()" (change)="direction.set($event.value)">
+            <mat-button-toggle value="out" title="Where value sent by the root went">Out</mat-button-toggle>
+            <mat-button-toggle value="in" title="Where value received by the root came from">In</mat-button-toggle>
+            <mat-button-toggle value="both" title="Both sides, each with its own depth">Both</mat-button-toggle>
+          </mat-button-toggle-group>
           <mat-button-toggle-group aria-label="Depth" [value]="depth()" (change)="depth.set($event.value)">
             @for (d of [1, 2, 3]; track d) { <mat-button-toggle [value]="d">{{ d }} {{ d === 1 ? 'hop' : 'hops' }}</mat-button-toggle> }
           </mat-button-toggle-group>
@@ -82,11 +97,21 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
             @if (nodes().length) {
               <span><strong>{{ nodes().length }}</strong> wallets</span><span><strong>{{ edges().length }}</strong> transfers</span><span><strong>{{ maxHop() }}</strong> {{ maxHop() === 1 ? 'hop' : 'hops' }} deep</span>
               @if (truncated()) { <span class="warn"><strong>Truncated</strong>: narrow the token or dates</span> }
+              @if (stops().length) { <span class="warn"><strong>Partial</strong>: {{ stops().length }} {{ stops().length === 1 ? 'stop' : 'stops' }}</span> }
             }
           </p>
+          <button matButton="outlined" class="sm" type="button" (click)="verify()" [disabled]="!edges().length || verifying()" title="Check whether transfers shown are still held (chain reorganisation)">Check for changes</button>
           <button matButton="outlined" class="sm" type="button" (click)="cmd('fit')" [disabled]="!nodes().length">Fit to view</button>
           <button matButton="outlined" class="sm" type="button" (click)="cmd('png')" [disabled]="!nodes().length">Export PNG</button>
         </div>
+        @if (nodes().length) {
+          <p class="small muted explain">Only links value could have taken are shown: each transfer follows the direction of value and happens after the one that brought it. Wallets linked only the other way are not shown; switch the direction to see them. A link is not shared intent.</p>
+          @if (stops().length) {
+            <details class="stops small"><summary>Where the graph stops ({{ stops().length }})</summary>
+              <ul>@for (s of stops(); track s.reason + s.address + (s.token ?? '')) { <li><span class="mono">{{ short(s.address) }}</span>: {{ s.reason }}, {{ s.detail }}</li> }</ul>
+            </details>
+          }
+        }
         <div class="stage">
           @defer (when nodes().length > 0) {
             <oci-graph-canvas class="canvas" [nodes]="nodes()" [edges]="edges()" [root]="root()" [theme]="theme.effective()" [command]="command()" [fileName]="fileName()"
@@ -132,6 +157,9 @@ function keyed(g: Graph, range: { from?: string; to?: string }): KeyedEdge[] {
     .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin: 0 calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
     .root-form { margin: 0 calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
     .tok { width: 140px; }
+    .explain { margin: 6px 0 0; }
+    .stops { margin: 4px 0 8px; }
+    .stops ul { margin: 4px 0 0; padding-left: 18px; }
     .dates { width: 240px; }
     .dates svg { width: 16px; height: 16px; }
     .stats { flex: 1; justify-content: flex-end; flex-wrap: nowrap; gap: 4px 14px; font-size: 12.5px; white-space: nowrap; }
@@ -191,6 +219,8 @@ export class InvestigationPage {
   readonly addr = signal('');
   readonly net = signal<NetworkId>('ethereum');
   readonly depth = signal(2);
+  /** Directed graph (Fund Flow Trace P0-C): out, in or both; the undirected graph is no longer used. */
+  readonly direction = signal<GraphDirection>('both');
   readonly token = signal('');
   /** Date range (whole UTC days); null = open-ended. */
   readonly from = signal<Date | null>(null);
@@ -207,7 +237,7 @@ export class InvestigationPage {
     params: () => {
       const address = this.address();
       if (!address) return undefined;
-      return { address, q: { network: this.network() ?? 'ethereum', depth: this.depth(), token: this.token() || undefined, ...this.range() } };
+      return { address, q: { network: this.network() ?? 'ethereum', depth: this.depth(), direction: this.direction(), token: this.token() || undefined, ...this.range() } };
     },
     stream: (p) => this.api.graph(p.address, p.q),
   });
@@ -219,6 +249,9 @@ export class InvestigationPage {
     return g ? keyed(g, this.range()) : [];
   });
   readonly truncated = linkedSignal(() => this.graph.value()?.truncated ?? false);
+  readonly stops = linkedSignal<GraphStop[]>(() => structuralStops(this.graph.value()?.stops));
+  readonly verifying = signal(false);
+  readonly short = (a: string) => shortHash(a, 6, 4);
   readonly root = computed(() => this.graph.value()?.root ?? null);
   readonly maxHop = computed(() => (this.nodes().length ? Math.max(...this.nodes().map((n) => n.depth)) : '–'));
   readonly fileName = computed(() => `fund-flow-${shortHash(this.address() ?? 'graph', 6, 4).replace('…', '-')}.png`);
@@ -269,8 +302,37 @@ export class InvestigationPage {
     this.pathInfo.set(null);
   }
 
+  /**
+   * Path computed by the server on the flows (directed, chronological, one token), not on the drawn edges: toward the
+   * wallet for a wallet reached on the out side, from it for one on the in side.
+   */
   highlight(n: GraphNode): void {
-    this.cmd('path', n.id);
+    const root = this.root();
+    if (!root) return;
+    const toward = n.side !== 'in';
+    this.pathInfo.set('Looking for a path value could have taken…');
+    this.api.graphPath(toward ? root : n.address, toward ? n.address : root, n.network, this.token() || undefined).subscribe({
+      next: (p) => {
+        this.pathInfo.set(p.outcome === 'FOUND' ? `${p.hops.length} ${p.hops.length === 1 ? 'transfer' : 'transfers'}: ${p.note}` : p.note);
+        this.command.set({ kind: p.outcome === 'FOUND' ? 'path' : 'clear', hops: p.hops.map((h) => ({ source: h.from, target: h.to })), n: ++this.seq });
+      },
+      error: (e: ApiError) => this.pathInfo.set(`${e.title}: ${e.detail}`),
+    });
+  }
+
+  /** Asks the server which transfers shown are no longer held (chain reorganisation, trimmed working set). */
+  verify(): void {
+    const ids = [...new Set(this.edges().flatMap((e) => e.edge.eventIds ?? []))].slice(0, 1000);
+    if (!ids.length) return;
+    this.verifying.set(true);
+    this.api.verifyGraph(this.network() ?? this.net(), ids).subscribe({
+      next: (r) => {
+        this.verifying.set(false);
+        if (r.missing.length) this.toasts.error(`${r.missing.length} ${r.missing.length === 1 ? 'transfer is' : 'transfers are'} no longer held`, `${r.note}`);
+        else this.toasts.success('No change', `${r.checked} ${r.checked === 1 ? 'transfer' : 'transfers'} still held`);
+      },
+      error: (e: ApiError) => { this.verifying.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+    });
   }
 
   expandById(id: string): void {
@@ -288,16 +350,20 @@ export class InvestigationPage {
     // merging it would mix wallets of two graphs (code review I13)
     const startedOn = this.graph.value();
     this.expansion?.unsubscribe();
-    this.expansion = this.api.graph(n.address, { network: n.network, depth: 1, token: this.token() || undefined, ...this.range() }).subscribe({
+    // same direction as the graph; an address reached on one side is expanded on that side
+    const dir: GraphDirection = this.direction() === 'both' ? (n.side === 'in' ? 'in' : n.side === 'out' ? 'out' : 'both') : this.direction();
+    this.expansion = this.api.graph(n.address, { network: n.network, depth: 1, direction: dir, token: this.token() || undefined, ...this.range() }).subscribe({
       next: (g) => {
         if (this.graph.value() !== startedOn) { this.expanding.set(false); return; }
         const known = new Map(this.nodes().map((x) => [x.id, x]));
-        const added = g.nodes.filter((x) => !known.has(x.id)).map((x) => ({ ...x, depth: n.depth + 1 }));
+        const added = g.nodes.filter((x) => !known.has(x.id)).map((x) => ({ ...x, depth: n.depth + x.depth, side: x.side === 'root' ? n.side : x.side }));
         const keys = new Set(this.edges().map((e) => e.key));
         const newEdges = keyed(g, this.range()).filter((e) => !keys.has(e.key));
         this.nodes.update((l) => [...l, ...added]);
         this.edges.update((l) => [...l, ...newEdges]);
         if (g.truncated) this.truncated.set(true);
+        const more = structuralStops(g.stops).filter((s) => !this.stops().some((x) => x.reason === s.reason && x.address === s.address));
+        if (more.length) this.stops.update((l) => [...l, ...more]);
         this.expanding.set(false);
         this.toasts.success('Counterparties expanded', `${added.length} new ${added.length === 1 ? 'wallet' : 'wallets'}, ${newEdges.length} new ${newEdges.length === 1 ? 'transfer' : 'transfers'}`);
       },

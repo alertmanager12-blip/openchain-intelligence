@@ -1,6 +1,12 @@
 # Fund Flow Trace P0-A — correction de `/exposure`
 
-Statut : **préparation, aucune modification de code** (2026-11-12, code de `94ea42c`, pendant la mesure mémoire de 12 h).
+Statut : **implémenté le 2026-11-16** (décision D6, option b). La qualification des chemins est extraite dans
+`ExposurePaths` (oci-intelligence), utilisée par le détecteur (comportement inchangé : banc et tests des détecteurs) et par
+l'endpoint. Cas de régression : R1 à R9, R11 et R14 sur la fonction (`ExposurePathsTest`), R1 à R3, R5, R6, R9, R10 et R12
+sur l'endpoint (`ExposureApiTest`, 7 en échec avant la correction) ; R13 tient par construction (même fonction). La
+couverture reste `PARTIAL` jusqu'à P0-B.
+
+Texte de préparation (2026-11-12, code de `94ea42c`, pendant la mesure mémoire de 12 h) :
 Légende : **[F]** fait vérifié dans le code ou en base, avec sa référence ; **[P]** proposition.
 
 ## 1. Les deux implémentations

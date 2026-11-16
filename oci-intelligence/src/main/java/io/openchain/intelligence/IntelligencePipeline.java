@@ -101,6 +101,9 @@ public final class IntelligencePipeline {
     public ValueFlow canonical(ValueFlow f) { return canonical.flow(f); }
 
     /** Fully in-memory wiring with the default detectors. */
+    /** Detection settings in force (the exposure endpoint qualifies paths with the detector's own rules). */
+    public DetectionConfig detectionConfig() { return config; }
+
     public static IntelligencePipeline inMemory(DetectionConfig dc, ScoringConfig sc, Clock clock) {
         var flows = new InMemoryFlowStore();
         var labels = new InMemoryLabelRepository();

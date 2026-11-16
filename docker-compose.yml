@@ -71,6 +71,11 @@ services:
       OCI_CHAINS_TRON_URL: ${OCI_CHAINS_TRON_URL:-https://api.trongrid.io}
       OCI_CHAINS_TRON_API_KEY_HEADER: TRON-PRO-API-KEY
       OCI_CHAINS_TRON_API_KEY: ${OCI_CHAINS_TRON_API_KEY:-}
+      # Fallback when TronGrid fails (timeout, 429, 5xx, open circuit), e.g. a Chainstack TRON endpoint
+      # (https://tron-mainnet.core.chainstack.com/<endpoint id>; the id in the URL is the credential: keep it in .env).
+      # It serves the node API (/wallet, /walletsolidity) used by live indexing, not TronGrid's /v1 API (address histories,
+      # wallet transactions and balances, freeze backfill): those wait for TronGrid, which is tried again after 30 s.
+      OCI_CHAINS_TRON_FALLBACK_URLS: ${OCI_CHAINS_TRON_FALLBACK_URLS:-}
       OCI_CHAINS_TRON_START_BLOCK: ${OCI_CHAINS_TRON_START_BLOCK:--100}
       # In-memory working set bounds (ADR-0024 step 3a); OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0 disables the trim
       OCI_INGESTION_WORKING_SET_TRIM_INTERVAL: ${OCI_INGESTION_WORKING_SET_TRIM_INTERVAL:-10m}

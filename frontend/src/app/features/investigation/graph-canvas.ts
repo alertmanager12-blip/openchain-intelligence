@@ -172,17 +172,19 @@ export class GraphCanvas {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       this.exported.emit();
-    } else if (c.kind === 'path' && c.target && this.root()) {
+    } else if (c.kind === 'path' && c.hops?.length) {
+      // a path computed by the server on the flows (directed, chronological): highlight its transfers as drawn
       this.clearPath();
-      const res = this.cy.elements().aStar({ root: `#${CSS.escape(this.root()!)}`, goal: `#${CSS.escape(c.target)}`, directed: false });
-      if (!res.found) {
-        this.pathResult.emit('No path to the root within the loaded graph.');
-        return;
+      const cy = this.cy;
+      const lit = cy.collection();
+      for (const h of c.hops) {
+        lit.merge(cy.getElementById(h.source)).merge(cy.getElementById(h.target));
+        lit.merge(cy.edges().filter((e) => e.data('source') === h.source && e.data('target') === h.target));
       }
-      this.cy.elements().addClass('dim');
-      res.path.removeClass('dim').addClass('path');
-      const hops = res.path.edges().length;
-      this.pathResult.emit(`${hops} ${hops === 1 ? 'hop' : 'hops'} from the root, direction ignored.`);
+      cy.elements().addClass('dim');
+      lit.removeClass('dim').addClass('path');
+      const missing = c.hops.filter((h) => cy.getElementById(h.source).empty() || cy.getElementById(h.target).empty()).length;
+      if (missing) this.pathResult.emit(`${missing} ${missing === 1 ? 'transfer of the path goes' : 'transfers of the path go'} through wallets not drawn here.`);
     }
   }
 

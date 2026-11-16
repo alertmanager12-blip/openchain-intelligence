@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -25,6 +25,8 @@ export interface GraphQuery {
   token?: string;
   from?: string;
   to?: string;
+  /** Absent: the deprecated undirected graph. */
+  direction?: GraphDirection;
 }
 
 /**
@@ -66,6 +68,13 @@ export class ApiService {
   }
   graph(address: string, q: GraphQuery): Observable<Graph> {
     return this.http.get<Graph>(`${this.base}/graph/${this.enc(address)}`, { params: params({ ...q }) });
+  }
+  graphPath(source: string, target: string, network: NetworkId, token?: string): Observable<GraphPath> {
+    return this.http.get<GraphPath>(`${this.base}/graph/${this.enc(source)}/path`, { params: params({ network, target, token }) });
+  }
+  /** Transfers of a displayed graph that are no longer held (reorganisation or trimmed working set). */
+  verifyGraph(network: NetworkId, eventIds: string[]): Observable<{ network: NetworkId; checked: number; missing: string[]; note: string }> {
+    return this.http.post<{ network: NetworkId; checked: number; missing: string[]; note: string }>(`${this.base}/graph/verify`, { network, eventIds });
   }
 
   // --- rules

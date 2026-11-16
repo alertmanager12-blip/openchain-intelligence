@@ -74,6 +74,8 @@ on('GET', '/wallets/([^/]+)/transactions', (req, m) => mockDb().transactions(dec
 on('GET', '/wallets/([^/]+)/risk', (req, m) => mockDb().risk(decodeURIComponent(m[1]), net(req)));
 on('GET', '/wallets/([^/]+)/exposure', (req, m) => mockDb().exposure(decodeURIComponent(m[1]), net(req)));
 on('GET', '/transactions/([^/]+)/analysis', (req, m) => mockDb().transaction(decodeURIComponent(m[1]), net(req)));
+on('GET', '/graph/([^/]+)/path', (req, m) => ({ source: decodeURIComponent(m[1]), target: req.params.get('target') ?? '', network: net(req), outcome: 'NO_PATH', hops: [], stops: [], note: 'Demo data: no path computed.', asOfBlock: null }));
+on('POST', '/graph/verify', (req) => ({ network: (req.body as { network: string }).network, checked: ((req.body as { eventIds: string[] }).eventIds ?? []).length, missing: [], note: 'Demo data.' }));
 on('GET', '/graph/([^/]+)', (req, m) => mockDb().graph(decodeURIComponent(m[1]), net(req), Math.min(3, Math.max(1, Number(req.params.get('depth') ?? 1))), req.params.get('token')));
 
 on('GET', '/rules/fields', () => DEFAULT_FIELDS);

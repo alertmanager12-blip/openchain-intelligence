@@ -34,7 +34,7 @@ import org.springframework.stereotype.Service;
  * <p>Pepper: with PostgreSQL persistence an ephemeral pepper would silently invalidate every stored key at the next
  * restart, so {@code OCI_SECURITY_API_KEY_PEPPER} is required there (demo mode falls back to a documented dev-only
  * pepper). In memory mode an ephemeral random pepper is used when none is configured.
- * TODO(persistence): audit_log table, tenant scoping.
+ * TODO(persistence): audit_log table. Client scopes: {@link ClientScope} (decision D1).
  */
 @Service
 public class ApiKeyService {
@@ -49,13 +49,14 @@ public class ApiKeyService {
 
     /** Stored metadata (immutable snapshot); {@code hash} is the only trace of the secret. */
     public static final class StoredKey {
-        private final String id, name, env, prefix, createdBy;
+        private final String id, name, env, prefix, createdBy, clientScope;
         private final byte[] hash;
         private final Set<String> scopes;
         private final Instant createdAt, expiresAt, lastUsedAt, revokedAt;
 
         StoredKey(String id, String name, String env, String prefix, byte[] hash, Set<String> scopes, Instant createdAt,
-                  Instant expiresAt, String createdBy, Instant lastUsedAt, Instant revokedAt) {
+                  Instant expiresAt, String createdBy, Instant lastUsedAt, Instant revokedAt, String clientScope) {
+            this.clientScope = java.util.Objects.requireNonNull(clientScope, "clientScope");
             this.id = id; this.name = name; this.env = env; this.prefix = prefix; this.hash = hash.clone(); this.scopes = Set.copyOf(scopes);
             this.createdAt = createdAt; this.expiresAt = expiresAt; this.createdBy = createdBy;
             this.lastUsedAt = lastUsedAt; this.revokedAt = revokedAt;
@@ -72,17 +73,19 @@ public class ApiKeyService {
         public Instant revokedAt() { return revokedAt; }
         public boolean revoked() { return revokedAt != null; }
         public String createdBy() { return createdBy; }
+        /** Client scope of the key (decision D1); {@link ClientScope#DEFAULT} until the instance serves several clients. */
+        public String clientScope() { return clientScope; }
         String env() { return env; }
         String prefix() { return prefix; }
         byte[] hash() { return hash.clone(); }
 
-        StoredKey withLastUsedAt(Instant at) { return new StoredKey(id, name, env, prefix, hash, scopes, createdAt, expiresAt, createdBy, at, revokedAt); }
-        StoredKey withRevokedAt(Instant at) { return new StoredKey(id, name, env, prefix, hash, scopes, createdAt, expiresAt, createdBy, lastUsedAt, at); }
-        StoredKey withScopes(Set<String> s) { return new StoredKey(id, name, env, prefix, hash, s, createdAt, expiresAt, createdBy, lastUsedAt, revokedAt); }
+        StoredKey withLastUsedAt(Instant at) { return new StoredKey(id, name, env, prefix, hash, scopes, createdAt, expiresAt, createdBy, at, revokedAt, clientScope); }
+        StoredKey withRevokedAt(Instant at) { return new StoredKey(id, name, env, prefix, hash, scopes, createdAt, expiresAt, createdBy, lastUsedAt, at, clientScope); }
+        StoredKey withScopes(Set<String> s) { return new StoredKey(id, name, env, prefix, hash, s, createdAt, expiresAt, createdBy, lastUsedAt, revokedAt, clientScope); }
     }
 
     /** Authenticated principal of a key. */
-    public record KeyPrincipal(String keyId, String name, String prefix, Set<String> scopes) {}
+    public record KeyPrincipal(String keyId, String name, String prefix, Set<String> scopes, String clientScope) {}
 
     /** Creation result: the plaintext is returned to the caller once and never stored. */
     public record Created(StoredKey key, String plaintext) {}
@@ -91,11 +94,19 @@ public class ApiKeyService {
     private final Clock clock;
     private final String env;
     private final ApiKeyRepository repository;
+    private final ClientScopeDirectory clientScopes;
     private final SecureRandom random = new SecureRandom();
 
+    /** Single client scope ({@link ClientScope#DEFAULT}) kept in memory: tools and tests that do not need several. */
     public ApiKeyService(OciProperties props, Clock clock, ApiKeyRepository repository, PersistenceMode mode) {
+        this(props, clock, repository, mode, ClientScopeDirectory.inMemory());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ApiKeyService(OciProperties props, Clock clock, ApiKeyRepository repository, PersistenceMode mode, ClientScopeDirectory clientScopes) {
         this.clock = clock;
         this.repository = repository;
+        this.clientScopes = clientScopes;
         this.env = props.getSecurity().getKeyEnvironment();
         this.pepper = pepper(props, mode);
         for (OciProperties.StaticKey k : props.getSecurity().getKeys()) {
@@ -155,15 +166,24 @@ public class ApiKeyService {
             return k;
         }
         StoredKey k = new StoredKey(UUID.randomUUID().toString(), name, m.group(1), m.group(2), hash, normalised, clock.instant(),
-                expiresAt, actor, null, null);
+                expiresAt, actor, null, null, ClientScope.DEFAULT);
         repository.insert(k);
         AUDIT.info("api_key.register id={} name={} prefix={} scopes={} expiresAt={} actor={}", k.id, name, k.displayPrefix(),
                 k.scopes, expiresAt, actor);
         return k;
     }
 
-    /** Creates a new random key. */
+    /** Creates a new random key in the default client scope. */
     public Created create(String name, Collection<String> scopes, Duration ttl, String actor) {
+        return create(name, scopes, ttl, actor, ClientScope.DEFAULT);
+    }
+
+    /**
+     * Creates a new random key in {@code clientScope}, which must exist and be active. The API passes the scope of the
+     * caller ({@link ClientScope#of}): an administrator creates keys in its own scope only.
+     */
+    public Created create(String name, Collection<String> scopes, Duration ttl, String actor, String clientScope) {
+        if (!clientScopes.isActive(clientScope)) throw new IllegalArgumentException("unknown or disabled client scope");
         String prefix;
         do { prefix = base62Chars(8); } while (repository.findByPrefix(prefix).isPresent());
         byte[] secret = new byte[SECRET_BYTES];
@@ -173,10 +193,10 @@ public class ApiKeyService {
         var m = FORMAT.matcher(plaintext);
         if (!m.matches()) throw new IllegalStateException("generated key does not match the key format");
         StoredKey k = new StoredKey(UUID.randomUUID().toString(), name, env, prefix, hmac(m.group(3)), Scopes.normalise(scopes),
-                clock.instant(), expires, actor, null, null);
+                clock.instant(), expires, actor, null, null, clientScope);
         repository.insert(k);
-        AUDIT.info("api_key.create id={} name={} prefix={} scopes={} expiresAt={} actor={}", k.id, name, k.displayPrefix(),
-                k.scopes, expires, actor);
+        AUDIT.info("api_key.create id={} name={} prefix={} scopes={} expiresAt={} clientScope={} actor={}", k.id, name, k.displayPrefix(),
+                k.scopes, expires, clientScope, actor);
         return new Created(k, plaintext);
     }
 
@@ -224,14 +244,25 @@ public class ApiKeyService {
         boolean hashOk = MessageDigest.isEqual(expected, actual);
         Instant now = clock.instant();
         boolean ok = hashOk && k != null && k.env.equals(m.group(1)) && k.revokedAt == null
-                && (k.expiresAt == null || now.isBefore(k.expiresAt));
+                && (k.expiresAt == null || now.isBefore(k.expiresAt))
+                && clientScopes.isActive(k.clientScope); // a disabled or removed client scope disables its keys
         if (!ok) return Optional.empty();
         if (k.lastUsedAt == null || !now.isBefore(k.lastUsedAt.plus(LAST_USED_RESOLUTION))) repository.touch(k.id, now);
-        return Optional.of(new KeyPrincipal(k.id, k.name, k.displayPrefix(), k.scopes));
+        return Optional.of(new KeyPrincipal(k.id, k.name, k.displayPrefix(), k.scopes, k.clientScope));
     }
 
     public List<StoredKey> list() {
         return repository.findAll().stream().sorted(Comparator.comparing(StoredKey::createdAt).reversed()).toList();
+    }
+
+    /** Keys of one client scope only: what an administrator of that scope may see. */
+    public List<StoredKey> list(String clientScope) {
+        return list().stream().filter(k -> k.clientScope.equals(clientScope)).toList();
+    }
+
+    /** The key when it belongs to {@code clientScope}; another scope's key is reported as absent (same answer as unknown). */
+    public Optional<StoredKey> find(String id, String clientScope) {
+        return repository.findById(id).filter(k -> k.clientScope.equals(clientScope));
     }
 
     private byte[] hmac(String secret) {

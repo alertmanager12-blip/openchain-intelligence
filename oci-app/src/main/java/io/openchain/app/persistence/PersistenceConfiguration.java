@@ -63,6 +63,7 @@ public class PersistenceConfiguration {
         @Bean AlertRepository alertRepository() { return new InMemoryAlertRepository(); }
         @Bean DeliveryStore deliveryStore() { return new InMemoryDeliveryStore(); }
         @Bean ApiKeyRepository apiKeyRepository() { return new InMemoryApiKeyRepository(); }
+        @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory() { return io.openchain.app.security.ClientScopeDirectory.inMemory(); }
         @Bean UserRepository userRepository() { return new InMemoryUserRepository(); }
         @Bean ConnectorRepository connectorRepository() { return new InMemoryConnectorRepository(); }
         @Bean RuleRepository ruleRepository() { return new InMemoryRuleRepository(); }
@@ -107,6 +108,9 @@ public class PersistenceConfiguration {
         }
 
         @Bean ApiKeyRepository apiKeyRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcApiKeyRepository(jdbc); }
+        @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory(NamedParameterJdbcTemplate jdbc) {
+            return io.openchain.app.security.ClientScopeDirectory.jdbc(jdbc);
+        }
         @Bean UserRepository userRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcUserRepository(jdbc); }
         @Bean ConnectorRepository connectorRepository(NamedParameterJdbcTemplate jdbc, SecretCipher cipher) { return new JdbcConnectorRepository(jdbc, cipher); }
         @Bean RuleRepository ruleRepository(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) { return new JdbcRuleRepository(jdbc, tx); }
@@ -135,6 +139,9 @@ public class PersistenceConfiguration {
         }
         @Bean io.openchain.blockchain.indexer.CheckpointStore checkpointStore(NamedParameterJdbcTemplate jdbc, Clock clock) {
             return new JdbcCheckpointStore(jdbc, clock);
+        }
+        @Bean io.openchain.app.chain.IndexingCoverage.Store indexingCoverageStore(NamedParameterJdbcTemplate jdbc) {
+            return new JdbcIndexingCoverageStore(jdbc);
         }
         @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
             return new io.openchain.app.history.JdbcAddressHistoryStore(jdbc, tx);

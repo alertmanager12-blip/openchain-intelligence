@@ -16,7 +16,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 /** {@code api_keys} table: prefix + HMAC hash, scopes, expiry, revocation, last use. Never the secret. */
 public final class JdbcApiKeyRepository implements ApiKeyRepository {
 
-    private static final String COLUMNS = "id, name, env, prefix, secret_hash, scopes, created_by, created_at, expires_at, last_used_at, revoked_at";
+    private static final String COLUMNS = "id, name, env, prefix, secret_hash, scopes, created_by, created_at, expires_at, last_used_at, revoked_at, client_scope_id";
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -25,12 +25,12 @@ public final class JdbcApiKeyRepository implements ApiKeyRepository {
     @Override public void insert(ApiKeyService.StoredKey k) {
         try {
             jdbc.update("insert into api_keys (" + COLUMNS + ") values (:id, :name, :env, :prefix, :hash, cast(:scopes as jsonb), "
-                    + ":createdBy, :createdAt, :expiresAt, :lastUsedAt, :revokedAt)", new MapSqlParameterSource()
+                    + ":createdBy, :createdAt, :expiresAt, :lastUsedAt, :revokedAt, :clientScope)", new MapSqlParameterSource()
                     .addValue("id", k.id()).addValue("name", k.name()).addValue("env", k.env()).addValue("prefix", k.prefix())
                     .addValue("hash", k.hash()).addValue("scopes", TypedJson.write(k.scopes().stream().sorted().toList()))
                     .addValue("createdBy", k.createdBy()).addValue("createdAt", Sql.ts(k.createdAt()))
                     .addValue("expiresAt", Sql.ts(k.expiresAt())).addValue("lastUsedAt", Sql.ts(k.lastUsedAt()))
-                    .addValue("revokedAt", Sql.ts(k.revokedAt())));
+                    .addValue("revokedAt", Sql.ts(k.revokedAt())).addValue("clientScope", k.clientScope()));
         } catch (DuplicateKeyException e) {
             throw new IllegalStateException("duplicate API key prefix " + k.displayPrefix());
         }
@@ -67,5 +67,6 @@ public final class JdbcApiKeyRepository implements ApiKeyRepository {
     private static final RowMapper<ApiKeyService.StoredKey> MAPPER = (rs, n) -> new ApiKeyService.StoredKey(rs.getString("id"),
             rs.getString("name"), rs.getString("env"), rs.getString("prefix"), rs.getBytes("secret_hash"),
             new LinkedHashSet<>(TypedJson.readStrings(rs.getString("scopes"))), Sql.instant(rs, "created_at"),
-            Sql.instant(rs, "expires_at"), rs.getString("created_by"), Sql.instant(rs, "last_used_at"), Sql.instant(rs, "revoked_at"));
+            Sql.instant(rs, "expires_at"), rs.getString("created_by"), Sql.instant(rs, "last_used_at"), Sql.instant(rs, "revoked_at"),
+            rs.getString("client_scope_id"));
 }

@@ -210,15 +210,62 @@ export interface Exposure {
   network: NetworkId;
   direct: ExposureEntry[];
   indirect: ExposureEntry[];
+  /** Transfers from listed addresses that create no exposure (unverified token, dust). */
+  ignored?: IgnoredTransfer[];
+  /** Labelled counterparties outside the risky categories (exchange, protocol...): information, not exposure. */
+  counterparties?: LabelledCounterparty[];
+  coverage?: ExposureCoverage;
 }
 
 export interface ExposureEntry {
   category: string;
   hops: number;
-  /** Share of volume, 0..1. */
+  /** @deprecated share of volume summed over all tokens (no unit); use `amounts` or `traced`. */
   share: number;
   counterparty: string;
   evidenceLevel: EvidenceLevel;
+  source?: string;
+  /** Direct: exact amounts per token (decimal strings), never added across tokens. */
+  amounts?: { token: string; received: string; sent: string }[] | null;
+  transfers?: number | null;
+  txHashes?: string[] | null;
+  /** Indirect: hops from the listed address to this wallet. */
+  path?: { from: string; to: string; txHash: string; token: string; amount: string; timestamp: string }[] | null;
+  /** Indirect: at most this amount (smallest hop), in this token. */
+  traced?: { token: string; amount: string } | null;
+  confidence?: number | null;
+}
+
+export interface IgnoredTransfer {
+  counterparty: string;
+  category: string;
+  source: string;
+  reason: 'unverified_token' | 'below_dust_threshold';
+  token: string;
+  amount: string;
+  txHash: string;
+  timestamp: string;
+}
+
+export interface LabelledCounterparty {
+  counterparty: string;
+  category: string;
+  source: string;
+  evidenceLevel: EvidenceLevel;
+  transfers: number;
+}
+
+export interface ExposureCoverage {
+  /** PARTIAL until the coverage model exists: "none found" means none in the data covered. */
+  state: 'COMPLETE' | 'PARTIAL' | 'TRUNCATED' | 'UNAVAILABLE' | 'NOT_YET_INDEXED';
+  dataFrom: string | null;
+  dataTo: string | null;
+  limits: string[];
+  /** Block range the state applies to. */
+  fromBlock?: number | null;
+  toBlock?: number | null;
+  segments?: { source: 'HISTORY' | 'LIVE'; fromBlock: number | null; toBlock: number | null; fromTime: string | null; state: string; detail: string | null }[];
+  knownGaps?: { fromBlock: number; toBlock: number; cause: string; detectedAt: string }[];
 }
 
 export interface TransactionAnalysis {
@@ -238,23 +285,52 @@ export interface GraphNode {
   /** null = unknown (no real provider, lookup failed, or graph node not resolved) */
   isContract: boolean | null;
   depth: number;
+  /** Directed graph: root, out (value went there), in (value came from there), both. */
+  side?: 'root' | 'out' | 'in' | 'both' | null;
 }
 
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
+  /** Latest transfer. */
   txHash: string;
   token: Token;
   rawAmount: string;
+  /** Latest transfer. */
   timestamp: string;
+  count?: number;
+  /** Directed graph: first transfer, every transfer id (at most 50), value coming back to an address already on the way. */
+  firstTimestamp?: string | null;
+  eventIds?: string[] | null;
+  cycle?: boolean | null;
 }
+
+export type GraphDirection = 'out' | 'in' | 'both';
+
+export interface GraphStop { address: string; token: string | null; reason: string; detail: string }
 
 export interface Graph {
   root: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
   truncated: boolean;
+  direction?: GraphDirection | null;
+  status?: 'COMPLETE' | 'PARTIAL' | null;
+  stops?: GraphStop[] | null;
+  asOfBlock?: number | null;
+}
+
+/** A path value could have taken (directed, chronological, one token), computed by the server. */
+export interface GraphPath {
+  source: string;
+  target: string;
+  network: NetworkId;
+  outcome: 'FOUND' | 'NO_PATH' | 'LIMIT_REACHED';
+  hops: { from: string; to: string; txHash: string; token: string; amount: string; timestamp: string }[];
+  stops: GraphStop[];
+  note: string;
+  asOfBlock: number | null;
 }
 
 export type AlertStatus = 'OPEN' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE_POSITIVE';

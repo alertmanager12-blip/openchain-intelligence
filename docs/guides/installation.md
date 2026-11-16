@@ -64,6 +64,8 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_CRYPTO_MASTER_KEY` | dev-only key in compose (demo only) | base64 of 32 random bytes (`openssl rand -base64 32`): AES-256-GCM key of connector secrets and targets at rest. **Required with PostgreSQL** (startup fails if missing, not 32 bytes, or the compose dev key outside demo mode). Never logged; losing it makes stored connector secrets unrecoverable. |
 | `OCI_PERSISTENCE_DELIVERY_CLAIM_LEASE` | `2m` | How long an instance holds a claimed delivery; deliveries claimed by a crashed instance are retried after it |
 | `OCI_SECURITY_OIDC_ISSUER_URI` / `OCI_SECURITY_OIDC_AUDIENCE` | — | OIDC issuer (enables JWT bearer authentication) and optional audience |
+| `OCI_SECURITY_MULTI_CLIENT` | `false` | Several client scopes on one instance. Off (one instance per client): every key and token is in the `default` scope. On: an OIDC token must carry exactly one known, active client scope in `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` (else 401) |
+| `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` | `oci_client_scope` | Token claim naming the caller's client scope (multi-client mode) |
 | `OCI_CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Allowed browser origins |
 | `OCI_RULES_DIRS` | `rules,../rules` | Rule pack directories (first existing wins); the image ships `/app/rules` |
 | `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector; a group id is negative, e.g. `-100…`) |
@@ -75,7 +77,7 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_CHAINS_<NETWORK>_HISTORY_MAX_PAGES` / `..._MAX_EVENTS` | `200` / `5000` | Caps per address; reaching one marks the history TRUNCATED (older events not loaded) |
 | `OCI_CHAINS_<NETWORK>_HISTORY_CHUNK_SIZE` / `..._MIN_CHUNK_SIZE` | `10000` / `50` | EVM: blocks per `eth_getLogs` query, halved on "range too large" answers down to the minimum |
 | `OCI_CHAINS_<NETWORK>_HISTORY_PAUSE` | `100ms` | Pause between two pages (on top of the transport rate limiter) |
-| `OCI_CHAINS_<NETWORK>_FALLBACK_URLS` | — | Comma-separated fallback endpoints tried in order when the primary fails with a retryable error (timeout, 429, 5xx, open circuit); the API key header is sent to the primary URL only |
+| `OCI_CHAINS_<NETWORK>_FALLBACK_URLS` | — | Comma-separated fallback endpoints tried in order when the primary fails with a retryable error (timeout, 429, 5xx, open circuit); the API key header is sent to the primary URL only. The primary is tried again 30 s after a failover. For TRON, a Chainstack endpoint (`https://tron-mainnet.core.chainstack.com/<endpoint id>`, the id is the credential) serves the node API used by live indexing, not TronGrid's `/v1` API (address histories, wallet transactions and balances, freeze backfill), which waits for TronGrid |
 | `OCI_DEFAULT_CONNECTOR` | — | Connector id receiving the alerts of rules routed to the pack placeholder `default-webhook`; unset = those alerts are recorded as not notified (delivery `SKIPPED`), never dead-lettered |
 | `OCI_INGESTION_AGE_WARMUP` | `30d` | Observation time a real chain needs before "first seen by the platform" fields (`wallet.age_days`, `wallet.tx_count`, `counterparty.age_days`, `approval.spender_age_days`) are emitted; before that every address would look new |
 | `OCI_API_DOCS_ENABLED` | demo mode | Serve `/v3/api-docs` and Swagger UI |

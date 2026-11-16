@@ -4,7 +4,8 @@ export const RISK_VAR: Record<RiskLevel, string> = { CRITICAL: '--risk-critical'
 
 export interface KeyedEdge { key: string; edge: GraphEdge }
 export type GraphSelection = { kind: 'node' | 'edge'; id: string } | null;
-export interface GraphCommand { kind: 'fit' | 'png' | 'path' | 'clear'; target?: string; n: number }
+/** {@code path}: highlight the transfers of a server path ({@code hops}, source and target of each). */
+export interface GraphCommand { kind: 'fit' | 'png' | 'path' | 'clear'; target?: string; hops?: { source: string; target: string }[]; n: number }
 
 /** Edge width 1..5 px: log-scaled amount relative to the largest transfer of the same token in the graph. */
 export function edgeWidths(edges: KeyedEdge[]): Map<string, number> {

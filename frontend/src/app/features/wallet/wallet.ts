@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { Toasts } from '../../core/toasts';
-import { Counterparty, NetworkId, Page, ChainTransaction } from '../../core/models';
+import { Counterparty, ExposureEntry, NetworkId, Page, ChainTransaction } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
 import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
 import { Crumb, PageHeader } from '../../shared/page-header';
@@ -93,7 +93,17 @@ export class WalletPage {
   readonly tabIndex = signal(0);
   readonly txCols = ['hash', 'when', 'dir', 'cp', 'value', 'status'];
   readonly cpCols = ['address', 'direction', 'txCount', 'in', 'out', 'risk'];
-  readonly expCols = ['category', 'hops', 'share', 'via', 'evidence'];
+  readonly expCols = ['category', 'hops', 'amount', 'via', 'evidence'];
+  /** Direct: "received 1,000 USDT, sent 0.5 TRX"; indirect: "at most 100 USDT traced". Never a sum across tokens. */
+  readonly expAmount = (x: ExposureEntry): string => {
+    if (x.traced) return `at most ${x.traced.amount} ${x.traced.token} traced`;
+    const parts = (x.amounts ?? []).flatMap((a) => [
+      ...(a.received !== '0' ? [`received ${a.received} ${a.token}`] : []),
+      ...(a.sent !== '0' ? [`sent ${a.sent} ${a.token}`] : []),
+    ]);
+    return parts.length ? parts.join(', ') : '—';
+  };
+  readonly ignoredReason = (r: string) => (r === 'unverified_token' ? 'unverified token contract' : 'below the dust threshold');
   readonly sigCols = ['signal', 'severity', 'evidence', 'detected'];
   readonly byHash = (_: number, t: ChainTransaction) => t.id ?? t.hash;
   /** The node cannot list the address's transactions: rows are the transfers the platform knows. */

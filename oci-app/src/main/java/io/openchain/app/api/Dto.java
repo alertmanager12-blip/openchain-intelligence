@@ -99,18 +99,101 @@ public final class Dto {
 
     public record GraphNodeDto(String id, String address, String network, String label, List<String> labels, String riskLevel,
                                /** null = not resolved (graph nodes are not looked up, to bound provider calls) */
-                               int riskScore, Boolean isContract, int depth) {}
+                               int riskScore, Boolean isContract, int depth,
+                               /** directed graph: "root", "out" (value went there), "in" (value came from there), "both"; null otherwise */
+                               String side) {
+        public GraphNodeDto(String id, String address, String network, String label, List<String> labels, String riskLevel,
+                            int riskScore, Boolean isContract, int depth) {
+            this(id, address, network, label, labels, riskLevel, riskScore, isContract, depth, null);
+        }
+    }
 
+    /**
+     * Value moved from {@code source} to {@code target} in one token. {@code txHash} and {@code timestamp}: the latest
+     * transfer. Directed graph only (null otherwise): {@code firstTimestamp}, {@code eventIds} (every transfer, at most
+     * {@link #MAX_EDGE_EVIDENCE}; {@code count} is the total), {@code cycle} (the transfer brings value back to an address
+     * already on the way).
+     */
     public record GraphEdgeDto(String id, String source, String target, String txHash, TokenDto token, String rawAmount,
-                               String amount, Instant timestamp, int count) {}
+                               String amount, Instant timestamp, int count, Instant firstTimestamp, List<String> eventIds, Boolean cycle) {
+        public static final int MAX_EDGE_EVIDENCE = 50;
+        public GraphEdgeDto(String id, String source, String target, String txHash, TokenDto token, String rawAmount,
+                            String amount, Instant timestamp, int count) {
+            this(id, source, target, txHash, token, rawAmount, amount, timestamp, count, null, null, null);
+        }
+    }
 
-    public record GraphDto(String root, String network, List<GraphNodeDto> nodes, List<GraphEdgeDto> edges, boolean truncated) {}
+    /**
+     * A path value could have taken from {@code source} to {@code target} (directed, chronological, one token).
+     * {@code outcome}: FOUND, NO_PATH (none in the flows held, within the limits) or LIMIT_REACHED (a limit stopped the search:
+     * a path may exist).
+     */
+    public record GraphPathDto(String source, String target, String network, String outcome, List<PathHopDto> hops,
+                               List<GraphStopDto> stops, String note, Long asOfBlock) {}
 
-    public record ExposureEntryDto(String category, int hops, double share, String counterparty, String evidenceLevel,
-                                   String source) {}
+    public record VerifyRequest(String network, List<String> eventIds) {}
+
+    /** Transfers of a displayed graph that are no longer held: removed by a chain reorganisation or by the working-set trim. */
+    public record VerifyDto(String network, int checked, List<String> missing, String note) {}
+
+        /** Where and why a directed graph stopped (trace engine stop reasons). */
+    public record GraphStopDto(String address, String token, String reason, String detail) {}
+
+    /**
+     * {@code direction} null: the deprecated undirected graph (any flow, either way, no time order). Otherwise "out", "in"
+     * or "both": value followed in its direction and time order (Fund Flow Trace P0-C); {@code status} PARTIAL when a stop
+     * comes from missing data or a limit, {@code stops} says where; {@code asOfBlock}: last block indexed live.
+     */
+    public record GraphDto(String root, String network, List<GraphNodeDto> nodes, List<GraphEdgeDto> edges, boolean truncated,
+                           String direction, String status, List<GraphStopDto> stops, Long asOfBlock) {
+        public GraphDto(String root, String network, List<GraphNodeDto> nodes, List<GraphEdgeDto> edges, boolean truncated) {
+            this(root, network, nodes, edges, truncated, null, null, null, null);
+        }
+    }
+
+    /**
+     * One exposure (Fund Flow Trace P0-A). Direct: {@code amounts} per token and the transfers' hashes. Indirect:
+     * {@code path} (listed address first), {@code traced} (at most this amount, the smallest hop, in its token) and
+     * {@code confidence}. Amounts are exact decimal strings and are never added across tokens.
+     *
+     * @param share deprecated, kept for v1 compatibility: share of volume summed over all tokens (no unit). Use
+     *              {@code amounts} or {@code traced}. Removed at the next major API version.
+     */
+    public record ExposureEntryDto(String category, int hops, @Deprecated double share, String counterparty, String evidenceLevel,
+                                   String source, List<TokenFlowDto> amounts, Integer transfers, List<String> txHashes,
+                                   List<PathHopDto> path, TokenAmountDto traced, Double confidence) {}
+
+    /** Amount received from and sent to the listed address, in one token. */
+    public record TokenFlowDto(String token, String received, String sent) {}
+
+    public record TokenAmountDto(String token, String amount) {}
+
+    public record PathHopDto(String from, String to, String txHash, String token, String amount, Instant timestamp) {}
+
+    /** A transfer from a listed address that creates no exposure ({@code reason}: unverified_token, below_dust_threshold). */
+    public record IgnoredTransferDto(String counterparty, String category, String source, String reason, String token,
+                                     String amount, String txHash, Instant timestamp) {}
+
+    /** A labelled counterparty that is not in a risky category (exchange, protocol...): information, not exposure. */
+    public record LabelledCounterpartyDto(String counterparty, String category, String source, String evidenceLevel, int transfers) {}
+
+    /**
+     * What the answer is based on (ADR-0023 amendment 1: coverage is separate from the evidence level; Fund Flow Trace
+     * P0-B). {@code COMPLETE} only for the block range {@code fromBlock..toBlock}, with every condition of
+     * {@code AddressCoverage} met; otherwise {@code PARTIAL} and "no exposure" means none in the data covered.
+     */
+    public record CoverageDto(String state, Instant dataFrom, Instant dataTo, List<String> limits, Long fromBlock, Long toBlock,
+                              List<CoverageSegmentDto> segments, List<IndexingGapDto> knownGaps) {}
+
+    /** A source of the answer over a block range: HISTORY (address history) or LIVE (blocks indexed live). */
+    public record CoverageSegmentDto(String source, Long fromBlock, Long toBlock, Instant fromTime, String state, String detail) {}
+
+    /** Blocks that were not indexed (inclusive). */
+    public record IndexingGapDto(long fromBlock, long toBlock, String cause, Instant detectedAt) {}
 
     public record ExposureDto(String address, String network, int depth, List<ExposureEntryDto> direct,
-                              List<ExposureEntryDto> indirect) {}
+                              List<ExposureEntryDto> indirect, List<IgnoredTransferDto> ignored,
+                              List<LabelledCounterpartyDto> counterparties, CoverageDto coverage) {}
 
     public record CommentDto(String id, String author, String body, Instant createdAt) {}
 

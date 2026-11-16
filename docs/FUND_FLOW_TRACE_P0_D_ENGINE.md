@@ -1,6 +1,18 @@
 # Fund Flow Trace P0-D — moteur de traçage pur
 
-Statut : **conception, aucune implémentation** (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
+Statut : **première partie implémentée le 2026-11-16** (D-1, paquet `io.openchain.intelligence.trace` : `Trace`,
+`TraceEngine`, `Fraction`). Scénarios 1, 2, 5, 8 à 13, déterminisme, limites et exactitude sur 8 sauts
+(`TraceEngineTest`). Écarts au contrat : flux = `ValueFlow` (bloc et index de log absents tant que D7 option a n'est pas
+faite ; l'ordre à instant égal est supposé et signalé `SAME_TIME_ORDER`) ; couverture lue comme un booléen par adresse
+(`Source.complete`) ; solde d'ouverture inconnu = intervalle [0 ; valeur avec le plus petit solde cohérent] ; arrêt
+`ASSET_CHANGE` jamais émis (aucun échange d'actif détecté). **D-2 fait le même jour** (`TracePatternsTest`) : motifs
+dispersion, consolidation, circulation, peel chain (constats `INFERRED` citant leurs flux ; seuils `Trace.Patterns` :
+20 contreparties, 3 détachements d'au plus 20 % et d'écart au plus 1,5) ; une valeur qui revient vers une adresse déjà
+traversée continue de circuler mais n'est pas reçue deux fois (arête de retour, constat de circulation, arrêt `CYCLE`).
+**D-3 fait le même jour** : `TraceDiff` (preuves rapprochées par l'identité du transfert, réinclusion =
+`MOVED`, attributions modifiées ; scénarios 14 et 15, `TraceDiffTest`). P0-D est complet ; aucun branchement à l'API.
+
+Conception (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
 
 Précision : ChainSentinel n'utilise **pas MongoDB**. La persistance est PostgreSQL (Flyway, `oci-app`) ; les flux de travail
 sont en mémoire (`oci-intelligence`). Le moteur est indépendant de PostgreSQL, du RPC, du HTTP et d'Angular.
