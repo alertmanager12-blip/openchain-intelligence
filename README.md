@@ -19,8 +19,8 @@ ChainSentinel indexes TRON and Ethereum itself, profiles every wallet it sees, e
 transactions behind it, scores wallets with traceable contributions, and turns your YAML rules into alerts delivered to
 webhooks, Slack, Discord or Telegram. Everything runs on your own machine or server with Docker.
 
-> **Status: 0.1.0-SNAPSHOT, no release yet.** It works end to end on mainnet data, but APIs and schemas may still
-> change before 1.0. Licence: [Apache-2.0](LICENSE).
+> **Status: 0.1.0, first pre-release** ([release notes and known issues](docs/releases/v0.1.0.md)). It works end to
+> end on mainnet data, but APIs and schemas may still change before 1.0. Licence: [Apache-2.0](LICENSE).
 >
 > **Naming:** the project was started as *OpenChain Intelligence*. Module names (`oci-*`), Java packages
 > (`io.openchain`), environment variables (`OCI_*`) and the repository name keep that technical prefix.
@@ -59,7 +59,7 @@ The longer-term vision and roadmap are in [docs/strategy](docs/strategy/README.m
 
 | Area | What it does today |
 |---|---|
-| Ingestion | TRON and EVM indexers with confirmations, reorg handling and gap-free resume after a restart: token transfers (USDT, USDC…), native transfers of successful transactions, ERC-20/TRC-20 approvals, stablecoin issuer freezes (Tether, Circle — official contracts only), contract ownership changes |
+| Ingestion | TRON and EVM indexers with confirmations, reorg detection (retractions reach rules and alerts, not yet wallet profiles and scores) and gap-free resume after a restart: token transfers (USDT, USDC…), native transfers of successful transactions, ERC-20/TRC-20 approvals, stablecoin issuer freezes (Tether, Circle — official contracts only), contract ownership changes |
 | Investigation | Wallet page (profile, counterparties, signals, labels), transaction page, fund-flow graph (up to 3 hops), on-demand ERC-20 history of an address you open |
 | Risk | Ten detectors (structuring, fan-out, fast forwarding, rapid drain, circular flows, unusual amounts, unusual approvals, dormant reactivation, ownership changes, exposure to listed addresses) and a 0–100 score where every point names its source |
 | Monitoring | Rules as YAML or with a visual builder, dry-run simulation on recorded data, versioning, watchlist of your own wallets, alert inbox (acknowledge, assign, comment, resolve, false positive) |
@@ -89,6 +89,10 @@ Bitcoin and Solana are not supported.
 - **Old native transfers and internal transactions** of an address need an archive/Erigon node
   ([ADR-0020](docs/adr/0020-address-history-sources.md)).
 - **Single organisation:** no multi-tenancy, no API rate limiting yet.
+- **The console listens on every interface in plain HTTP** (`"4200:8080"` in `docker-compose.yml`): on a server, put it
+  behind a TLS reverse proxy or bind it to `127.0.0.1`. Other known issues of 0.1.0 (reorganisations not retracted from
+  profiles and scores, fake-token transfers in behavioural detectors, lag shown as 0 when the provider fails) are listed
+  in the [release notes](docs/releases/v0.1.0.md#known-issues).
 - **Email notifications** are not available (Telegram, Slack, Discord and webhooks are).
 
 ## In development

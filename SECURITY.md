@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| `main` (no release published yet; version 0.1.0-SNAPSHOT) | Yes: security fixes land on `main` |
+| `main` | Yes: security fixes land on `main` |
+| 0.1.x (pre-release) | Yes, until the next minor release |
 
 Once releases are published, the latest minor release receives security fixes; from 1.0, the latest minor release and the
 previous one do.
