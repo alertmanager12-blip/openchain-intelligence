@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — trace artifacts, ADR-0022 amendment 1, first step)
+
+- **Stored trace runs with their frozen evidence** (`V14__trace_artifacts`; not exposed by the API yet). A run of the trace engine is stored with its request, engine version, result, and every flow, label, coverage flag and opening balance it read; running the engine again on that evidence gives the same result. A run on newer data is a new version of the same lineage, with the `TraceDiff` against the previous one; a stored version is never recomputed. An artifact holding a flow later retracted by a reorganisation is marked `STALE` with the event ids concerned. Every row carries its client scope; reads always filter by it, and row-level security policies (forced) hide other scopes' rows from any role that is not superuser or `BYPASSRLS`. The production database user is the owner superuser today, so there the repository filter is the guarantee; a dedicated non-superuser role is needed for the policies to apply.
+
 ### Added (phase 2 — relations between wallets)
 
 - **`GET /wallets/{a}/relations`** and "Possibly related wallets" in the wallet page's Exposure tab: wallets that share a funder within 24 h, send most of a token's outflow to the same address, or share at least 3 recipients. Every relation is an inference (`INFERRED`) with a confidence, the transfers it rests on and the wording "may be related; not proof of common ownership or control". False links are the main risk, so a service (labelled exchange, bridge, protocol or other, or more than 5,000 flows), a funder of more than 20 wallets in the window (payroll, airdrop), dust and unverified tokens never link wallets. This completes the phase 2 acceptance criterion "100 % of wallet relations marked INFERRED with confidence and evidence".

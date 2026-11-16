@@ -41,8 +41,8 @@ public class TraceEngineTest {
     /** In-memory source: flows, coverage, opening balances (default 0, i.e. known empty), labels. */
     public static final class Src implements Trace.Source {
         public final List<ValueFlow> flows = new ArrayList<>();
-        final Set<Address> incomplete = new HashSet<>();
-        final Map<Address, Optional<BigInteger>> opening = new HashMap<>();
+        public final Set<Address> incomplete = new HashSet<>();
+        public final Map<Address, Optional<BigInteger>> opening = new HashMap<>();
         final Map<Address, List<AddressLabel>> labels = new HashMap<>();
         int seq;
 
