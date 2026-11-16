@@ -23,13 +23,18 @@ import tools.jackson.databind.JsonNode;
  * <p>Pipeline per logical call and endpoint: retry(backoff+jitter) -> circuit breaker -> rate limiter -> HTTP attempt.
  * Error classification: timeout / IO / 429 / 5xx = retryable; other 4xx and malformed JSON = permanent.
  * <p>Failover: when a call still fails with a <b>retryable</b> error on an endpoint (retries exhausted, or its circuit is
- * open), the next endpoint is tried; the endpoint that last succeeded is preferred for the following calls. A permanent
+ * open), the next endpoint is tried; the endpoint that last succeeded is preferred for the following calls, and the primary
+ * is tried again once it has had time to recover (its circuit open duration after the failover): a fallback may serve only
+ * part of the primary's API (Chainstack serves TRON's /wallet API, not TronGrid's /v1 API). A permanent
  * error is returned as is (another node would answer the same). Each endpoint has its own circuit breaker, rate limiter
  * and headers, so a provider API key configured for one endpoint is never sent to another.
  */
 public final class HttpJsonTransport {
     private final List<Lane> lanes;
+    private final Clock clock;
     private volatile int preferred;
+    /** When the preferred endpoint left the primary (null: on the primary). */
+    private volatile java.time.Instant failedOverAt;
 
     public HttpJsonTransport(RpcEndpoint endpoint) { this(endpoint, Clock.systemUTC(), Sleeper.SYSTEM); }
 
@@ -41,6 +46,7 @@ public final class HttpJsonTransport {
         List<Lane> l = new ArrayList<>();
         for (RpcEndpoint e : endpoints) l.add(new Lane(e, clock, sleeper, () -> maxResponseBytes));
         this.lanes = List.copyOf(l);
+        this.clock = clock;
     }
 
     /** Default cap on a response body: far above a full block with receipts, far below what would endanger the heap. */
@@ -89,11 +95,18 @@ public final class HttpJsonTransport {
 
     private JsonNode call(Function<Lane, JsonNode> op) {
         int start = preferred;
+        java.time.Instant since = failedOverAt;
+        if (start != 0 && since != null
+                && !clock.instant().isBefore(since.plus(lanes.get(0).endpoint.resilience().openDuration()))) {
+            start = 0; // give the primary another chance; a retryable failure fails over again
+        }
         ProviderException last = null;
         for (int i = 0; i < lanes.size(); i++) {
             int idx = (start + i) % lanes.size();
             try {
                 JsonNode r = op.apply(lanes.get(idx));
+                if (idx == 0) failedOverAt = null;
+                else if (start == 0 || failedOverAt == null) failedOverAt = clock.instant(); // (re)failed over: wait again
                 preferred = idx;
                 return r;
             } catch (ProviderException e) {

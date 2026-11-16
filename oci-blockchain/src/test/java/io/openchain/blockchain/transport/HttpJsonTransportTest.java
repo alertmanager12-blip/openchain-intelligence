@@ -109,6 +109,42 @@ class HttpJsonTransportTest {
     }
 
     /**
+     * A fallback may serve only part of the primary's API (Chainstack serves TRON's /wallet API, not TronGrid's /v1 API):
+     * once the primary has had time to recover (its circuit open duration), it is tried again and preferred again when it
+     * answers, instead of keeping the fallback for good.
+     */
+    @Test void returnsToThePrimaryOnceItHasHadTimeToRecover() throws Exception {
+        try (StubHttpServer backup = new StubHttpServer()) {
+            java.util.concurrent.atomic.AtomicBoolean primaryDown = new java.util.concurrent.atomic.AtomicBoolean(true);
+            server.route("/x", r -> primaryDown.get() ? Response.status(503) : Response.ok("{\"from\":\"primary\"}"));
+            backup.route("/x", r -> Response.ok("{\"from\":\"backup\"}"));
+            java.util.concurrent.atomic.AtomicReference<java.time.Instant> now = new java.util.concurrent.atomic.AtomicReference<>(java.time.Instant.parse("2026-11-16T22:00:00Z"));
+            Clock clock = new Clock() {
+                @Override public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+                @Override public Clock withZone(java.time.ZoneId z) { return this; }
+                @Override public java.time.Instant instant() { return now.get(); }
+            };
+            ResilienceConfig r = fastResilience(2, 10);
+            HttpJsonTransport t = new HttpJsonTransport(java.util.List.of(endpoint("primary", server.url(), r), endpoint("backup", backup.url(), r)),
+                    clock, sleeper);
+            assertThat(t.get("/x").path("from").asString()).isEqualTo("backup");
+            // still down when retried: back to the fallback, and the wait starts again (no retry of the primary on every call)
+            now.set(now.get().plus(r.openDuration()).plusSeconds(1));
+            int hits = server.hits.get();
+            assertThat(t.get("/x").path("from").asString()).isEqualTo("backup");
+            assertThat(server.hits.get()).isGreaterThan(hits);
+            hits = server.hits.get();
+            t.get("/x");
+            assertThat(server.hits.get()).isEqualTo(hits);
+            primaryDown.set(false);
+            assertThat(t.get("/x").path("from").asString()).as("too early: stays on the fallback").isEqualTo("backup");
+            now.set(now.get().plus(r.openDuration()).plusSeconds(1));
+            assertThat(t.get("/x").path("from").asString()).isEqualTo("primary");
+            assertThat(t.endpoint().name()).isEqualTo("primary");
+        }
+    }
+
+    /**
      * Code review I19 (2026-11-13): gateways answer a rate limit as a JSON-RPC error inside an HTTP 200 (e.g. -32005
      * "rate limit exceeded"). It was seen as a success by retry, circuit breaker and failover, and failed every poll.
      */

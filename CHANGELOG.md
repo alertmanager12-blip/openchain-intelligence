@@ -11,6 +11,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 ### Fixed (address histories could stop live indexing)
 
 - **Address histories and the freeze backfill no longer share live indexing's provider client.** On 2026-11-16 several TRON address histories made TronGrid refuse requests and opened the circuit breaker that live indexing also used: TRON stopped for about 80 minutes. Each real network now has two clients on the same endpoints, each with its own circuit breaker and rate limiter: live indexing (8 requests/s, burst 16) and background work (2 requests/s, burst 4). Together they send no more requests than the previous single client (10/s). A background breaker is named `<network>-background-primary` in the logs.
+- **A fallback endpoint no longer keeps the traffic for good**: 30 s (the circuit open duration) after a failover, the primary is tried again and preferred again when it answers. A fallback may serve only part of the primary's API: Chainstack, now documented as a TRON fallback (`OCI_CHAINS_TRON_FALLBACK_URLS`, passed by `docker-compose.yml`), serves the node API used by live indexing but not TronGrid's `/v1` API; before this change, one TronGrid outage would have left address histories, wallet transactions and balances failing until the next restart.
 
 ### Changed (phase 2 — console on the directed graph, Fund Flow Trace P0-C, console part)
 
