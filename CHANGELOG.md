@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Changed (phase 2 — console on the directed graph, Fund Flow Trace P0-C, console part)
+
+- **The fund flow graph page uses the directed graph.** A direction selector (Out, In, Both; Both by default) replaces the undirected view: only links value could have taken are drawn, and the page says so. "Highlight path from root" asks the server for a path value could have taken (directed, chronological, one token) and highlights its transfers; it no longer computes a shortest path in the browser that ignored direction and time. The status line says when the graph is partial, and "Where the graph stops" lists the reasons per wallet (depth, budget, likely service, coverage gap, exchange or bridge, loop), leaving out the near-universal unknown opening balance. The date filter keeps an edge when its first-to-last transfer span overlaps the range, not only by its last transfer. Expanding a wallet keeps the graph's direction. "Check for changes" asks the server which transfers shown are no longer held (reorganisation, trimmed working set).
+
 ### Added (phase 2 — directed graph, Fund Flow Trace P0-C, server part)
 
 - **`GET /graph/{address}?direction=out|in|both`** follows value in its direction and in time order with the trace engine: from A, an address that only sent to one of A's counterparties is no longer reached, and a flow earlier than the one that brought the value cannot carry it. Edges keep every transfer id (at most 50 listed, `count` is the total), the first and last instant and a `cycle` mark; `stops` say where and why the graph ends (depth, node or read budget, exchange or bridge, likely service above 5,000 flows, coverage gap, unknown opening balance, same-instant order), `status` is `PARTIAL` when one comes from missing data, and `asOfBlock` gives the last block indexed. Expect fewer nodes than the undirected graph: only links value could have taken. Without `direction` the previous undirected graph is unchanged and deprecated. The console still uses the undirected graph until the next part.

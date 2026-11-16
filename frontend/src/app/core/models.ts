@@ -285,23 +285,52 @@ export interface GraphNode {
   /** null = unknown (no real provider, lookup failed, or graph node not resolved) */
   isContract: boolean | null;
   depth: number;
+  /** Directed graph: root, out (value went there), in (value came from there), both. */
+  side?: 'root' | 'out' | 'in' | 'both' | null;
 }
 
 export interface GraphEdge {
   id: string;
   source: string;
   target: string;
+  /** Latest transfer. */
   txHash: string;
   token: Token;
   rawAmount: string;
+  /** Latest transfer. */
   timestamp: string;
+  count?: number;
+  /** Directed graph: first transfer, every transfer id (at most 50), value coming back to an address already on the way. */
+  firstTimestamp?: string | null;
+  eventIds?: string[] | null;
+  cycle?: boolean | null;
 }
+
+export type GraphDirection = 'out' | 'in' | 'both';
+
+export interface GraphStop { address: string; token: string | null; reason: string; detail: string }
 
 export interface Graph {
   root: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
   truncated: boolean;
+  direction?: GraphDirection | null;
+  status?: 'COMPLETE' | 'PARTIAL' | null;
+  stops?: GraphStop[] | null;
+  asOfBlock?: number | null;
+}
+
+/** A path value could have taken (directed, chronological, one token), computed by the server. */
+export interface GraphPath {
+  source: string;
+  target: string;
+  network: NetworkId;
+  outcome: 'FOUND' | 'NO_PATH' | 'LIMIT_REACHED';
+  hops: { from: string; to: string; txHash: string; token: string; amount: string; timestamp: string }[];
+  stops: GraphStop[];
+  note: string;
+  asOfBlock: number | null;
 }
 
 export type AlertStatus = 'OPEN' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE_POSITIVE';

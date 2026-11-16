@@ -3,7 +3,9 @@
 Statut : **C-1 (serveur) implémenté le 2026-11-16** : `GET /graph?direction=out|in|both` sur le moteur P0-D (G1 à G6,
 G11 avec l'arrêt `SERVICE_LIKE` au-delà de 5 000 flux, `asOfBlock` de G7), tests T1 à T7 et T10 (`DirectedGraphApiTest`) ;
 sans `direction`, ancien graphe conservé et déprécié. C-2 fait le même jour : `GET /graph/{a}/path` (chemin au plus tôt,
-orienté, chronologique, un jeton, `TracePath`, T9) et `POST /graph/verify` (T8). Reste : C-3 (console : G8 à G10).
+orienté, chronologique, un jeton, `TracePath`, T9) et `POST /graph/verify` (T8). C-3 fait le même jour (console : sens Out/In/Both, chemin serveur, arrêts
+structurels affichés, filtre de dates par chevauchement, expansion dans le même sens, « Check for changes ») ; non
+vérifié visuellement dans un navigateur. P0-C complet.
 
 Préparation (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
 
