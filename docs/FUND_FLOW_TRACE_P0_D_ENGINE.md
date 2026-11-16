@@ -9,7 +9,8 @@ faite ; l'ordre à instant égal est supposé et signalé `SAME_TIME_ORDER`) ; c
 dispersion, consolidation, circulation, peel chain (constats `INFERRED` citant leurs flux ; seuils `Trace.Patterns` :
 20 contreparties, 3 détachements d'au plus 20 % et d'écart au plus 1,5) ; une valeur qui revient vers une adresse déjà
 traversée continue de circuler mais n'est pas reçue deux fois (arête de retour, constat de circulation, arrêt `CYCLE`).
-Reste : D-3 `TraceDiff` (14, 15). Aucun branchement à l'API.
+**D-3 fait le même jour** : `TraceDiff` (preuves rapprochées par l'identité du transfert, réinclusion =
+`MOVED`, attributions modifiées ; scénarios 14 et 15, `TraceDiffTest`). P0-D est complet ; aucun branchement à l'API.
 
 Conception (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
 
