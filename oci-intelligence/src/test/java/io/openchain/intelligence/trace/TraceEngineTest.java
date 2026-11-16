@@ -220,6 +220,18 @@ class TraceEngineTest {
         assertThat(second.toString()).isEqualTo(first.toString());
     }
 
+    /** An address with too many flows (service-like) is not expanded, and the result says so. */
+    @Test void aServiceLikeAddressIsNotExpanded() {
+        src.flow(A, B, 100, 1);
+        for (int i = 0; i < 6; i++) src.flow(B, a("s" + i), 10, 2);
+        src.flow(B, C, 40, 3);
+        Trace.Result r = TraceEngine.run(Trace.Request.of(A, Direction.FORWARD).withLimits(new Trace.Limits(3, 500, 20_000, 5)), src);
+        assertThat(stopped(r, B, StopReason.SERVICE_LIKE)).isTrue();
+        assertThat(at(r, B).high()).isEqualTo(Fraction.of(100));
+        assertThat(at(r, C)).isNull();
+        assertThat(r.status()).isEqualTo(Trace.Status.PARTIAL);
+    }
+
     @Test void theNodeAndReadLimitsStopTheTraceAndSaySo() {
         for (int i = 0; i < 10; i++) src.flow(A, a("10" + i), 100, 1);
         Trace.Result nodes = TraceEngine.run(Trace.Request.of(A, Direction.FORWARD).withLimits(new Trace.Limits(2, 4, 20_000)), src);

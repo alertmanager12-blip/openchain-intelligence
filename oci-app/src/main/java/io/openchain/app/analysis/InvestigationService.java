@@ -17,7 +17,11 @@ import io.openchain.core.risk.RiskScore;
 import io.openchain.intelligence.IntelligencePipeline;
 import io.openchain.intelligence.exposure.ExposurePaths;
 import io.openchain.intelligence.flow.ValueFlow;
+import io.openchain.intelligence.trace.Fraction;
+import io.openchain.intelligence.trace.Trace;
+import io.openchain.intelligence.trace.TraceEngine;
 import io.openchain.intelligence.label.AddressLabel;
+import io.openchain.intelligence.label.LabelCategory;
 import io.openchain.intelligence.profile.WalletProfile;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -328,7 +332,8 @@ public class InvestigationService {
     static final int MAX_HASHES = 20;
 
     /** Which blocks the answer rests on (Fund Flow Trace P0-B): {@link AddressCoverage}, plus the known blind spots. */
-    private Dto.CoverageDto coverage(Address a, List<ValueFlow> involving) {
+    /** Coverage of one address (Fund Flow Trace P0-B): address history, blocks indexed live, recorded gaps, trim. */
+    AddressCoverage.Result addressCoverage(Address a) {
         Network n = a.network();
         Dto.HistoryCoverageDto h = history.coverage(a);
         AddressCoverage.History hist = "NOT_CONFIGURED".equals(h.status()) ? null : new AddressCoverage.History(h.status(),
@@ -336,10 +341,16 @@ public class InvestigationService {
         long first = chains.firstIndexedBlock(n).orElse(-1);
         long last = chains.runtime(n).map(ChainIngestionService.NetworkRuntime::lastIndexedBlock).orElse(-1L);
         boolean exempt = history.historyAddresses().contains(a);
-        var r = AddressCoverage.compute(hist, first, last, chains.indexingCoverage().gaps(n), !exempt && chains.flowsTrimmed() > 0);
+        return AddressCoverage.compute(hist, first, last, chains.indexingCoverage().gaps(n), !exempt && chains.flowsTrimmed() > 0);
+    }
+
+    private Dto.CoverageDto coverage(Address a, List<ValueFlow> involving) {
+        Network n = a.network();
+        Dto.HistoryCoverageDto h = history.coverage(a);
+        var r = addressCoverage(a);
 
         List<String> limits = new ArrayList<>(r.reasons());
-        if (hist == null && h.message() != null) limits.add(h.message());
+        if ("NOT_CONFIGURED".equals(h.status()) && h.message() != null) limits.add(h.message());
         limits.addAll(limitations(n));
         if (r.state() != AddressCoverage.State.COMPLETE) {
             limits.add("No exposure here means none in the data covered, not none at all.");
@@ -470,5 +481,119 @@ public class InvestigationService {
                     ApiMapper.token(x.token), x.raw.toString(), ApiMapper.amount(x.raw, x.token.decimals()), x.last, x.count));
         }
         return new Dto.GraphDto(root.value(), root.network().id(), nodes, edgeDtos, truncated);
+    }
+
+    // ---- directed graph (Fund Flow Trace P0-C) ------------------------------------------------------------------
+
+    /** Flows held in memory, labels, and the P0-B coverage of each address; opening balances unknown. */
+    private Trace.Source traceSource() {
+        return new Trace.Source() {
+            @Override public List<ValueFlow> outgoing(Address a) { return intelligence.flows().outgoing(a); }
+            @Override public List<ValueFlow> incoming(Address a) { return intelligence.flows().incoming(a); }
+            @Override public boolean complete(Address a, Trace.Window w) { return addressCoverage(a).state() == AddressCoverage.State.COMPLETE; }
+            @Override public Optional<BigInteger> openingBalance(Address a, String tokenKey, Trace.Window w) { return Optional.empty(); }
+            @Override public List<AddressLabel> labels(Address a) { return labels.findByAddress(a); }
+        };
+    }
+
+    /**
+     * Graph of value in its direction and time order ({@code out}: where the root's value went; {@code in}: where the
+     * value it received came from; {@code both}: the two, each with its own depth), computed by the trace engine on the
+     * flows held in memory. Edges aggregate per (source, target, token) the transfers that carried traced value, with all
+     * their event ids; stops say where and why the graph ends. With {@code both}, each side has its own node limit.
+     */
+    public Dto.GraphDto graphDirected(Address root, int depth, String tokenFilter, Instant from, Instant to, int maxNodes, String direction) {
+        String tokenKey = null;
+        if (tokenFilter != null && !tokenFilter.isBlank()) {
+            tokenKey = "\u0000none"; // a token the root never moved: nothing to follow
+            for (ValueFlow f : intelligence.flows().involving(root)) {
+                if (tokenFilter.equalsIgnoreCase(f.token().symbol()) || tokenFilter.equalsIgnoreCase(f.token().contract())) {
+                    tokenKey = Trace.tokenKey(f.token());
+                    break;
+                }
+            }
+        }
+        Trace.Source src = traceSource();
+        List<Trace.Result> runs = new ArrayList<>();
+        List<String> sides = new ArrayList<>();
+        for (String side : List.of("out", "in")) {
+            if (!direction.equals("both") && !direction.equals(side)) continue;
+            Trace.Request req = new Trace.Request(root.network(), root, side.equals("out") ? Trace.Direction.FORWARD : Trace.Direction.BACKWARD,
+                    new Trace.Window(from, to), tokenKey, Trace.Method.PROPORTIONAL, new Trace.Limits(depth, maxNodes, 20_000, 5_000),
+                    Set.of(LabelCategory.EXCHANGE, LabelCategory.BRIDGE), new Fraction(BigInteger.ONE, BigInteger.valueOf(1_000)), Map.of());
+            runs.add(TraceEngine.run(req, src));
+            sides.add(side);
+        }
+
+        Map<Address, Integer> nodeDepth = new HashMap<>();
+        Map<Address, String> nodeSide = new HashMap<>();
+        nodeDepth.put(root, 0);
+        nodeSide.put(root, "root");
+        record EdgeKey(String source, String target, String tokenKey) {}
+        final class EdgeAcc {
+            Token token; BigInteger raw = BigInteger.ZERO; Instant first, last; String lastTx; boolean cycle; int transfers;
+            final java.util.TreeSet<String> ids = new java.util.TreeSet<>();
+        }
+        Map<EdgeKey, EdgeAcc> edges = new java.util.TreeMap<>(Comparator.comparing(EdgeKey::source).thenComparing(EdgeKey::target)
+                .thenComparing(EdgeKey::tokenKey));
+        Map<String, Dto.GraphStopDto> stops = new java.util.TreeMap<>();
+        boolean partial = false, truncated = false;
+        for (int r = 0; r < runs.size(); r++) {
+            Trace.Result res = runs.get(r);
+            String side = sides.get(r);
+            partial |= res.status() == Trace.Status.PARTIAL;
+            Set<String> cycleIds = new HashSet<>();
+            for (Trace.Finding f : res.findings()) if (f.type() == Trace.FindingType.CIRCULATION) cycleIds.addAll(f.eventIds());
+            for (Trace.Node n : res.nodes()) mark(nodeDepth, nodeSide, n.address(), n.depth(), side);
+            for (Trace.Attribution x : res.attributions()) mark(nodeDepth, nodeSide, x.address(), x.depth(), side);
+            for (Trace.Edge e : res.edges()) {
+                EdgeAcc acc = edges.computeIfAbsent(new EdgeKey(e.from().value(), e.to().value(), e.tokenKey()), k -> new EdgeAcc());
+                if (!acc.ids.add(e.eventId())) continue; // the same transfer seen from both sides
+                acc.ids.addAll(e.aliases());
+                acc.transfers++;
+                acc.token = e.token();
+                acc.raw = acc.raw.add(e.rawAmount());
+                if (acc.first == null || e.timestamp().isBefore(acc.first)) acc.first = e.timestamp();
+                if (acc.last == null || !e.timestamp().isBefore(acc.last)) { acc.last = e.timestamp(); acc.lastTx = e.txHash(); }
+                acc.cycle |= cycleIds.contains(e.eventId());
+                // an endpoint not reached by the engine (dust, share, budget) still belongs to the drawing
+                mark(nodeDepth, nodeSide, e.from(), nodeDepth.getOrDefault(e.to(), 0) + 1, side);
+                mark(nodeDepth, nodeSide, e.to(), nodeDepth.getOrDefault(e.from(), 0) + 1, side);
+            }
+            for (Trace.Stop s : res.stops()) {
+                if (s.reason() == Trace.StopReason.NODES || s.reason() == Trace.StopReason.FLOWS_READ || s.reason() == Trace.StopReason.DEPTH) truncated = true;
+                stops.putIfAbsent(s.reason() + "|" + s.address().value() + "|" + s.tokenKey(),
+                        new Dto.GraphStopDto(s.address().value(), s.tokenKey(), s.reason().name(), s.detail()));
+            }
+        }
+
+        List<Dto.GraphNodeDto> nodes = new ArrayList<>();
+        nodeDepth.entrySet().stream().sorted(Comparator.comparing((Map.Entry<Address, Integer> e) -> e.getValue())
+                .thenComparing(e -> e.getKey().value())).forEach(e -> {
+            Address a = e.getKey();
+            Optional<RiskScore> s = intelligence.scoring().latest(a);
+            List<AddressLabel> ls = labels.findByAddress(a);
+            nodes.add(new Dto.GraphNodeDto(a.value(), a.value(), a.network().id(), labelText(a),
+                    ls.stream().map(l -> ChainIngestionService.categoryId(l.category())).distinct().toList(),
+                    s.map(x -> x.level().name()).orElse("UNKNOWN"), s.map(RiskScore::score).orElse(0), null, e.getValue(), nodeSide.get(a)));
+        });
+        List<Dto.GraphEdgeDto> edgeDtos = new ArrayList<>();
+        int i = 0;
+        for (var e : edges.entrySet()) {
+            EdgeAcc x = e.getValue();
+            List<String> ids = x.ids.stream().limit(Dto.GraphEdgeDto.MAX_EDGE_EVIDENCE).toList();
+            edgeDtos.add(new Dto.GraphEdgeDto("e" + (i++), e.getKey().source(), e.getKey().target(), x.lastTx, ApiMapper.token(x.token),
+                    x.raw.toString(), ApiMapper.amount(x.raw, x.token.decimals()), x.last, x.transfers, x.first, ids, x.cycle));
+        }
+        Long asOf = chains.runtime(root.network()).map(ChainIngestionService.NetworkRuntime::lastIndexedBlock).filter(b -> b >= 0).orElse(null);
+        return new Dto.GraphDto(root.value(), root.network().id(), nodes, edgeDtos, truncated, direction, partial ? "PARTIAL" : "COMPLETE",
+                List.copyOf(stops.values()), asOf);
+    }
+
+    /** Keeps the smallest depth of an address and the sides it was reached from. */
+    private static void mark(Map<Address, Integer> depth, Map<Address, String> side, Address a, int d, String s) {
+        if (d < 0) d = 1;
+        depth.merge(a, d, Math::min);
+        side.merge(a, s, (old, now) -> old.equals("root") || old.equals(now) ? old : "both");
     }
 }

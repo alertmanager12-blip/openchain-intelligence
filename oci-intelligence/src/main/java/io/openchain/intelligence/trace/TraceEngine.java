@@ -83,6 +83,11 @@ public final class TraceEngine {
         Loaded l = loaded.get(a);
         if (l != null) return l;
         List<ValueFlow> rawIn = source.incoming(a), rawOut = source.outgoing(a);
+        if (!a.equals(req.seed()) && rawIn.size() + rawOut.size() > req.limits().maxFlowsPerAddress()) {
+            stop(a, null, StopReason.SERVICE_LIKE, (rawIn.size() + rawOut.size()) + " flows (more than " + req.limits().maxFlowsPerAddress()
+                    + "): probably a service; not expanded");
+            return null;
+        }
         if (flowsRead + rawIn.size() + rawOut.size() > req.limits().maxFlowsRead()) {
             readLimitHit = true;
             stop(a, null, StopReason.FLOWS_READ, "loading this address would exceed " + req.limits().maxFlowsRead() + " flows read");
@@ -546,7 +551,7 @@ public final class TraceEngine {
             if (!forward && f.to().equals(req.seed()) && !followsQuiet(f)) continue;
             Address at = forward ? f.to() : f.from();
             Edge edge = new Edge(f.eventId(), List.copyOf(aliases.getOrDefault(f.eventId(), List.of())), f.txHash(), f.timestamp(), f.from(), f.to(),
-                    Trace.tokenKey(f.token()), f.rawAmount(), t.low(), t.high());
+                    Trace.tokenKey(f.token()), f.rawAmount(), t.low(), t.high(), f.token());
             edges.add(edge);
             // value coming back to an address already on the way is not received a second time (circulation finding)
             if (!at.equals(req.seed()) && !backEdge(edge)) perAddress.merge(at.value() + "|" + Trace.tokenKey(f.token()), t, Traced::plus);

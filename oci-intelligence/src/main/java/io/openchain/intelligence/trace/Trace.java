@@ -35,10 +35,16 @@ public final class Trace {
         boolean contains(Instant t) { return (from == null || !t.isBefore(from)) && (to == null || !t.isAfter(to)); }
     }
 
-    public record Limits(int maxDepth, int maxNodes, int maxFlowsRead) {
+    /**
+     * @param maxFlowsPerAddress an address with more flows than this is not expanded (likely a service: exchange hot wallet,
+     *                           router, contract); stop {@code SERVICE_LIKE}
+     */
+    public record Limits(int maxDepth, int maxNodes, int maxFlowsRead, int maxFlowsPerAddress) {
         public static final int DEPTH_CAP = 8, NODES_CAP = 5_000, FLOWS_CAP = 200_000;
-        public static final Limits DEFAULTS = new Limits(3, 500, 20_000);
+        public static final Limits DEFAULTS = new Limits(3, 500, 20_000, 5_000);
+        public Limits(int maxDepth, int maxNodes, int maxFlowsRead) { this(maxDepth, maxNodes, maxFlowsRead, 5_000); }
         public Limits {
+            if (maxFlowsPerAddress < 1) throw new IllegalArgumentException("maxFlowsPerAddress must be positive");
             if (maxDepth < 1 || maxDepth > DEPTH_CAP) throw new IllegalArgumentException("maxDepth must be 1.." + DEPTH_CAP);
             if (maxNodes < 1 || maxNodes > NODES_CAP) throw new IllegalArgumentException("maxNodes must be 1.." + NODES_CAP);
             if (maxFlowsRead < 1 || maxFlowsRead > FLOWS_CAP) throw new IllegalArgumentException("maxFlowsRead must be 1.." + FLOWS_CAP);
@@ -108,7 +114,7 @@ public final class Trace {
     public static String tokenKey(Token t) { return t.isNative() ? "native:" + t.symbol() : t.contract(); }
 
     public enum StopReason {
-        DEPTH, NODES, FLOWS_READ, STOP_CATEGORY, BELOW_MIN_SHARE, DUST, UNVERIFIED_TOKEN, COVERAGE_GAP, CYCLE,
+        DEPTH, NODES, FLOWS_READ, SERVICE_LIKE, STOP_CATEGORY, BELOW_MIN_SHARE, DUST, UNVERIFIED_TOKEN, COVERAGE_GAP, CYCLE,
         /** The value could have come from a balance held before the window, of unknown size: lower bound 0. */
         UNKNOWN_OPENING_BALANCE,
         /** Flows of the same instant in and out of the address: their order is unknown (no log index yet, D7). */
@@ -130,7 +136,7 @@ public final class Trace {
 
     /** Value moved along one flow that the trace followed, with every identifier of that transfer. */
     public record Edge(String eventId, List<String> aliases, String txHash, Instant timestamp, Address from, Address to,
-                       String tokenKey, BigInteger rawAmount, Fraction tracedLow, Fraction tracedHigh) {}
+                       String tokenKey, BigInteger rawAmount, Fraction tracedLow, Fraction tracedHigh, Token token) {}
 
     public record Node(Address address, int depth, List<String> labels) {}
 

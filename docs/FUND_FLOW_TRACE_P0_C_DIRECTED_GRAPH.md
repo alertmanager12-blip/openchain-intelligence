@@ -1,6 +1,11 @@
 # Fund Flow Trace P0-C — graphe orienté et chronologique
 
-Statut : **préparation, aucune modification de code** (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
+Statut : **C-1 (serveur) implémenté le 2026-11-16** : `GET /graph?direction=out|in|both` sur le moteur P0-D (G1 à G6,
+G11 avec l'arrêt `SERVICE_LIKE` au-delà de 5 000 flux, `asOfBlock` de G7), tests T1 à T7 et T10 (`DirectedGraphApiTest`) ;
+sans `direction`, ancien graphe conservé et déprécié. Restent : C-2 (chemin orienté T9, vérification T8), C-3 (console :
+G8 à G10).
+
+Préparation (2026-11-12, code de `94ea42c`). **[F]** fait vérifié ; **[P]** proposition.
 
 ## 1. Comportement actuel
 

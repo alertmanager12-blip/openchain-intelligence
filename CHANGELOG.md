@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 2 — directed graph, Fund Flow Trace P0-C, server part)
+
+- **`GET /graph/{address}?direction=out|in|both`** follows value in its direction and in time order with the trace engine: from A, an address that only sent to one of A's counterparties is no longer reached, and a flow earlier than the one that brought the value cannot carry it. Edges keep every transfer id (at most 50 listed, `count` is the total), the first and last instant and a `cycle` mark; `stops` say where and why the graph ends (depth, node or read budget, exchange or bridge, likely service above 5,000 flows, coverage gap, unknown opening balance, same-instant order), `status` is `PARTIAL` when one comes from missing data, and `asOfBlock` gives the last block indexed. Expect fewer nodes than the undirected graph: only links value could have taken. Without `direction` the previous undirected graph is unchanged and deprecated. The console still uses the undirected graph until the next part.
+- Trace engine: an address with more than `maxFlowsPerAddress` flows (default 5,000) is not expanded (`SERVICE_LIKE`).
+
 ### Added (phase 2 — fund flow trace engine, Fund Flow Trace P0-D, first part)
 
 - **Pure trace engine** (`oci-intelligence`, `io.openchain.intelligence.trace`; not exposed by the API yet). Follows value forward from an address or backward to its sources, per token (never mixing assets), within depth, node and flows-read limits. Attribution by pool replay in exact fractions, `PROPORTIONAL` (default) or `FIFO`, both stated as conventions; an unknown opening balance gives an interval with lower bound 0. Duplicates and a TRC-20 transfer seen live and by history count once, with both ids kept as evidence. Every stop has a reason (depth, nodes, flows read, exchange or bridge, minimum share, dust, unverified token, coverage gap, return to the seed, unknown opening balance, same-instant order); the result is `COMPLETE` only when no stop is caused by missing data. Deterministic: same request and flows, same result.
