@@ -1,0 +1,104 @@
+# Release images and SBOMs.
+#
+# Runs only when a maintainer publishes a GitHub release (pre-releases included) from a tag vX.Y.Z, created by hand as
+# described in docs/guides/release-process.md. It never creates a tag or a release by itself.
+#   1. checks that the tag matches the version of pom.xml (no SNAPSHOT image under a release tag);
+#   2. builds the app and frontend images from the tagged commit and pushes them to GitHub Container Registry
+#      (ghcr.io/<owner>/openchain-intelligence-app:X.Y.Z and ...-frontend:X.Y.Z; no "latest" tag);
+#   3. generates a CycloneDX SBOM of each image with Syft and attaches it to the release.
+# New GHCR packages are private: make them public in the package settings after the first run if they should be pulled
+# without credentials.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Images and SBOMs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write   # attach the SBOMs to the release
+      packages: write   # push to ghcr.io
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Check that the tag matches the project version
+        id: version
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::tag $TAG is not vX.Y.Z"; exit 1 ;; esac
+          version="${TAG#v}"
+          pom=$(sed -n 's:^  <version>\(.*\)</version>$:\1:p' pom.xml | head -1)
+          if [ "$pom" != "$version" ]; then echo "::error::tag $TAG but pom.xml version is '$pom'"; exit 1; fi
+          grep -q "\"version\": \"$version\"" frontend/package.json || { echo "::error::frontend/package.json is not $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+          owner=$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "app=ghcr.io/$owner/openchain-intelligence-app:$version" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/$owner/openchain-intelligence-frontend:$version" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the app image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.version.outputs.app }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Build and push the frontend image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/frontend.Dockerfile
+          push: true
+          tags: ${{ steps.version.outputs.frontend }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: SBOM of the app image
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.version.outputs.app }}
+          format: cyclonedx-json
+          output-file: chainsentinel-app-${{ steps.version.outputs.version }}.cdx.json
+          artifact-name: chainsentinel-app-${{ steps.version.outputs.version }}.cdx.json
+          upload-release-assets: true
+
+      - name: SBOM of the frontend image
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.version.outputs.frontend }}
+          format: cyclonedx-json
+          output-file: chainsentinel-frontend-${{ steps.version.outputs.version }}.cdx.json
+          artifact-name: chainsentinel-frontend-${{ steps.version.outputs.version }}.cdx.json
+          upload-release-assets: true

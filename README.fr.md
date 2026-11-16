@@ -20,7 +20,8 @@ risque par les transactions qui le fondent, attribue aux portefeuilles un score 
 transforme vos règles YAML en alertes envoyées vers des webhooks, Slack, Discord ou Telegram. Tout tourne sur votre
 propre machine ou votre serveur, avec Docker.
 
-> **Statut : 0.1.0-SNAPSHOT, aucune version publiée.** Le produit fonctionne de bout en bout sur les données réelles,
+> **Statut : 0.1.0, première pré-version** ([notes de version et problèmes connus](docs/releases/v0.1.0.md), en anglais).
+> Le produit fonctionne de bout en bout sur les données réelles,
 > mais les API et les schémas peuvent encore évoluer avant la 1.0. Licence : [Apache-2.0](LICENSE).
 >
 > **Nom :** le projet a démarré sous le nom *OpenChain Intelligence*. Les modules (`oci-*`), les paquets Java
@@ -60,7 +61,7 @@ La vision à long terme et la feuille de route sont dans [docs/strategy](docs/st
 
 | Domaine | Ce que le produit fait aujourd'hui |
 |---|---|
-| Ingestion | Indexeurs TRON et EVM avec confirmations, gestion des réorganisations et reprise sans trou après un redémarrage : transferts de tokens (USDT, USDC…), transferts natifs des transactions réussies, approvals ERC-20/TRC-20, gels de stablecoins par l'émetteur (Tether, Circle — contrats officiels uniquement), changements de propriétaire de contrats |
+| Ingestion | Indexeurs TRON et EVM avec confirmations, détection des réorganisations (les retraits atteignent les règles et les alertes, pas encore les profils ni les scores) et reprise sans trou après un redémarrage : transferts de tokens (USDT, USDC…), transferts natifs des transactions réussies, approvals ERC-20/TRC-20, gels de stablecoins par l'émetteur (Tether, Circle — contrats officiels uniquement), changements de propriétaire de contrats |
 | Investigation | Page wallet (profil, contreparties, signaux, labels), page transaction, graphe des flux de fonds (jusqu'à 3 sauts), historique ERC-20 récupéré à la demande pour une adresse que vous ouvrez |
 | Risque | Dix détecteurs (structuration, dispersion, transit rapide, vidage rapide, flux circulaires, montants inhabituels, approvals inhabituels, réveil d'un wallet dormant, changements de propriétaire, exposition à des adresses listées) et un score de 0 à 100 dont chaque point cite sa source |
 | Surveillance | Règles en YAML ou via un éditeur visuel, simulation sur les données enregistrées, versionnement, liste de surveillance de vos propres portefeuilles, boîte de réception des alertes (acquitter, assigner, commenter, résoudre, faux positif) |
@@ -91,6 +92,11 @@ Bitcoin et Solana ne sont pas pris en charge.
 - **Les anciens transferts natifs et les transactions internes** d'une adresse nécessitent un nœud d'archive ou Erigon
   ([ADR-0020](docs/adr/0020-address-history-sources.md)).
 - **Une seule organisation :** pas de multi-tenant, pas encore de limitation de débit de l'API.
+- **La console écoute sur toutes les interfaces, en HTTP** (`"4200:8080"` dans `docker-compose.yml`) : sur un serveur,
+  placez-la derrière un proxy inverse TLS ou liez-la à `127.0.0.1`. Les autres problèmes connus de la 0.1.0
+  (réorganisations non retirées des profils et des scores, transferts de faux tokens dans les détecteurs
+  comportementaux, retard affiché à 0 quand le fournisseur échoue) sont listés dans les
+  [notes de version](docs/releases/v0.1.0.md#known-issues) (en anglais).
 - **Notifications par e-mail** non disponibles (Telegram, Slack, Discord et webhooks le sont).
 
 ## En cours de développement
