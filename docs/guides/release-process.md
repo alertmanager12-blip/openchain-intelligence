@@ -1,7 +1,7 @@
 # Release process
 
-How ChainSentinel versions are numbered and published. No release has been published yet: the code on `main` is
-`0.1.0-SNAPSHOT`. The first release number is decided by the lead maintainer when it is published.
+How ChainSentinel versions are numbered and published. The first release is `0.1.0`, a pre-release; release notes
+live in [`docs/releases/`](../releases/).
 
 ## Versioning
 
@@ -62,8 +62,16 @@ automatically.
 5. **Open the next development cycle:** set the version to the next `-SNAPSHOT` and add an empty `[Unreleased]`
    section.
 
-Docker images are built locally by `docker compose up --build`; no image is published to a registry yet. Publishing
-images (for example to GitHub Container Registry) would be a separate, explicitly approved workflow triggered by a tag.
+Docker images are built locally by `docker compose up --build`. When a maintainer publishes a GitHub release, the
+[`Release` workflow](../../.github/workflows/release.yml) checks that the tag matches the versions of `pom.xml`,
+`frontend/package.json` and `CHANGELOG.md`, pushes the app and frontend images to GitHub Container Registry
+(`ghcr.io/<owner>/openchain-intelligence-app:X.Y.Z`, `...-frontend:X.Y.Z`, no `latest` tag) and attaches a CycloneDX
+SBOM of each image to the release. It never creates a tag or a release. New GHCR packages are private until made public
+in their settings.
+
+`deploy/smoke-test.sh` builds and starts the whole stack: run it on a machine without a deployment of ChainSentinel (CI
+runs it in the "Docker images" job). Up to 0.1.0 it builds the images under the tags of `docker-compose.yml`, so on a
+machine that runs ChainSentinel it would replace the images of that deployment.
 
 ## Security releases
 

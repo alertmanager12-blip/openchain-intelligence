@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
+First published version, as a pre-release (0.x: APIs and schemas may still change, see the stability note above). Known issues of this version are listed in [`docs/releases/v0.1.0.md`](docs/releases/v0.1.0.md).
+
+
 ### Changed (console UI/UX redesign, see `docs/FRONTEND_UI_UX_REDESIGN.md`)
 
 - **Dark theme by default** (blue-black anthracite, signal-cyan accent used sparingly; light and "system" still available in Settings, a stored choice is kept). Type moves to **IBM Plex Sans / IBM Plex Mono** (OFL-1.1, Latin subsets, replace Inter and JetBrains Mono; ADR-0012 revision, NOTICE and CI allow-list updated).
@@ -126,4 +131,5 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 - Risk scores can no longer be raised for free by third parties: unsolicited dust (below 10 USDT/USDC by default, `DetectionConfig.Exposure.dustThresholds`) and transfers of unverified token contracts (fake tokens whose `Transfer` events name a sanctioned sender) no longer create direct or indirect exposure. They produce a `DUSTING` anomaly signal with zero score weight instead. Previously 0.000001 USDT, or a fake-token transfer, from a sanctioned address scored the recipient 80/HIGH.
 
-[Unreleased]: https://github.com/alertmanager12-blip/openchain-intelligence/commits/main
+[Unreleased]: https://github.com/alertmanager12-blip/openchain-intelligence/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/alertmanager12-blip/openchain-intelligence/releases/tag/v0.1.0

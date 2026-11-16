@@ -40,7 +40,7 @@ management:
 info:
   app:
     name: OpenChain Intelligence
-    version: 0.1.0-SNAPSHOT
+    version: 0.1.0
 
 springdoc:
   # OpenAPI document and Swagger UI: on in demo mode, off otherwise unless OCI_API_DOCS_ENABLED=true
