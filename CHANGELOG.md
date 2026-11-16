@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (phase 2 — one TRC-20 transfer counted once, Fund Flow Trace P0-B, second part)
+
+- **A TRC-20 transfer seen both by live indexing and by the TronGrid address history is counted once.** TronGrid gives no log index, so the history id (`tron:<tx>:trc20:<hash>:<n>`) never matched the live one (`tron:<tx>:<logIndex>`) and the same transfer could be counted twice in amounts, profiles and exposure. Both are now matched on network, transaction, token contract, sender, recipient, raw amount and rank of that tuple in the transaction: a history transfer already indexed live is not applied, and a live transfer replaces a history copy loaded before it. Metric `oci_history_duplicates_total{action="skipped"|"replaced"}` shows whether it happens. Known limit: two identical transfers of one transaction that TronGrid splits across two pages share the same rank; the second is lost.
+
 ### Added (phase 2 — indexing coverage recorded, Fund Flow Trace P0-B, first part)
 
 - **Blocks that were not indexed are now recorded, not only logged** (`V13__indexing_coverage`): a range skipped at a resume (`max-resume-gap`) goes to `indexer_gaps`, and the first block of the current run of continuous live indexing to `indexer_live_coverage`. On a network already indexed before this version, the first start sets that block with `exact = false`: continuity before it is unknown (earlier gaps were only in the logs). Metadata only; indexing itself is unchanged. These records feed the per-address coverage (next part), so that an answer can say which blocks it saw.

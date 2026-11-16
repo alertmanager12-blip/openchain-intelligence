@@ -519,8 +519,9 @@ public final class TronGridProvider implements BlockchainProvider, FreezeLogScan
      *   <li>TRC-20: TronGrid exposes neither the block number nor the log index, so the event id is
      *       {@code tron:<txid>:trc20:<h>:<n>} ({@code h} = 16 hex chars of SHA-256 over {@code from|to|contract|value},
      *       {@code n} = occurrence of that same tuple within the tx in that page), stable whatever the order of the
-     *       entries, and never colliding with live ids ({@code tron:<txid>:<logIndex>}): a transfer already indexed live
-     *       is seen twice under two ids (and two identical transfers of one tx split across two pages share n = 0). Block number is -1 and block hash null (no {@code block.number},
+     *       entries, and never colliding with live ids ({@code tron:<txid>:<logIndex>}): the application recognises the
+     *       same transfer seen by both sources ({@code TransferIdentity}, Fund Flow Trace P0-B) and counts it once. Two
+     *       identical transfers of one tx split across two pages still share n = 0 (the second is lost). Block number is -1 and block hash null (no {@code block.number},
      *       {@code block.hash}, {@code transaction.log_index} fields); entries whose {@code type} is not
      *       {@code Transfer} are skipped.</li>
      *   <li>Native TRX: successful {@code TransferContract} amounts and {@code TriggerSmartContract} call values above

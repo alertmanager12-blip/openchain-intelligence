@@ -213,6 +213,8 @@ public class ChainIngestionService {
         return start != null && at != null && !Duration.between(start, at).minus(ageWarmup).isNegative();
     }
     private final AtomicLong historyEventsApplied = new AtomicLong();
+    /** Same transfer seen by live indexing and by an address history without log index (Fund Flow Trace P0-B, C7). */
+    private final AtomicLong historyDuplicatesSkipped = new AtomicLong(), historyDuplicatesReplaced = new AtomicLong();
     /** Real balance lookups (provider calls), cache hits and failures (field then absent). */
     private final AtomicLong balanceLookups = new AtomicLong(), balanceCacheHits = new AtomicLong(), balanceLookupFailures = new AtomicLong();
     private static final int BALANCE_CACHE_SIZE = 10_000;
@@ -431,6 +433,12 @@ public class ChainIngestionService {
             if (flow.isPresent()) {
                 ValueFlow f = flow.get();
                 transfersIndexed.incrementAndGet();
+                // the same transfer loaded earlier by an address history without log index: the live flow, which has the
+                // exact identity, replaces it (Fund Flow Trace P0-B, C7)
+                io.openchain.intelligence.flow.TransferIdentity.counterpart(f, intelligence.flows()).ifPresent(old -> {
+                    intelligence.retractFlow(old.eventId());
+                    historyDuplicatesReplaced.incrementAndGet();
+                });
                 track(f);
                 // before this flow: was each party ever seen, and does the receiver still have a profile? (age fields)
                 boolean senderSeen = seenAddresses.add(f.from());
@@ -647,6 +655,10 @@ public class ChainIngestionService {
             if (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER) {
                 Optional<ValueFlow> f = toFlow(e);
                 if (f.isEmpty()) continue;
+                if (io.openchain.intelligence.flow.TransferIdentity.counterpart(f.get(), intelligence.flows()).isPresent()) {
+                    historyDuplicatesSkipped.incrementAndGet(); // already indexed live: counted once
+                    continue;
+                }
                 track(f.get());
                 seenAddresses.add(f.get().from());
                 seenAddresses.add(f.get().to());
@@ -769,6 +781,12 @@ public class ChainIngestionService {
     }
 
     public long historyEventsApplied() { return historyEventsApplied.get(); }
+
+    /** History transfers not applied because live indexing already had them. */
+    public long historyDuplicatesSkipped() { return historyDuplicatesSkipped.get(); }
+
+    /** History transfers replaced by the same transfer indexed live afterwards. */
+    public long historyDuplicatesReplaced() { return historyDuplicatesReplaced.get(); }
 
     public long backfilledFreezesApplied() { return backfilledFreezesApplied.get(); }
     /** Approval spender code lookups that failed (the field is then absent from the event). */

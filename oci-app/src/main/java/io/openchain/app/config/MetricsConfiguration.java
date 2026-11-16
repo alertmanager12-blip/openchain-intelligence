@@ -159,6 +159,11 @@ public class MetricsConfiguration {
                         .description("Time events waited for the processing lock").tag("network", id).register(registry);
             }
             FunctionCounter.builder("oci.events.indexed", chains, ChainIngestionService::eventsIndexed).register(registry);
+            // Fund Flow Trace P0-B (C7): one transfer seen live and by an address history without log index counts once
+            FunctionCounter.builder("oci.history.duplicates", chains, ChainIngestionService::historyDuplicatesSkipped).tag("action", "skipped")
+                    .description("History transfers not applied: already indexed live").register(registry);
+            FunctionCounter.builder("oci.history.duplicates", chains, ChainIngestionService::historyDuplicatesReplaced).tag("action", "replaced")
+                    .description("History transfers replaced by the same transfer indexed live").register(registry);
             // working set (ADR-0024 step 3a): sizes after the last trim, and its duration
             for (var e : java.util.Map.<String, java.util.function.ToDoubleFunction<ChainIngestionService.TrimResult>>of(
                     "flows", t -> t.remainingFlows(), "signals", t -> t.remainingSignals(), "profiles", t -> t.remainingProfiles(),
