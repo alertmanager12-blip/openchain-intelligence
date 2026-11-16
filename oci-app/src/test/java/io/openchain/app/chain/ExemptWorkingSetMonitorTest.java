@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -30,6 +31,17 @@ class ExemptWorkingSetMonitorTest extends ApiTestSupport {
     @Autowired IntelligencePipeline intel;
     @Autowired AddressHistoryStore histories;
     @Autowired WatchlistService watchlist;
+    String watchedId;
+
+    /**
+     * The Spring context is shared with the other test classes: a watchlist entry left behind turns every watchlist-scoped
+     * rule of the pack (suspicious-approval...) off for unwatched wallets in the classes that run next (CI failure of
+     * AdminChangeSpenderAndBackfillTest, 2026-11-16, Linux test order).
+     */
+    @AfterEach void removeWatchlistEntry() {
+        if (watchedId != null) watchlist.remove(watchedId);
+        watchedId = null;
+    }
     @Autowired ExemptWorkingSetMonitor monitor;
 
     static final Token USDT = new Token(Network.POLYGON, "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", "USDT", 6);
@@ -51,7 +63,7 @@ class ExemptWorkingSetMonitorTest extends ApiTestSupport {
         histories.save(progress(failed, Status.FAILED, 0));
         histories.save(progress(watchedFailed, Status.FAILED, 0));
         histories.save(progress(busy, Status.TRUNCATED, 5_000));
-        watchlist.add(watchedFailed, "client treasury", "test");
+        watchedId = watchlist.add(watchedFailed, "client treasury", "test").orElseThrow().id();
         Instant now = Instant.now();
         List<ValueFlow> flows = new ArrayList<>();
         flows.add(new ValueFlow("polygon:0xex1:0", Network.POLYGON, "0xex1", now.minusSeconds(60), loaded, partial, USDT, BigInteger.TEN)); // shared

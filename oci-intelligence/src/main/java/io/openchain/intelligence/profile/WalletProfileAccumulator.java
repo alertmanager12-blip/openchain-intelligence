@@ -68,6 +68,8 @@ public final class WalletProfileAccumulator {
         /** @return true if the key was not among the remembered ones. */
         boolean add(String k) { return put(k, Boolean.TRUE) == null; }
         @Override protected boolean removeEldestEntry(Map.Entry<String, Boolean> e) { return size() > cap; }
+        /** Never copied (the accumulator copies its state explicitly); refused rather than a silently shared shallow copy. */
+        @Override public RecentKeys clone() { throw new UnsupportedOperationException("not cloneable"); }
     }
 
     /** Insertion-ordered counter that forgets its oldest keys beyond a capacity. */
@@ -75,6 +77,8 @@ public final class WalletProfileAccumulator {
         private final int cap;
         RecentCounts(int cap) { super(16, 0.75f, false); this.cap = cap; }
         @Override protected boolean removeEldestEntry(Map.Entry<String, Integer> e) { return size() > cap; }
+        /** Never copied (the accumulator copies its state explicitly); refused rather than a silently shared shallow copy. */
+        @Override public RecentCounts clone() { throw new UnsupportedOperationException("not cloneable"); }
     }
 
     public WalletProfileAccumulator(Address address) { this.address = address; }

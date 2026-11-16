@@ -110,7 +110,13 @@ final class SlidingWindow {
         lost(entries.get(n - 1).time());
         entries.subList(0, n).clear();
         for (Entry x : removed) ids.remove(x.eventId());
-        if (undo != null) undo.push(() -> { entries.addAll(0, removed); for (Entry x : removed) ids.add(x.eventId()); lostUpTo = priorLost; });
+        if (undo != null) {
+            undo.push(() -> {
+                entries.addAll(0, removed);
+                for (Entry x : removed) ids.add(x.eventId());
+                lostUpTo = priorLost;
+            });
+        }
     }
 
     Instant newest() { return entries.isEmpty() ? null : entries.getLast().time(); }

@@ -37,7 +37,8 @@ public record CursorPage<T>(List<T> items, String nextCursor, boolean truncated)
             String s = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
             if (!s.startsWith("o:")) throw new IllegalArgumentException();
             int o = Integer.parseInt(s.substring(2));
-            if (o < 0) throw new IllegalArgumentException();
+            // a forged offset near Integer.MAX_VALUE would overflow offset + limit
+            if (o < 0 || o > Integer.MAX_VALUE - MAX_LIMIT - 1) throw new IllegalArgumentException();
             return o;
         } catch (IllegalArgumentException e) {
             throw ApiException.badRequest("invalid cursor");

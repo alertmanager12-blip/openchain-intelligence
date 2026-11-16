@@ -26,5 +26,5 @@ public record OrphanKeyReport(Instant at, long profiles, long eventKeys, long tx
     }
 
     /** Entry (LinkedHashMap.Entry 40 B + table slot ~8 B) + String (24 B) + byte[] (16 B header + length, 8-aligned). */
-    static long entryBytes(String k) { return 48 + 24 + ((16 + k.length() + 7) / 8) * 8; }
+    static long entryBytes(String k) { return 48 + 24 + ((16L + k.length() + 7) / 8) * 8; }
 }
