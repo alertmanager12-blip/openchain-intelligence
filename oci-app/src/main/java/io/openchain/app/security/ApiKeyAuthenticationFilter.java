@@ -31,16 +31,20 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private static final Set<String> FORBIDDEN_PARAMS = Set.of("api_key", "apikey", "api-key", "key", "access_token");
 
     /** Authentication of an API key. */
-    public static final class ApiKeyAuthentication extends AbstractAuthenticationToken {
+    public static final class ApiKeyAuthentication extends AbstractAuthenticationToken implements ClientScope.Scoped {
         private final String principal;
         private final String keyId;
+        private final String clientScope;
 
-        public ApiKeyAuthentication(String principal, String keyId, Collection<String> scopes) {
+        public ApiKeyAuthentication(String principal, String keyId, Collection<String> scopes, String clientScope) {
             super(Scopes.authorities(scopes));
             this.principal = principal;
             this.keyId = keyId;
+            this.clientScope = java.util.Objects.requireNonNull(clientScope, "clientScope");
             setAuthenticated(true);
         }
+
+        @Override public String clientScope() { return clientScope; }
 
         @Override public Object getCredentials() { return null; }
         @Override public Object getPrincipal() { return principal; }
@@ -79,7 +83,7 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             }
             ApiKeyService.KeyPrincipal k = p.get();
             SecurityContext ctx = SecurityContextHolder.createEmptyContext();
-            ctx.setAuthentication(new ApiKeyAuthentication("apikey:" + k.name() + ":" + k.prefix(), k.keyId(), k.scopes()));
+            ctx.setAuthentication(new ApiKeyAuthentication("apikey:" + k.name() + ":" + k.prefix(), k.keyId(), k.scopes(), k.clientScope()));
             SecurityContextHolder.setContext(ctx);
         } else if (bearer != null && !oidcEnabled) {
             Problems.write(req, res, json, HttpStatus.UNAUTHORIZED, "unauthenticated", "Authentication required",

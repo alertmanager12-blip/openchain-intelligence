@@ -341,7 +341,14 @@ public class OciProperties {
         private List<StaticKey> keys = new ArrayList<>();
         private List<String> corsAllowedOrigins = new ArrayList<>(List.of("http://localhost:4200"));
         private final Oidc oidc = new Oidc();
+        /**
+         * OCI_SECURITY_MULTI_CLIENT: several client scopes on this instance (decision D1). Off by default (one instance per
+         * client): every credential is in the {@code default} scope. On: an OIDC token must carry the client scope claim.
+         */
+        private boolean multiClient = false;
 
+        public boolean isMultiClient() { return multiClient; }
+        public void setMultiClient(boolean multiClient) { this.multiClient = multiClient; }
         public String getApiKeyPepper() { return apiKeyPepper; }
         public String getCryptoMasterKey() { return cryptoMasterKey; }
         public void setCryptoMasterKey(String cryptoMasterKey) { this.cryptoMasterKey = cryptoMasterKey; }
@@ -379,6 +386,8 @@ public class OciProperties {
         /** Expected audience (optional). */
         private String audience;
         private String rolesClaim = "oci_roles";
+        /** Claim naming the caller's client scope; required in multi-client mode (OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM). */
+        private String clientScopeClaim = "oci_client_scope";
 
         public String getIssuerUri() { return issuerUri; }
         public void setIssuerUri(String issuerUri) { this.issuerUri = issuerUri; }
@@ -386,6 +395,8 @@ public class OciProperties {
         public void setAudience(String audience) { this.audience = audience; }
         public String getRolesClaim() { return rolesClaim; }
         public void setRolesClaim(String rolesClaim) { this.rolesClaim = rolesClaim; }
+        public String getClientScopeClaim() { return clientScopeClaim; }
+        public void setClientScopeClaim(String clientScopeClaim) { this.clientScopeClaim = clientScopeClaim; }
     }
 
     /** Operator-state persistence (PostgreSQL when spring.datasource.url is set). */

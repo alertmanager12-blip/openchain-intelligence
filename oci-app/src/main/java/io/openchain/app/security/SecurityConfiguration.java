@@ -50,7 +50,8 @@ public class SecurityConfiguration {
     private static final String API = "/api/v1";
 
     @Bean
-    SecurityFilterChain apiSecurity(HttpSecurity http, ApiKeyService keys, OciProperties props, JsonMapper json) throws Exception {
+    SecurityFilterChain apiSecurity(HttpSecurity http, ApiKeyService keys, OciProperties props, JsonMapper json,
+                                 ClientScopeDirectory clientScopes) throws Exception {
         OciProperties.Security sec = props.getSecurity();
         String issuer = sec.getOidc().getIssuerUri();
         boolean oidc = issuer != null && !issuer.isBlank();
@@ -113,6 +114,8 @@ public class SecurityConfiguration {
             log.info("OIDC resource server enabled for issuer {}", issuer);
             JwtDecoder decoder = jwtDecoder(issuer, sec.getOidc().getAudience());
             String rolesClaim = sec.getOidc().getRolesClaim();
+            boolean multiClient = sec.isMultiClient();
+            String scopeClaim = sec.getOidc().getClientScopeClaim();
             // "Bearer oci_…" is an API key, already handled by ApiKeyAuthenticationFilter: it must never reach the JWT
             // decoder (it is not a JWT, and it must not be sent to the identity provider's code path). Code review I33.
             var bearer = new org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver();
@@ -123,10 +126,20 @@ public class SecurityConfiguration {
                     })
                     .authenticationEntryPoint((req, res, ex) -> Problems.write(req, res, json, HttpStatus.UNAUTHORIZED,
                             "unauthenticated", "Authentication required", "invalid bearer token"))
-                    .jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(jwt ->
-                            new JwtAuthenticationToken(jwt, jwtAuthorities(jwt, rolesClaim), jwt.getSubject()))));
+                    .jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(jwt -> new ScopedJwtAuthentication(jwt,
+                            jwtAuthorities(jwt, rolesClaim), ClientScope.ofJwt(jwt, multiClient, scopeClaim, clientScopes)))));
         }
         return http.build();
+    }
+
+    /** An OIDC token with the client scope resolved from its claim (decision D1). */
+    static final class ScopedJwtAuthentication extends JwtAuthenticationToken implements ClientScope.Scoped {
+        private final String clientScope;
+        ScopedJwtAuthentication(Jwt jwt, Collection<GrantedAuthority> authorities, String clientScope) {
+            super(jwt, authorities, jwt.getSubject());
+            this.clientScope = clientScope;
+        }
+        @Override public String clientScope() { return clientScope; }
     }
 
     /** Lazy: the issuer's discovery document / JWKS is fetched on the first token, not at startup. */

@@ -78,13 +78,13 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(11); // V1..V11 (V11: working-set snapshot)
-        assertThat(first.targetSchemaVersion).isEqualTo("11");
+        assertThat(first.migrationsExecuted).isEqualTo(12); // V1..V12 (V12: client scopes)
+        assertThat(first.targetSchemaVersion).isEqualTo("12");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
                 "alert_comments", "deliveries", "label_reports", "backfill_progress", "backfill_freeze_events", "address_history_progress",
-                "address_history_events", "working_set_snapshots", "working_set_snapshot_chunks", "flyway_schema_history");
+                "address_history_events", "working_set_snapshots", "working_set_snapshot_chunks", "client_scopes", "flyway_schema_history");
         assertThat(PostgresSupport.migrate(fresh).migrationsExecuted).isZero();
     }
 
@@ -121,6 +121,30 @@ class JdbcRepositoriesPersistenceTest {
         restarted.revoke(c.key().id(), "admin");
         assertThat(first.verify(c.plaintext())).isEmpty();
         assertThat(first.find(c.key().id()).orElseThrow().revoked()).isTrue();
+    }
+
+    /** Decision D1 (V12): a key keeps its client scope across restarts and stops authenticating when the scope is disabled. */
+    @Test
+    void anApiKeyKeepsItsClientScopeInPostgresql() {
+        JdbcApiKeyRepository repo = new JdbcApiKeyRepository(jdbc);
+        io.openchain.app.security.ClientScopeDirectory scopes = io.openchain.app.security.ClientScopeDirectory.jdbc(jdbc);
+        assertThat(scopes.isActive(io.openchain.app.security.ClientScope.DEFAULT)).as("created by the migration").isTrue();
+        scopes.register("client-b", "Client B");
+        ApiKeyService s = new ApiKeyService(props("p", false), Clock.systemUTC(), repo, new PersistenceMode(true), scopes);
+        ApiKeyService.Created b = s.create("b", List.of("alerts:read"), Duration.ofDays(1), "admin", "client-b");
+        ApiKeyService.Created d = s.create("d", List.of("alerts:read"), Duration.ofDays(1), "admin");
+
+        ApiKeyService restarted = new ApiKeyService(props("p", false), Clock.systemUTC(), repo, new PersistenceMode(true), scopes);
+        assertThat(restarted.verify(b.plaintext()).orElseThrow().clientScope()).isEqualTo("client-b");
+        assertThat(restarted.verify(d.plaintext()).orElseThrow().clientScope()).isEqualTo("default");
+        assertThat(restarted.list("client-b")).extracting(ApiKeyService.StoredKey::id).containsExactly(b.key().id());
+        assertThat(restarted.find(d.key().id(), "client-b")).isEmpty();
+
+        scopes.disable("client-b");
+        assertThat(restarted.verify(b.plaintext())).isEmpty();
+        assertThat(restarted.verify(d.plaintext())).isPresent();
+        assertThatThrownBy(() -> jdbc.update("update api_keys set client_scope_id = 'nobody' where id = :id", Map.of("id", d.key().id())))
+                .as("foreign key to client_scopes").isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     @Test

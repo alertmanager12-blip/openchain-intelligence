@@ -1,6 +1,12 @@
 # Fund Flow Trace — isolation multi-client (exigence P0)
 
-Statut : **stratégie, aucune implémentation** (2026-11-12, code de `94ea42c`). **[F]** fait vérifié (référence) ;
+Statut : **socle implémenté le 2026-11-16** (décision D1, option b) : table `client_scopes` (V12), `client_scope_id` sur
+`api_keys` et `users`, périmètre porté par la clé ou par la revendication OIDC (`oci.security.multi-client`, désactivé par
+défaut), administration des clés limitée au périmètre de l'appelant, tests N8 et N9. Restent avec l'API de traçage : les
+tables du traçage avec `client_scope_id` et RLS, les tests N1 à N7 et N10 à N12, le journal `audit_log`. Le nom retenu est
+`client_scope` (et non `scope`), pour ne pas le confondre avec les permissions des clés (`api_keys.scopes`).
+
+Texte d'origine (2026-11-12, code de `94ea42c`), stratégie : **[F]** fait vérifié (référence) ;
 **[P]** proposition. Exigence : aucune exposition du moteur de traçage (P0-D) par l'API avant que cette isolation soit en
 place et prouvée par des tests négatifs.
 
