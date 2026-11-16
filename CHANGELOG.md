@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 2 — coverage of an answer, Fund Flow Trace P0-B, third part)
+
+- **`/exposure` says which blocks it rests on.** `coverage` gains `fromBlock`/`toBlock`, `segments` (address history, blocks indexed live) and `knownGaps` (blocks not indexed). It is `COMPLETE` only when the address history covers token and native transfers, joins without a hole the first block indexed live, no recorded gap falls in the range and the address keeps all its flows in memory; otherwise `PARTIAL` with the reasons (truncated or missing history, hole between history and live indexing, gap, trimmed working set, source without native transfers). The Exposure tab says "no exposure in blocks X to Y" only with complete coverage, and lists the blocks not indexed. Ethereum histories (`eth_getLogs`) have no native transfers, so an Ethereum answer stays partial; EVM internal transactions and TRC-10 remain listed as limits.
+
 ### Fixed (phase 2 — one TRC-20 transfer counted once, Fund Flow Trace P0-B, second part)
 
 - **A TRC-20 transfer seen both by live indexing and by the TronGrid address history is counted once.** TronGrid gives no log index, so the history id (`tron:<tx>:trc20:<hash>:<n>`) never matched the live one (`tron:<tx>:<logIndex>`) and the same transfer could be counted twice in amounts, profiles and exposure. Both are now matched on network, transaction, token contract, sender, recipient, raw amount and rank of that tuple in the transaction: a history transfer already indexed live is not applied, and a live transfer replaces a history copy loaded before it. Metric `oci_history_duplicates_total{action="skipped"|"replaced"}` shows whether it happens. Known limit: two identical transfers of one transaction that TronGrid splits across two pages share the same rank; the second is lost.

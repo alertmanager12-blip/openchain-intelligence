@@ -861,6 +861,10 @@ public class ChainIngestionService {
                              java.util.Map<String, Long> signalsRemovedBySeverity) {}
 
     private volatile TrimResult lastTrim;
+    /** Flows removed by the working-set trim since start (coverage: a non-exempt address may have lost older flows). */
+    private final AtomicLong flowsTrimmed = new AtomicLong();
+
+    public long flowsTrimmed() { return flowsTrimmed.get(); }
 
     /** The last working-set trim, or null before the first one. */
     public TrimResult lastTrim() { return lastTrim; }
@@ -920,6 +924,7 @@ public class ChainIngestionService {
                 profiles.size(), intelligence.scoring().addressCount(), trackedWallets.size(), (System.nanoTime() - t0) / 1_000_000,
                 bySeverity(evictedBefore, intelligence.signals().evictionCounts()));
         lastTrim = r;
+        flowsTrimmed.addAndGet(flows);
         return r;
     }
 

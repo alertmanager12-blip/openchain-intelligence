@@ -138,10 +138,21 @@
             <ng-template mat-tab-label>Exposure@if (tabs()[3].count !== undefined) { <span class="count">{{ tabs()[3].count }}</span> }</ng-template>
             <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="false" skeleton="table" (retry)="exp.reload()">
               @if (exp.value()?.coverage; as cov) {
-                <p class="small muted">Based on the data covered{{ cov.dataFrom ? ' from ' + (cov.dataFrom | date: 'medium') : '' }}{{ cov.dataTo ? ' to ' + (cov.dataTo | date: 'medium') : '' }} (coverage {{ cov.state | lowercase }}): earlier activity may be missing.</p>
+                @if (cov.state === 'COMPLETE') {
+                  <p class="small muted">Complete coverage of blocks {{ cov.fromBlock }} to {{ cov.toBlock }} for token and native transfers (address history joined to live indexing).</p>
+                } @else {
+                  <p class="small muted">Partial coverage{{ cov.fromBlock != null ? ' (blocks ' + cov.fromBlock + ' to ' + cov.toBlock + ')' : '' }}: {{ cov.limits[0] }}</p>
+                }
+                @if (cov.knownGaps?.length) {
+                  <p class="small">Not indexed: @for (g of cov.knownGaps!; track g.fromBlock) {<span>blocks {{ g.fromBlock }} to {{ g.toBlock }} </span>}</p>
+                }
               }
               @if (expRows().length === 0) {
-                <p class="small">No exposure to listed addresses was found in the data covered. This is not proof that none exists.</p>
+                @if (exp.value()?.coverage?.state === 'COMPLETE') {
+                  <p class="small">No exposure to listed addresses in blocks {{ exp.value()!.coverage!.fromBlock }} to {{ exp.value()!.coverage!.toBlock }}.</p>
+                } @else {
+                  <p class="small">No exposure to listed addresses was found in the data covered. This is not proof that none exists.</p>
+                }
               } @else {
                 <p class="small muted">Exposure to addresses that a source lists in a risky category. Amounts are per token and never added across tokens. Indirect exposure (2 hops or more) is an inference: weaker evidence than direct exposure.</p>
                 <div class="table-wrap"><table mat-table [dataSource]="expRows()">

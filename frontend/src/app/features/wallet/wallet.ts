@@ -1,4 +1,3 @@
-import { DatePipe, LowerCasePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, linkedSignal, signal } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { Router, RouterLink } from '@angular/router';
@@ -23,7 +22,7 @@ const RISK_ORDER = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
 @Component({
   selector: 'oci-wallet',
-  imports: [DatePipe, LowerCasePipe, RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wallet.html',
   styleUrl: './wallet.scss',

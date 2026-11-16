@@ -133,10 +133,18 @@ public final class Dto {
     public record LabelledCounterpartyDto(String counterparty, String category, String source, String evidenceLevel, int transfers) {}
 
     /**
-     * What the answer is based on (ADR-0023 amendment 1: coverage is separate from the evidence level). {@code PARTIAL}
-     * until the coverage model of P0-B exists: "no exposure" then means none in the data covered, not none at all.
+     * What the answer is based on (ADR-0023 amendment 1: coverage is separate from the evidence level; Fund Flow Trace
+     * P0-B). {@code COMPLETE} only for the block range {@code fromBlock..toBlock}, with every condition of
+     * {@code AddressCoverage} met; otherwise {@code PARTIAL} and "no exposure" means none in the data covered.
      */
-    public record CoverageDto(String state, Instant dataFrom, Instant dataTo, List<String> limits) {}
+    public record CoverageDto(String state, Instant dataFrom, Instant dataTo, List<String> limits, Long fromBlock, Long toBlock,
+                              List<CoverageSegmentDto> segments, List<IndexingGapDto> knownGaps) {}
+
+    /** A source of the answer over a block range: HISTORY (address history) or LIVE (blocks indexed live). */
+    public record CoverageSegmentDto(String source, Long fromBlock, Long toBlock, Instant fromTime, String state, String detail) {}
+
+    /** Blocks that were not indexed (inclusive). */
+    public record IndexingGapDto(long fromBlock, long toBlock, String cause, Instant detectedAt) {}
 
     public record ExposureDto(String address, String network, int depth, List<ExposureEntryDto> direct,
                               List<ExposureEntryDto> indirect, List<IgnoredTransferDto> ignored,

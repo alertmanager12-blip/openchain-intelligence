@@ -261,6 +261,11 @@ export interface ExposureCoverage {
   dataFrom: string | null;
   dataTo: string | null;
   limits: string[];
+  /** Block range the state applies to. */
+  fromBlock?: number | null;
+  toBlock?: number | null;
+  segments?: { source: 'HISTORY' | 'LIVE'; fromBlock: number | null; toBlock: number | null; fromTime: string | null; state: string; detail: string | null }[];
+  knownGaps?: { fromBlock: number; toBlock: number; cause: string; detectedAt: string }[];
 }
 
 export interface TransactionAnalysis {

@@ -2,8 +2,9 @@
 
 Statut : **en cours (2026-11-16)**. Fait : trous de reprise et début de couverture continue enregistrés (V13,
 `IndexingCoverage`, cas C3 et C8) ; identité des transferts TRC-20 vus en direct et par l'historique (`TransferIdentity`,
-cas C7, métrique `oci_history_duplicates_total`). Reste : calcul de la couverture par adresse en segments et son usage
-dans `/exposure` (C1, C2, C4 à C6, C9) ; D7 option c.
+cas C7, métrique `oci_history_duplicates_total`). Couverture par adresse en segments (`AddressCoverage`, cas C1 à C6) utilisée par
+`/exposure` et l'onglet Exposure (C9). Reste : D7 option c (bloc et index de log dans le journal et les tables du
+traçage), à faire avec ces tables.
 
 Préparation (2026-11-12, code de `94ea42c`) : **[F]** fait vérifié (référence) ;
 **[P]** proposition.

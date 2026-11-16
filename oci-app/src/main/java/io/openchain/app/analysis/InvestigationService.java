@@ -327,17 +327,28 @@ public class InvestigationService {
 
     static final int MAX_HASHES = 20;
 
-    /** PARTIAL until P0-B: says which data the answer rests on, so that "none found" is never read as "none at all". */
+    /** Which blocks the answer rests on (Fund Flow Trace P0-B): {@link AddressCoverage}, plus the known blind spots. */
     private Dto.CoverageDto coverage(Address a, List<ValueFlow> involving) {
-        List<String> limits = new ArrayList<>();
-        limits.add("Based on the flows held in memory (bounded working set, kept for a limited time) and on the address history "
-                + "when it was loaded; earlier activity may be missing. No exposure here means none in these data, not none at all.");
+        Network n = a.network();
         Dto.HistoryCoverageDto h = history.coverage(a);
-        limits.add("Address history: " + h.status() + (h.message() == null ? "" : " - " + h.message()));
-        limits.addAll(limitations(a.network()));
+        AddressCoverage.History hist = "NOT_CONFIGURED".equals(h.status()) ? null : new AddressCoverage.History(h.status(),
+                h.coveredFromBlock(), h.coveredToBlock(), h.coveredFromTime(), h.tokenTransfersCovered(), h.nativeCovered(), h.message());
+        long first = chains.firstIndexedBlock(n).orElse(-1);
+        long last = chains.runtime(n).map(ChainIngestionService.NetworkRuntime::lastIndexedBlock).orElse(-1L);
+        boolean exempt = history.historyAddresses().contains(a);
+        var r = AddressCoverage.compute(hist, first, last, chains.indexingCoverage().gaps(n), !exempt && chains.flowsTrimmed() > 0);
+
+        List<String> limits = new ArrayList<>(r.reasons());
+        if (hist == null && h.message() != null) limits.add(h.message());
+        limits.addAll(limitations(n));
+        if (r.state() != AddressCoverage.State.COMPLETE) {
+            limits.add("No exposure here means none in the data covered, not none at all.");
+        }
         Instant from = involving.isEmpty() ? null : involving.getFirst().timestamp();
         Instant to = involving.isEmpty() ? null : involving.getLast().timestamp();
-        return new Dto.CoverageDto("PARTIAL", from, to, limits);
+        return new Dto.CoverageDto(r.state().name(), from, to, limits, r.fromBlock(), r.toBlock(),
+                r.segments().stream().map(x -> new Dto.CoverageSegmentDto(x.source(), x.fromBlock(), x.toBlock(), x.fromTime(), x.state(), x.reason())).toList(),
+                r.knownGaps().stream().map(g -> new Dto.IndexingGapDto(g.fromBlock(), g.toBlock(), g.cause().name(), g.detectedAt())).toList());
     }
 
     private static String plain(BigDecimal v) { return v.signum() == 0 ? "0" : v.stripTrailingZeros().toPlainString(); }
