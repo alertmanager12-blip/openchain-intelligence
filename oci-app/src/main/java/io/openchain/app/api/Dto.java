@@ -123,7 +123,20 @@ public final class Dto {
         }
     }
 
-    /** Where and why a directed graph stopped (trace engine stop reasons). */
+    /**
+     * A path value could have taken from {@code source} to {@code target} (directed, chronological, one token).
+     * {@code outcome}: FOUND, NO_PATH (none in the flows held, within the limits) or LIMIT_REACHED (a limit stopped the search:
+     * a path may exist).
+     */
+    public record GraphPathDto(String source, String target, String network, String outcome, List<PathHopDto> hops,
+                               List<GraphStopDto> stops, String note, Long asOfBlock) {}
+
+    public record VerifyRequest(String network, List<String> eventIds) {}
+
+    /** Transfers of a displayed graph that are no longer held: removed by a chain reorganisation or by the working-set trim. */
+    public record VerifyDto(String network, int checked, List<String> missing, String note) {}
+
+        /** Where and why a directed graph stopped (trace engine stop reasons). */
     public record GraphStopDto(String address, String token, String reason, String detail) {}
 
     /**

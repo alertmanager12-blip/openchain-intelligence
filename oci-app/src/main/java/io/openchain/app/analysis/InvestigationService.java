@@ -590,6 +590,42 @@ public class InvestigationService {
                 List.copyOf(stops.values()), asOf);
     }
 
+    /** A path value could have taken from {@code source} to {@code target} (Fund Flow Trace P0-C, T9). */
+    public Dto.GraphPathDto graphPath(Address source, Address target, String tokenFilter, Instant from, Instant to, int maxHops) {
+        String tokenKey = null;
+        if (tokenFilter != null && !tokenFilter.isBlank()) {
+            tokenKey = "\u0000none";
+            for (ValueFlow f : intelligence.flows().involving(source)) {
+                if (tokenFilter.equalsIgnoreCase(f.token().symbol()) || tokenFilter.equalsIgnoreCase(f.token().contract())) {
+                    tokenKey = Trace.tokenKey(f.token());
+                    break;
+                }
+            }
+        }
+        var r = io.openchain.intelligence.trace.TracePath.find(traceSource(), source, target, new Trace.Window(from, to), tokenKey,
+                maxHops, 20_000, 5_000);
+        List<Dto.PathHopDto> hops = r.hops().stream().map(f -> new Dto.PathHopDto(f.from().value(), f.to().value(), f.txHash(),
+                f.token().symbol(), plain(f.amount()), f.timestamp())).toList();
+        List<Dto.GraphStopDto> stops = r.stops().stream().map(s -> new Dto.GraphStopDto(s.address().value(), s.tokenKey(), s.reason().name(),
+                s.detail())).toList();
+        String note = switch (r.outcome()) {
+            case FOUND -> "A path value could have taken: each transfer was sent after the previous one arrived, in one token. "
+                    + "It shows that value could move this way, not that it did, nor how much.";
+            case NO_PATH -> "No path value could have taken in the data covered (flows held in memory and loaded histories), within "
+                    + maxHops + " hops.";
+            case LIMIT_REACHED -> "No path found before a limit was reached: one may exist beyond it.";
+        };
+        Long asOf = chains.runtime(source.network()).map(ChainIngestionService.NetworkRuntime::lastIndexedBlock).filter(b -> b >= 0).orElse(null);
+        return new Dto.GraphPathDto(source.value(), target.value(), source.network().id(), r.outcome().name(), hops, stops, note, asOf);
+    }
+
+    /** Which of these transfers are no longer held (Fund Flow Trace P0-C, T8). */
+    public Dto.VerifyDto verifyGraph(Network n, List<String> eventIds) {
+        List<String> missing = eventIds.stream().distinct().sorted().filter(id -> !intelligence.flows().contains(id)).toList();
+        return new Dto.VerifyDto(n.id(), (int) eventIds.stream().distinct().count(), missing,
+                "A missing transfer was removed by a chain reorganisation or by the bounded working set (older flows): reload the graph.");
+    }
+
     /** Keeps the smallest depth of an address and the sides it was reached from. */
     private static void mark(Map<Address, Integer> depth, Map<Address, String> side, Address a, int d, String s) {
         if (d < 0) d = 1;

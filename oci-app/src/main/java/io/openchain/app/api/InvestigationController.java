@@ -130,6 +130,26 @@ public class InvestigationController {
         return investigation.transaction(n, investigation.txHash(hash));
     }
 
+    /** Path value could have taken (directed, chronological, one token); {@code since}/{@code until} bound the flows. */
+    @GetMapping("/graph/{address}/path")
+    public Dto.GraphPathDto graphPath(@PathVariable String address, @RequestParam String network, @RequestParam String target,
+                                      @RequestParam(required = false) String token, @RequestParam(required = false) String since,
+                                      @RequestParam(required = false) String until, @RequestParam(defaultValue = "6") int maxHops) {
+        if (maxHops < 1 || maxHops > 8) throw ApiException.badRequest("maxHops must be between 1 and 8");
+        Network n = investigation.network(network);
+        return investigation.graphPath(investigation.address(n, address), investigation.address(n, target), token,
+                instant(since, "since"), instant(until, "until"), maxHops);
+    }
+
+    /** Which transfers of a displayed graph are no longer held (at most 1,000 ids). */
+    @org.springframework.web.bind.annotation.PostMapping("/graph/verify")
+    public Dto.VerifyDto verifyGraph(@org.springframework.web.bind.annotation.RequestBody Dto.VerifyRequest req) {
+        if (req == null || req.eventIds() == null || req.eventIds().isEmpty()) throw ApiException.badRequest("eventIds is required");
+        if (req.eventIds().size() > 1_000) throw ApiException.badRequest("at most 1000 eventIds");
+        if (req.eventIds().stream().anyMatch(id -> id == null || id.length() > 256)) throw ApiException.badRequest("invalid eventId");
+        return investigation.verifyGraph(investigation.network(req.network()), req.eventIds());
+    }
+
     @GetMapping("/graph/{address}")
     public Dto.GraphDto graph(@PathVariable String address, @RequestParam String network, @RequestParam(defaultValue = "1") int depth,
                               @RequestParam(required = false) String token, @RequestParam(required = false) String from,

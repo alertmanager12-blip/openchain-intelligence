@@ -132,6 +132,37 @@ class DirectedGraphApiTest extends ApiTestSupport {
         assertThat(usdt).singleElement().satisfies(x -> assertThat(new BigDecimal(x)).isEqualByComparingTo("100"));
     }
 
+    /** T9: the server gives a directed, chronological path with its transactions, or says there is none. */
+    @Test void t9PathValueCouldHaveTaken() throws Exception {
+        Address a = tron("t9a"), b = tron("t9b"), c = tron("t9c"), d = tron("t9d"), e = tron("t9e");
+        ValueFlow ab = flow(a, b, "100", 1), bc = flow(b, c, "80", 2), cd = flow(c, d, "60", 3);
+        flow(e, b, "5", 4); // e only sent to b
+        String found = mvc.perform(get("/api/v1/graph/" + a.value() + "/path?network=tron&target=" + d.value()).header("X-API-Key", ANALYST))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("FOUND")).andReturn().getResponse().getContentAsString();
+        List<String> txs = JsonPath.read(found, "$.hops[*].txHash");
+        assertThat(txs).containsExactly(ab.txHash(), bc.txHash(), cd.txHash());
+        mvc.perform(get("/api/v1/graph/" + a.value() + "/path?network=tron&target=" + e.value()).header("X-API-Key", ANALYST))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.outcome").value("NO_PATH"))
+                .andExpect(jsonPath("$.hops.length()").value(0));
+    }
+
+    /** T8: a transfer removed after the graph was displayed is listed by the verification. */
+    @Test void t8VerificationListsTransfersNoLongerHeld() throws Exception {
+        Address a = tron("t8a"), b = tron("t8b"), c = tron("t8c");
+        ValueFlow ab = flow(a, b, "100", 1), bc = flow(b, c, "100", 2);
+        List<String> shown = JsonPath.read(graph(a, "out", 2), "$.edges[*].eventIds[*]");
+        assertThat(shown).contains(ab.eventId(), bc.eventId());
+        intel.retractFlow(bc.eventId()); // chain reorganisation
+        String body = "{\"network\":\"tron\",\"eventIds\":[\"" + String.join("\",\"", shown) + "\"]}";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/graph/verify").header("X-API-Key", ANALYST)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.missing").value(org.hamcrest.Matchers.contains(bc.eventId())));
+        assertThat(nodes(graph(a, "out", 2))).doesNotContain(c.value());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/graph/verify").header("X-API-Key", READER)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden());
+    }
+
     @Test void withoutDirectionTheDeprecatedUndirectedGraphIsUnchanged() throws Exception {
         Address a = tron("legacyA"), b = tron("legacyB"), c = tron("legacyC");
         flow(a, b, "100", 1);
