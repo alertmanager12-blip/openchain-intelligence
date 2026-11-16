@@ -10,11 +10,16 @@ import io.openchain.core.model.Address;
  * unknown). Answers: {@code false} is always exact (never seen); {@code true} may be wrong with a small probability
  * that grows with the fill ratio (then a new address is reported as "seen": its age is withheld, never invented).
  *
- * <p>Fixed memory: {@code bits / 8} bytes, whatever the number of addresses. Not persisted: it restarts empty, like
- * the observation warm-up. Not thread-safe: callers serialise access (the ingestion lock).
+ * <p>Fixed memory: {@code bits / 8} bytes, whatever the number of addresses. Saved with the working-set snapshot
+ * ({@link #writeTo}/{@link #readFrom}) together with the observation start, never without it. Not thread-safe: callers
+ * serialise access (the ingestion lock).
  */
 public final class SeenAddresses {
     private static final int HASHES = 7;
+    /** Version of {@link #writeTo}. */
+    public static final int SNAPSHOT_FORMAT = 1;
+    /** 2^32 bits (512 MB): a corrupted size must not allocate gigabytes; real filters are far smaller (2^28 by default). */
+    static final int MAX_SNAPSHOT_WORDS = 1 << 26;
     private final long[] words;
     private final long bits;
     private long setBits, inserted;
@@ -25,6 +30,39 @@ public final class SeenAddresses {
         int w = (int) Math.min(Integer.MAX_VALUE - 8, (n + 63) / 64);
         this.words = new long[w];
         this.bits = (long) w * 64;
+    }
+
+    private SeenAddresses(long[] words, long setBits, long inserted) {
+        this.words = words;
+        this.bits = (long) words.length * 64;
+        this.setBits = setBits;
+        this.inserted = inserted;
+    }
+
+    /** Size in bits after rounding: two filters answer the same only with the same size. */
+    public long bits() { return bits; }
+
+    /** Exact copy of the filter (size, bits, counters). */
+    public void writeTo(java.io.DataOutput out) throws java.io.IOException {
+        out.writeByte(SNAPSHOT_FORMAT);
+        out.writeInt(words.length);
+        out.writeLong(setBits);
+        out.writeLong(inserted);
+        for (long w : words) out.writeLong(w);
+    }
+
+    /** Reads what {@link #writeTo} wrote; an unknown version or impossible counters are refused. */
+    public static SeenAddresses readFrom(java.io.DataInput in) throws java.io.IOException {
+        int v = in.readUnsignedByte();
+        if (v != SNAPSHOT_FORMAT) throw new java.io.IOException("seen-address filter format " + v + ", expected " + SNAPSHOT_FORMAT);
+        int n = in.readInt();
+        if (n <= 0 || n > MAX_SNAPSHOT_WORDS) throw new java.io.IOException("seen-address filter of " + n + " words");
+        long setBits = in.readLong(), inserted = in.readLong();
+        long[] words = new long[n];
+        long counted = 0;
+        for (int i = 0; i < n; i++) { words[i] = in.readLong(); counted += Long.bitCount(words[i]); }
+        if (counted != setBits || inserted < 0) throw new java.io.IOException("seen-address filter counters do not match its bits");
+        return new SeenAddresses(words, setBits, inserted);
     }
 
     /** Records the address; returns true when it was (probably) already there. */

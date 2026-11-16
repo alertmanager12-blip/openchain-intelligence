@@ -38,17 +38,31 @@ public final class WorkingSetSnapshot {
 
     /** "CSWS": ChainSentinel working set. */
     public static final int MAGIC = 0x43535753;
-    public static final int FORMAT = 1;
+    public static final int FORMAT = 2; // 2: observation state (seen-address filter, observation start, first block)
     private static final int END = 0x454E4421; // "END!": a snapshot cut short is refused
 
     public record Header(String appVersion, Instant createdAt, Map<Network, Long> watermarks) {
         public Header { watermarks = Map.copyOf(watermarks); }
     }
 
-    /** What a snapshot holds, parsed and checked, not yet installed. */
+    /**
+     * What makes the age of a wallet known (code review B3): the addresses seen since observation began, and when it began
+     * on each network. Saved and restored together or not at all: an observation start without the filter would present
+     * an old wallet whose profile was evicted as new (age 0, invented).
+     */
+    public record Observation(io.openchain.intelligence.memory.SeenAddresses seen, Map<Network, Instant> observationStart,
+                              Map<Network, Long> firstIndexedBlock) {
+        public Observation {
+            java.util.Objects.requireNonNull(seen);
+            observationStart = Map.copyOf(observationStart);
+            firstIndexedBlock = Map.copyOf(firstIndexedBlock);
+        }
+    }
+
+    /** What a snapshot holds, parsed and checked, not yet installed; {@code observation} is null when none was saved. */
     public record Contents(Header header, List<WalletProfileAccumulator> profiles, List<ValueFlow> flows, List<Signal> signals,
                            Map<Address, List<RiskScore>> scores, Set<Network> authoritative,
-                           List<Map.Entry<String, BigDecimal>> balances) {
+                           List<Map.Entry<String, BigDecimal>> balances, Observation observation) {
         public Counts counts() {
             int s = 0;
             for (List<RiskScore> l : scores.values()) s += l.size();
@@ -60,7 +74,10 @@ public final class WorkingSetSnapshot {
 
     private WorkingSetSnapshot() {}
 
-    public static Counts write(DataOutput out, IntelligencePipeline p, Header h) throws IOException {
+    public static Counts write(DataOutput out, IntelligencePipeline p, Header h) throws IOException { return write(out, p, h, null); }
+
+    /** @param observation the observation state to save with the working set, or null */
+    public static Counts write(DataOutput out, IntelligencePipeline p, Header h, Observation observation) throws IOException {
         out.writeInt(MAGIC);
         out.writeByte(FORMAT);
         writeString(out, h.appVersion());
@@ -98,6 +115,20 @@ public final class WorkingSetSnapshot {
             writeBigInteger(out, e.getValue().unscaledValue());
             out.writeInt(e.getValue().scale());
         }
+        out.writeBoolean(observation != null);
+        if (observation != null) {
+            observation.seen().writeTo(out);
+            out.writeInt(observation.observationStart().size());
+            for (var e : new java.util.TreeMap<>(observation.observationStart()).entrySet()) {
+                writeNetwork(out, e.getKey());
+                writeInstant(out, e.getValue());
+            }
+            out.writeInt(observation.firstIndexedBlock().size());
+            for (var e : new java.util.TreeMap<>(observation.firstIndexedBlock()).entrySet()) {
+                writeNetwork(out, e.getKey());
+                out.writeLong(e.getValue());
+            }
+        }
         out.writeInt(END);
         return new Counts(profiles, flows.size(), signals.size(), scoreCount, balances.size());
     }
@@ -130,8 +161,23 @@ public final class WorkingSetSnapshot {
         int nb = RecordCodecs.count(in, Integer.MAX_VALUE);
         List<Map.Entry<String, BigDecimal>> balances = new ArrayList<>(Math.min(nb, 1 << 20));
         for (int i = 0; i < nb; i++) balances.add(Map.entry(readString(in), new BigDecimal(readBigInteger(in), in.readInt())));
+        Observation observation = null;
+        if (in.readBoolean()) {
+            io.openchain.intelligence.memory.SeenAddresses seen;
+            try {
+                seen = io.openchain.intelligence.memory.SeenAddresses.readFrom(in);
+            } catch (IOException e) {
+                if (e instanceof java.io.EOFException) throw e;
+                throw new SnapshotFormatException(e.getMessage());
+            }
+            Map<Network, Instant> start = new EnumMap<>(Network.class);
+            for (int i = 0, n = RecordCodecs.count(in, Network.values().length); i < n; i++) start.put(readNetwork(in), readInstant(in));
+            Map<Network, Long> first = new EnumMap<>(Network.class);
+            for (int i = 0, n = RecordCodecs.count(in, Network.values().length); i < n; i++) first.put(readNetwork(in), in.readLong());
+            observation = new Observation(seen, start, first);
+        }
         if (in.readInt() != END) throw new SnapshotFormatException("working-set snapshot not terminated");
-        return new Contents(h, profiles, flows, signals, scores, auth, balances);
+        return new Contents(h, profiles, flows, signals, scores, auth, balances, observation);
     }
 
     /**

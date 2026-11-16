@@ -39,6 +39,10 @@ public final class WorkingSetSnapshotService {
     /** Runs a task under the ingestion lock (ChainIngestionService.exclusive): no event is processed meanwhile. */
     private final java.util.function.Consumer<Runnable> underIngestionLock;
     private final String appVersion;
+    /** Observation state saved with the working set (seen addresses, observation start); null: not saved (tests). */
+    private final java.util.function.Supplier<WorkingSetSnapshot.Observation> observation;
+    private final java.util.function.Predicate<WorkingSetSnapshot.Observation> installObservation;
+    private volatile Boolean lastObservationRestored;
     private final Clock clock;
     private volatile Outcome lastRestore;
     private final AtomicLong writeFailures = new AtomicLong(), restoreFailures = new AtomicLong();
@@ -49,11 +53,21 @@ public final class WorkingSetSnapshotService {
 
     public WorkingSetSnapshotService(JdbcWorkingSetSnapshotStore store, IntelligencePipeline intelligence, ChainIngestionService chains,
                                      String appVersion, Clock clock) {
-        this(store, intelligence, chains::exclusive, appVersion, clock);
+        this(store, intelligence, chains::exclusive, chains::observation, chains::installObservation, appVersion, clock);
     }
 
     public WorkingSetSnapshotService(JdbcWorkingSetSnapshotStore store, IntelligencePipeline intelligence,
                                      java.util.function.Consumer<Runnable> underIngestionLock, String appVersion, Clock clock) {
+        this(store, intelligence, underIngestionLock, null, null, appVersion, clock);
+    }
+
+    public WorkingSetSnapshotService(JdbcWorkingSetSnapshotStore store, IntelligencePipeline intelligence,
+                                     java.util.function.Consumer<Runnable> underIngestionLock,
+                                     java.util.function.Supplier<WorkingSetSnapshot.Observation> observation,
+                                     java.util.function.Predicate<WorkingSetSnapshot.Observation> installObservation,
+                                     String appVersion, Clock clock) {
+        this.observation = observation;
+        this.installObservation = installObservation;
         this.store = store;
         this.intelligence = intelligence;
         this.underIngestionLock = underIngestionLock;
@@ -85,7 +99,16 @@ public final class WorkingSetSnapshotService {
                 c = WorkingSetSnapshot.read(in);
             }
             WorkingSetSnapshot.Counts[] installed = new WorkingSetSnapshot.Counts[1];
-            underIngestionLock.accept(() -> installed[0] = WorkingSetSnapshot.install(c, intelligence));
+            Boolean[] observed = new Boolean[1];
+            underIngestionLock.accept(() -> {
+                installed[0] = WorkingSetSnapshot.install(c, intelligence);
+                // all or nothing: without the filter, the observation start would make evicted old wallets look new
+                observed[0] = c.observation() != null && installObservation != null && installObservation.test(c.observation());
+            });
+            lastObservationRestored = observed[0];
+            if (!observed[0]) log.warn("working-set snapshot: observation state (seen addresses, observation start) {}; wallet ages are "
+                    + "withheld until the age warm-up has passed again", c.observation() == null ? "not in the snapshot"
+                    : "not restored (seen-address filter size changed since the snapshot)");
             WorkingSetSnapshot.Counts n = installed[0];
             lastRestored = n;
             lastSnapshotAt = c.header().createdAt();
@@ -122,7 +145,8 @@ public final class WorkingSetSnapshotService {
             underIngestionLock.accept(() -> {
                 try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(raw, 1 << 16))) {
                     java.time.Instant at = clock.instant();
-                    written[0] = WorkingSetSnapshot.write(out, intelligence, new WorkingSetSnapshot.Header(appVersion, at, Map.of()));
+                    written[0] = WorkingSetSnapshot.write(out, intelligence, new WorkingSetSnapshot.Header(appVersion, at, Map.of()),
+                            observation == null ? null : observation.get());
                     lastSnapshotAt = at;
                     out.flush();
                     size[0] = out.size(); // DataOutputStream stops counting at Integer.MAX_VALUE (2 GB)
@@ -153,6 +177,8 @@ public final class WorkingSetSnapshotService {
     }
 
     public Outcome lastRestore() { return lastRestore; }
+    /** After a restore: whether the observation state came back with it (null before a restore). */
+    public Boolean lastObservationRestored() { return lastObservationRestored; }
     public WorkingSetSnapshot.Counts lastRestored() { return lastRestored; }
     public long lastRestoreMillis() { return lastRestoreMillis; }
     public long lastWriteMillis() { return lastWriteMillis; }

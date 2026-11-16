@@ -78,6 +78,7 @@ class WorkingSetRestartTest {
         try (ConfigurableApplicationContext second = start(db)) {
             WorkingSetSnapshotService snapshots = second.getBean(WorkingSetSnapshotService.class);
             assertThat(snapshots.lastRestore()).isEqualTo(WorkingSetSnapshotService.Outcome.RESTORED);
+            assertThat(snapshots.lastObservationRestored()).as("seen addresses and observation start restored").isTrue();
             // metrics (design § 4.6): what was restored, how long it took, how old it was
             assertThat(gauge(second, "oci.snapshot.restore.outcome", "outcome", "restored")).isEqualTo(1);
             assertThat(gauge(second, "oci.snapshot.restore.outcome", "outcome", "none")).isZero();
@@ -91,14 +92,14 @@ class WorkingSetRestartTest {
             awaitIndexed(second, LAST);
             assertThat(node.fullFetches.keySet()).as("no block indexed before the restart is fetched again")
                     .allMatch(n -> n > FIRST_STOP).contains(FIRST_STOP + 1, LAST);
-            restarted = State.of(pipeline(second));
+            restarted = State.of(second);
         }
 
         node.fullFetches.clear();
         State reference;
         try (ConfigurableApplicationContext never = start(PostgresSupport.newDatabase())) {
             awaitIndexed(never, LAST);
-            reference = State.of(pipeline(never));
+            reference = State.of(never);
         }
 
         assertThat(reference.flows()).as("reference run indexed the whole range").hasSize((int) (LAST * 3));
@@ -106,14 +107,23 @@ class WorkingSetRestartTest {
         assertThat(differences(restarted.profiles(), reference.profiles())).as("profiles that differ (restarted vs reference)").isEmpty();
         assertThat(restarted.signals()).as("signals, including those crossing the restart").isEqualTo(reference.signals());
         assertThat(restarted.scores()).isEqualTo(reference.scores());
+        // what decides whether a wallet's age is known: observation start, first block and seen addresses, as if never stopped
+        assertThat(restarted.observation()).isEqualTo(reference.observation());
         assertThat(reference.signals()).as("the comparison is not vacuous").isNotEmpty();
     }
 
     // ---- comparison --------------------------------------------------------------------------------------------------
 
     /** What an analyst sees; detection and computation instants (wall clock) are left out. */
-    record State(Set<String> flows, Map<String, String> profiles, Set<String> signals, Map<String, String> scores) {
-        static State of(IntelligencePipeline p) {
+    record State(Set<String> flows, Map<String, String> profiles, Set<String> signals, Map<String, String> scores, String observation) {
+        static State of(ConfigurableApplicationContext ctx) {
+            IntelligencePipeline p = pipeline(ctx);
+            var o = ctx.getBean(io.openchain.app.chain.ChainIngestionService.class).observation();
+            Set<Address> all = new java.util.HashSet<>();
+            p.flows().all().forEach(f -> { all.add(f.from()); all.add(f.to()); });
+            String observation = "start " + new TreeMap<>(o.observationStart()) + ", first block " + new TreeMap<>(o.firstIndexedBlock())
+                    + ", seen " + o.seen().inserted() + " (fill " + o.seen().fillRatio() + "), all flow addresses seen "
+                    + all.stream().allMatch(o.seen()::mightContain);
             Set<String> flows = p.flows().all().stream().map(ValueFlow::eventId).collect(Collectors.toCollection(TreeSet::new));
             Set<Address> addresses = new java.util.HashSet<>();
             for (ValueFlow f : p.flows().all()) { addresses.add(f.from()); addresses.add(f.to()); }
@@ -124,7 +134,7 @@ class WorkingSetRestartTest {
             Map<String, String> scores = new TreeMap<>();
             p.scoring().repository().all().forEach((a, history) -> scores.put(a.value(),
                     history.stream().map(s -> s.score() + " " + s.level()).collect(Collectors.joining(", "))));
-            return new State(flows, profiles, signals, scores);
+            return new State(flows, profiles, signals, scores, observation);
         }
     }
 

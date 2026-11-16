@@ -142,6 +142,37 @@ class WorkingSetSnapshotTest {
         assertThatThrownBy(() -> read(future)).isInstanceOf(SnapshotIO.SnapshotFormatException.class).hasMessageContaining("format version");
     }
 
+    @Test void theObservationStateComesBackExactlyOrTheSnapshotIsRefused() throws IOException {
+        var seen = new io.openchain.intelligence.memory.SeenAddresses(1 << 16);
+        for (int i = 0; i < 500; i++) seen.add(w(i));
+        var obs = new WorkingSetSnapshot.Observation(seen, Map.of(Network.ETHEREUM, T0, Network.TRON, days(1)),
+                Map.of(Network.ETHEREUM, 19_000_000L));
+        IntelligencePipeline before = pipeline();
+        history(before, sanctioned);
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        WorkingSetSnapshot.write(new DataOutputStream(b), before, new WorkingSetSnapshot.Header("test", Instant.EPOCH, Map.of()), obs);
+        byte[] bytes = b.toByteArray();
+
+        WorkingSetSnapshot.Observation back = read(bytes).observation();
+        assertThat(back.observationStart()).isEqualTo(obs.observationStart());
+        assertThat(back.firstIndexedBlock()).isEqualTo(obs.firstIndexedBlock());
+        assertThat(back.seen().bits()).isEqualTo(seen.bits());
+        assertThat(back.seen().inserted()).isEqualTo(seen.inserted());
+        assertThat(back.seen().fillRatio()).isEqualTo(seen.fillRatio());
+        for (int i = 0; i < 500; i++) assertThat(back.seen().mightContain(w(i))).isTrue();
+        // same answers for addresses never added (false positives included): the filter is the same bit for bit
+        for (int i = 10_000; i < 20_000; i++) assertThat(back.seen().mightContain(w(i))).isEqualTo(seen.mightContain(w(i)));
+        assertThat(read(snapshot(before)).observation()).as("written without observation").isNull();
+
+        // a flipped bit in the filter no longer matches its counters: the whole snapshot is refused
+        // same prefix as a snapshot without observation, whose last 4 bytes (END) are replaced by the flag then the filter
+        int filterStart = snapshot(before).length - 4 + 1;
+        byte[] corrupted = bytes.clone();
+        int firstWord = filterStart + 1 + 4 + 8 + 8; // version, word count, set bits, inserted
+        corrupted[firstWord + 100] ^= 0x01;
+        assertThatThrownBy(() -> read(corrupted)).isInstanceOf(SnapshotIO.SnapshotFormatException.class).hasMessageContaining("seen-address");
+    }
+
     @Test void installingIntoANonEmptyWorkingSetIsRefused() throws IOException {
         IntelligencePipeline before = pipeline();
         history(before, sanctioned);

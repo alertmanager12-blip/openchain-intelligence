@@ -150,6 +150,30 @@ public class ChainIngestionService {
     /** Size of the seen-address filter in bits (OCI_INGESTION_SEEN_ADDRESSES_BITS); call before indexing starts. */
     public void setSeenAddressesBits(long bits) { this.seenAddresses = new io.openchain.intelligence.memory.SeenAddresses(bits); }
 
+    /**
+     * Observation state for the working-set snapshot: the live seen-address filter (not a copy: call under the ingestion
+     * lock, see {@link #exclusive}, and finish writing before releasing it), observation start and first block per network.
+     */
+    public synchronized io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation observation() {
+        return new io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation(seenAddresses, Map.copyOf(observationStart),
+                Map.copyOf(firstIndexedBlock));
+    }
+
+    /**
+     * Restores the observation state saved with a snapshot, before indexing starts. Refused (false, nothing changed) when
+     * the filter size differs from the configured one: the observation start is then not restored either, so ages stay
+     * withheld until the warm-up has passed again, never invented.
+     */
+    public synchronized boolean installObservation(io.openchain.intelligence.snapshot.WorkingSetSnapshot.Observation o) {
+        if (o.seen().bits() != seenAddresses.bits()) return false;
+        if (seenAddresses.inserted() > 0 || !observationStart.isEmpty() || !firstIndexedBlock.isEmpty())
+            throw new IllegalStateException("observation state is restored before indexing only");
+        seenAddresses = o.seen();
+        observationStart.putAll(o.observationStart());
+        firstIndexedBlock.putAll(o.firstIndexedBlock());
+        return true;
+    }
+
     /** Fill ratio (0..1), estimated error rate and distinct addresses of the seen-address filter (metrics). */
     public synchronized double[] seenAddressesStats() {
         var s = seenAddresses;
