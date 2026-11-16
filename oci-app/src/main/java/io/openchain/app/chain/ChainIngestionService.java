@@ -151,6 +151,23 @@ public class ChainIngestionService {
     public void setSeenAddressesBits(long bits) { this.seenAddresses = new io.openchain.intelligence.memory.SeenAddresses(bits); }
 
     /**
+     * Runs {@code work} at a block boundary of every network: no poll in progress (each network's poll lock, taken in
+     * network order, waits for the block being indexed to be fully processed and its checkpoint saved), then under the
+     * ingestion lock (no backfill or history chunk half applied). The in-memory state then matches the saved checkpoints
+     * exactly. Lock order as in a poll (network, then ingestion): no deadlock. Polls wait meanwhile: keep {@code work} short.
+     */
+    public void atBlockBoundary(Runnable work) {
+        List<NetworkRuntime> rts = new ArrayList<>(runtimes.values());
+        rts.sort(java.util.Comparator.comparing(NetworkRuntime::network));
+        lockFrom(rts, 0, work);
+    }
+
+    private void lockFrom(List<NetworkRuntime> rts, int i, Runnable work) {
+        if (i == rts.size()) { exclusive(work); return; }
+        synchronized (rts.get(i)) { lockFrom(rts, i + 1, work); }
+    }
+
+    /**
      * Observation state for the working-set snapshot: the live seen-address filter (not a copy: call under the ingestion
      * lock, see {@link #exclusive}, and finish writing before releasing it), observation start and first block per network.
      */

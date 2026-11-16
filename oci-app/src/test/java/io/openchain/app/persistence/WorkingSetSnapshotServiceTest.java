@@ -111,15 +111,50 @@ class WorkingSetSnapshotServiceTest {
         assertThat(jdbc.queryForObject("select count(*) from working_set_snapshots", Map.of(), Integer.class)).isEqualTo(1);
     }
 
-    @Test void aSnapshotIsNotRestoredOnceTheIndexersMovedOn() {
+    long lastBlock(String indexer) {
+        return jdbc.queryForObject("select last_block from indexer_checkpoints where indexer_id = :id", Map.of("id", indexer), Long.class);
+    }
+
+    @Test void afterACrashTheSnapshotIsRestoredAndTheCheckpointsGoBackToItsWatermark() {
         IntelligencePipeline before = pipeline();
         traffic(before);
-        service(before).writeAtShutdown();
-        checkpoints.save("ethereum-indexer", checkpoint(1_001)); // indexed after the snapshot (crash, no new snapshot)
+        checkpoints.save("tron-indexer", new Checkpoint(Network.TRON, 70_000_000L, List.of()));
+        assertThat(service(before).writePeriodic()).isTrue();
+        // indexing went on after the periodic snapshot, then the application crashed (no snapshot at shutdown)
+        checkpoints.save("ethereum-indexer", checkpoint(1_050));
+        checkpoints.save("tron-indexer", new Checkpoint(Network.TRON, 70_000_200L, List.of()));
+        checkpoints.save("bsc-indexer", new Checkpoint(Network.BSC, 5L, List.of())); // added after the snapshot
+
         IntelligencePipeline after = pipeline();
-        assertThat(service(after).restoreAtStartup()).isEqualTo(WorkingSetSnapshotService.Outcome.SKIPPED_CHECKPOINTS_MOVED);
-        assertThat(empty(after)).isTrue();
-        assertThat(jdbc.queryForObject("select count(*) from working_set_snapshots", Map.of(), Integer.class)).isZero(); // stale: removed
+        WorkingSetSnapshotService s = service(after);
+        assertThat(s.restoreAtStartup()).isEqualTo(WorkingSetSnapshotService.Outcome.REWOUND);
+        assertSame(before, after);
+        assertThat(lastBlock("ethereum-indexer")).as("blocks 1001..1050 are indexed again").isEqualTo(1_000);
+        assertThat(lastBlock("tron-indexer")).isEqualTo(70_000_000L);
+        assertThat(checkpoints.load("ethereum-indexer").orElseThrow().window()).isEqualTo(checkpoint(1_000).window());
+        assertThat(jdbc.queryForObject("select count(*) from indexer_checkpoints where indexer_id = 'bsc-indexer'", Map.of(), Integer.class))
+                .as("an indexer unknown to the snapshot starts as a new one").isZero();
+        // a second crash before the next snapshot rewinds to the same watermark again
+        checkpoints.save("ethereum-indexer", checkpoint(1_010));
+        assertThat(service(pipeline()).restoreAtStartup()).isEqualTo(WorkingSetSnapshotService.Outcome.REWOUND);
+        assertThat(lastBlock("ethereum-indexer")).isEqualTo(1_000);
+    }
+
+    @Test void aPeriodicSnapshotKeepsItsWatermarkWhileIndexingGoesOnAndReplacesThePreviousOne() {
+        IntelligencePipeline p = pipeline();
+        traffic(p);
+        WorkingSetSnapshotService s = service(p);
+        assertThat(s.writePeriodic()).isTrue();
+        checkpoints.save("ethereum-indexer", checkpoint(1_001));
+        assertThat(s.writePeriodic()).isTrue();
+        assertThat(jdbc.queryForObject("select count(*) from working_set_snapshots", Map.of(), Integer.class)).as("one generation").isEqualTo(1);
+        assertThat(jdbc.queryForObject("select (checkpoints -> 'ethereum-indexer' ->> 'last_block')::bigint from working_set_snapshots",
+                Map.of(), Long.class)).isEqualTo(1_001);
+        assertThat(s.lastWriteBytes()).isPositive();
+        assertThat(s.lastPauseMillis()).isGreaterThanOrEqualTo(0);
+        // the indexers move on after the copy: the generation stays valid (no "moved" refusal as at shutdown)
+        checkpoints.save("ethereum-indexer", checkpoint(1_002));
+        assertThat(store.latestComplete()).isPresent();
     }
 
     @Test void aGenerationIsDiscardedWhenAnIndexerMovesWhileItIsWritten() {

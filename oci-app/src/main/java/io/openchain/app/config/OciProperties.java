@@ -417,6 +417,14 @@ public class OciProperties {
         private boolean workingSetSnapshot = false;
         /** How long an orderly shutdown waits for indexer polls in progress before writing the snapshot. */
         private Duration snapshotShutdownTimeout = Duration.ofSeconds(20);
+        /**
+         * Interval of the periodic snapshots taken while indexing (0 = at shutdown only). After a crash, the last one is
+         * reloaded and the blocks indexed since its watermark are indexed again: at most one interval of blocks.
+         */
+        private Duration snapshotInterval = Duration.ofMinutes(30);
+
+        public Duration getSnapshotInterval() { return snapshotInterval; }
+        public void setSnapshotInterval(Duration v) { this.snapshotInterval = v == null ? Duration.ZERO : v; }
 
         public boolean isWorkingSetSnapshot() { return workingSetSnapshot; }
         public void setWorkingSetSnapshot(boolean v) { this.workingSetSnapshot = v; }

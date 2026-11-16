@@ -541,6 +541,15 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         }
         snapshotsActive = true;
         snapshots.restoreAtStartup();
+        Duration every = props.getPersistence().getSnapshotInterval();
+        if (every.isPositive()) {
+            scheduler.scheduleWithFixedDelay(guard("working-set snapshot", snapshots::writePeriodic), every.toMillis(), every.toMillis(),
+                    TimeUnit.MILLISECONDS);
+            log.info("working-set snapshot every {} (after a crash, at most that much indexing is done again)", every);
+        } else {
+            log.warn("periodic working-set snapshots disabled: after a crash the last snapshot is reloaded and everything indexed "
+                    + "since it is indexed again (or skipped beyond max-resume-gap)");
+        }
     }
 
     /**

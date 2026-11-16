@@ -42,7 +42,9 @@ import tools.jackson.databind.node.ObjectNode;
  * blocks 1..40, stops in order (working-set snapshot written), and a second application started on the same database
  * resumes at block 41 without fetching any earlier block again. After both have indexed blocks 1..80, the intelligence
  * (flows, wallet profiles, signals, risk scores) equals that of a third application that indexed 1..80 without a restart.
- * The traffic crosses the restart on purpose: funds received before it are forwarded after it.
+ * The traffic crosses the restart on purpose: funds received before it are forwarded after it. Crash variant: a periodic
+ * snapshot at block 40, indexing on to block 60, then a stop without snapshot; the next start goes back to block 40 and
+ * indexes 41..60 again, ending with the same intelligence and the same alerts (none duplicated) as the reference run.
  */
 @PostgresSupport.RequiresDocker
 class WorkingSetRestartTest {
@@ -95,13 +97,65 @@ class WorkingSetRestartTest {
             restarted = State.of(second);
         }
 
-        node.fullFetches.clear();
-        State reference;
-        try (ConfigurableApplicationContext never = start(PostgresSupport.newDatabase())) {
-            awaitIndexed(never, LAST);
-            reference = State.of(never);
-        }
+        assertSameAsReference(restarted, reference());
+    }
 
+    @Test void afterACrashTheLastPeriodicSnapshotIsRestoredAndTheBlocksSinceAreIndexedAgain() throws Exception {
+        PostgresSupport.Database db = PostgresSupport.newDatabase();
+        NamedParameterJdbcTemplate dbt = jdbc(db);
+        long crashAt = 60;
+        node.head.set(FIRST_STOP + CONFIRMATIONS);
+        try (ConfigurableApplicationContext first = start(db)) {
+            awaitIndexed(first, FIRST_STOP);
+            WorkingSetSnapshotService snapshots = first.getBean(WorkingSetSnapshotService.class);
+            assertThat(snapshots.writePeriodic()).isTrue(); // while the application runs (the scheduled task does the same)
+            assertThat(gauge(first, "oci.snapshot.write.seconds", null, null)).isGreaterThanOrEqualTo(0);
+            assertThat(gauge(first, "oci.snapshot.pause.seconds", null, null)).isGreaterThanOrEqualTo(0);
+            node.head.set(crashAt + CONFIRMATIONS);
+            awaitIndexed(first, crashAt);
+            // keep the periodic generation: the stop below must look like a crash (no snapshot at shutdown)
+            dbt.update("create table crash_snapshots as select * from working_set_snapshots", Map.of());
+            dbt.update("create table crash_chunks as select * from working_set_snapshot_chunks", Map.of());
+        }
+        dbt.update("delete from working_set_snapshots", Map.of());
+        dbt.update("insert into working_set_snapshots select * from crash_snapshots", Map.of());
+        dbt.update("insert into working_set_snapshot_chunks select * from crash_chunks", Map.of());
+        assertThat(dbt.queryForObject("select last_block from indexer_checkpoints", Map.of(), Long.class)).isEqualTo(crashAt);
+        long alertsBeforeCrash = dbt.queryForObject("select count(*) from alerts", Map.of(), Long.class);
+
+        node.fullFetches.clear();
+        node.head.set(LAST + CONFIRMATIONS);
+        State recovered;
+        try (ConfigurableApplicationContext second = start(db)) {
+            assertThat(second.getBean(WorkingSetSnapshotService.class).lastRestore()).isEqualTo(WorkingSetSnapshotService.Outcome.REWOUND);
+            assertThat(gauge(second, "oci.snapshot.restore.outcome", "outcome", "rewound")).isEqualTo(1);
+            awaitIndexed(second, LAST);
+            assertThat(node.fullFetches.keySet()).as("indexing resumes after the snapshot's watermark, not after the crash")
+                    .allMatch(n -> n > FIRST_STOP).contains(FIRST_STOP + 1, crashAt, LAST);
+            recovered = State.of(second);
+        }
+        assertThat(dbt.queryForObject("select count(*) from alerts", Map.of(), Long.class)).isGreaterThanOrEqualTo(alertsBeforeCrash);
+        assertSameAsReference(recovered, reference());
+    }
+
+    /** One run that never stops, shared by the tests (blocks are the same: deterministic chain, fixed block times). */
+    private static State reference;
+
+    State reference() throws Exception {
+        if (reference == null) {
+            long head = node.head.get();
+            node.head.set(LAST + CONFIRMATIONS);
+            try (ConfigurableApplicationContext never = start(PostgresSupport.newDatabase())) {
+                awaitIndexed(never, LAST);
+                reference = State.of(never);
+            } finally {
+                node.head.set(head);
+            }
+        }
+        return reference;
+    }
+
+    static void assertSameAsReference(State restarted, State reference) {
         assertThat(reference.flows()).as("reference run indexed the whole range").hasSize((int) (LAST * 3));
         assertThat(restarted.flows()).isEqualTo(reference.flows());
         assertThat(differences(restarted.profiles(), reference.profiles())).as("profiles that differ (restarted vs reference)").isEmpty();
@@ -109,13 +163,18 @@ class WorkingSetRestartTest {
         assertThat(restarted.scores()).isEqualTo(reference.scores());
         // what decides whether a wallet's age is known: observation start, first block and seen addresses, as if never stopped
         assertThat(restarted.observation()).isEqualTo(reference.observation());
+        assertThat(restarted.alerts()).as("alerts by rule and key: none lost, none duplicated").isEqualTo(reference.alerts());
         assertThat(reference.signals()).as("the comparison is not vacuous").isNotEmpty();
+        assertThat(reference.alerts()).as("the alert comparison is not vacuous").containsKeys(
+                "e2e-large-transfer e2e-large-transfer:" + FakeEthereum.addr(1, 0) + " alert",
+                "e2e-fast-forwarding e2e-fast-forwarding:" + FakeEthereum.addr(2, FIRST_STOP) + " alert");
     }
 
     // ---- comparison --------------------------------------------------------------------------------------------------
 
     /** What an analyst sees; detection and computation instants (wall clock) are left out. */
-    record State(Set<String> flows, Map<String, String> profiles, Set<String> signals, Map<String, String> scores, String observation) {
+    record State(Set<String> flows, Map<String, String> profiles, Set<String> signals, Map<String, String> scores, String observation,
+                 Map<String, Long> alerts) {
         static State of(ConfigurableApplicationContext ctx) {
             IntelligencePipeline p = pipeline(ctx);
             var o = ctx.getBean(io.openchain.app.chain.ChainIngestionService.class).observation();
@@ -134,7 +193,14 @@ class WorkingSetRestartTest {
             Map<String, String> scores = new TreeMap<>();
             p.scoring().repository().all().forEach((a, history) -> scores.put(a.value(),
                     history.stream().map(s -> s.score() + " " + s.level()).collect(Collectors.joining(", "))));
-            return new State(flows, profiles, signals, scores, observation);
+            Map<String, Long> alerts = new TreeMap<>();
+            ctx.getBean(NamedParameterJdbcTemplate.class).query("select rule_id || ' ' || coalesce(dedup_key, '-'), "
+                    + "jsonb_array_length(matched_event_ids), occurrence_count from alerts", Map.of(), rs -> {
+                        alerts.merge(rs.getString(1) + " alert", 1L, Long::sum);
+                        alerts.merge(rs.getString(1) + " events", rs.getLong(2), Long::sum);
+                        alerts.merge(rs.getString(1) + " occurrences", rs.getLong(3), Long::sum);
+                    });
+            return new State(flows, profiles, signals, scores, observation, alerts);
         }
     }
 
@@ -163,6 +229,63 @@ class WorkingSetRestartTest {
 
     // ---- application -------------------------------------------------------------------------------------------------
 
+    /**
+     * Two rules that fire on the traffic (the shipped rules need connectors): a stateless one on large native transfers,
+     * grouped per sender within its cooldown, and one on fast-forwarding signals. No rule with a window: rule-engine
+     * windows are not in the snapshot (documented), so a windowed rule may legitimately differ after a restart.
+     */
+    static final String RULES = rulesDirectory();
+
+    static String rulesDirectory() {
+        try {
+            java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("oci-e2e-rules");
+            java.nio.file.Files.writeString(dir.resolve("large-transfer.yaml"), """
+                    apiVersion: openchain.io/rule/v1
+                    id: e2e-large-transfer
+                    version: 1.0.0
+                    name: Large ETH transfer
+                    author: test-suite
+                    enabled: true
+                    scope:
+                      networks: [ethereum]
+                      eventTypes: [NATIVE_TRANSFER]
+                    conditions:
+                      logic: AND
+                      rules:
+                        - field: transaction.amount
+                          operator: GREATER_THAN_OR_EQUAL
+                          value: "5"
+                    severity: MEDIUM
+                    evidenceLevel: ANOMALY
+                    cooldown: 10m
+                    dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+                    """);
+            java.nio.file.Files.writeString(dir.resolve("fast-forwarding.yaml"), """
+                    apiVersion: openchain.io/rule/v1
+                    id: e2e-fast-forwarding
+                    version: 1.0.0
+                    name: Fast forwarding
+                    author: test-suite
+                    enabled: true
+                    scope:
+                      eventTypes: [DETECTION_SIGNAL]
+                    conditions:
+                      logic: AND
+                      rules:
+                        - field: signal.type
+                          operator: EQUALS
+                          value: FAST_FORWARDING
+                    severity: MEDIUM
+                    evidenceLevel: ANOMALY
+                    cooldown: 1h
+                    dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+                    """);
+            return dir.toString();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     ConfigurableApplicationContext start(PostgresSupport.Database db) {
         Map<String, Object> p = new HashMap<>();
         p.put("spring.datasource.url", db.url());
@@ -171,9 +294,11 @@ class WorkingSetRestartTest {
         p.put("oci.security.crypto-master-key", PersistenceRestartTest.MASTER_KEY);
         p.put("server.port", "0");
         p.put("oci.demo.enabled", "false");
+        p.put("oci.rules.directories", RULES);
         p.put("oci.ingestion.poll-interval", "100ms");
         p.put("oci.persistence.working-set-snapshot", "true");
         p.put("oci.persistence.snapshot-shutdown-timeout", "10s");
+        p.put("oci.persistence.snapshot-interval", "0"); // periodic snapshots are taken by the test itself
         p.put("oci.chains.ethereum.enabled", "true");
         p.put("oci.chains.ethereum.url", node.url());
         p.put("oci.chains.ethereum.start-block", "1");

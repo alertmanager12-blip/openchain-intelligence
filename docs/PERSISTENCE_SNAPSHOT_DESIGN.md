@@ -189,14 +189,20 @@ Fait, testé :
 | Redémarrage de bout en bout : l'application réelle indexe les blocs 1 à 40 d'un nœud Ethereum simulé, s'arrête, une deuxième application sur la même base reprend au bloc 41 **sans relire un bloc déjà indexé** ; après le bloc 80, flux, profils, signaux et scores sont identiques à ceux d'une troisième application qui a tout indexé sans arrêt. Le trafic traverse le redémarrage (fonds reçus avant, transférés après) | — | `WorkingSetRestartTest` (PostgreSQL 17) ; vérifié qu'il échoue quand l'instantané est supprimé avant le redémarrage. Seules les valeurs d'horloge murale (instant de calcul des scores, âge affiché) sont exclues de la comparaison |
 | Métriques (§ 4.6) : `oci_snapshot_restore_seconds`, `oci_snapshot_write_seconds`, `oci_snapshot_bytes`, `oci_snapshot_age_seconds`, `oci_snapshot_restore_outcome{outcome}`, `oci_snapshot_restored_items{kind}`, `oci_snapshot_failures_total{phase}` ; NaN tant qu'aucune mesure n'existe (les valeurs d'écriture ne sont visibles qu'avec des instantanés périodiques) | `MetricsConfiguration.workingSetSnapshotMetrics` | `WorkingSetRestartTest` |
 | État d'observation (format 2) : filtre des adresses vues, début d'observation et premier bloc par réseau, rechargés ensemble ou pas du tout. Sans lui, chaque redémarrage relançait les 30 jours de mise en route de l'âge (âges retenus) ; le début d'observation sans le filtre ferait passer un vieux portefeuille dont le profil a été évincé pour neuf (âge 0 inventé). Taille du filtre changée depuis l'instantané : rien de l'observation n'est rechargé, l'âge reste retenu | `SeenAddresses.writeTo/readFrom`, `WorkingSetSnapshot.Observation`, `ChainIngestionService.observation/installObservation` | `WorkingSetSnapshotTest` (filtre identique bit à bit, bit corrompu refusé), `WorkingSetRestartTest` (même état d'observation que l'exécution sans arrêt ; échoue s'il n'est pas rechargé) |
+| Instantanés périodiques (`OCI_PERSISTENCE_SNAPSHOT_INTERVAL`, 30 min par défaut, 0 = à l'arrêt seulement) et retour au filigrane après un crash : points de reprise remis à ceux de l'instantané, blocs indexés depuis réindexés ; les alertes déjà levées sont reconnues (même événement déclencheur) | `WorkingSetSnapshotService.writePeriodic`, `ChainIngestionService.atBlockBoundary`, `JdbcWorkingSetSnapshotStore.rewindCheckpoints` | `WorkingSetSnapshotServiceTest` (retour au filigrane, indexeur ajouté depuis, second crash) ; `WorkingSetRestartTest` variante crash : instantané au bloc 40, crash au bloc 60, reprise au bloc 41, au bloc 80 mêmes flux, profils, signaux, scores, observation **et alertes** (nombre, événements, occurrences) que l'exécution sans arrêt ; échoue si la reconnaissance des alertes rejouées est retirée |
 | Contrôle CI « 0 test sauté » | `.github/workflows/ci.yml`, étape « No skipped test » | vérifié en local |
 
 Écarts assumés par rapport au § 4 :
 
-- **Rechargement seulement si les points de reprise n'ont pas bougé depuis l'instantané** (arrêt ordonné). Après un arrêt
-  brutal, rien n'est rechargé et l'état se reconstruit comme avant, au lieu de revenir au filigrane et de réindexer : sans
-  instantané périodique, le seul instantané disponible pourrait avoir des jours, et le retour en arrière réindexerait des
-  milliers de blocs. Le retour au filigrane viendra avec les instantanés périodiques.
+- **Copie cohérente par fichier temporaire local** (§ 4.3, instantané périodique) : la copie est prise à une frontière de
+  bloc de tous les réseaux (verrou de relève de chaque réseau, puis verrou d'ingestion), écrite dans un fichier temporaire
+  pendant que l'indexation attend (`oci_snapshot_pause_seconds`), puis envoyée à PostgreSQL pendant que l'indexation
+  reprend. Le filigrane est la copie des points de reprise prise au même instant. Coût : un fichier de la taille de
+  l'instantané dans le répertoire temporaire, le temps de l'envoi.
+- **Après un crash, retour au filigrane du dernier instantané** (§ 4.4) même si les instantanés périodiques sont désactivés
+  (`OCI_PERSISTENCE_SNAPSHOT_INTERVAL=0`) : l'instantané peut alors être ancien, et au-delà de `max-resume-gap` le saut
+  journalisé existant s'applique. Un indexeur absent du filigrane (ajouté depuis) perd son point de reprise et démarre
+  comme un nouveau.
 - **Morceaux binaires (`bytea`) plutôt que des tables par type remplies par `COPY`** : un seul format, versionné, déjà
   testé en aller-retour exact ; une génération se remplace en une transaction.
 - **Désactivé par défaut** : l'écriture à l'arrêt demande un délai d'arrêt du conteneur supérieur aux 10 s par défaut de
@@ -204,6 +210,5 @@ Fait, testé :
 
 Reste à faire :
 
-1. Instantanés périodiques avec copie cohérente et retour au filigrane après un crash (§ 4.3 et 4.4, variante crash du § 5).
-2. Mesure à volume réel (§ 6), avec ton accord : durée d'écriture et de rechargement, taille, mémoire.
-3. `stop_grace_period` dans `docker-compose.yml` et activation par défaut : décisions à prendre.
+1. Mesure à volume réel (§ 6), avec ton accord : durée d'écriture et de rechargement, taille, mémoire.
+2. `stop_grace_period` dans `docker-compose.yml` et activation par défaut : décisions à prendre.

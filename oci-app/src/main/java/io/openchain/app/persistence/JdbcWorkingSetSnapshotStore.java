@@ -38,6 +38,66 @@ public final class JdbcWorkingSetSnapshotStore {
         this.clock = clock;
     }
 
+    /** The indexer checkpoints as they are now, as JSON (the watermark of a periodic snapshot taken at a block boundary). */
+    public String currentCheckpoints() { return jdbc.queryForObject("select " + CHECKPOINTS + "::text", Map.of(), String.class); }
+
+    /**
+     * Starts a new, not yet visible generation whose watermark is {@code checkpointsJson} (checkpoints read while no block
+     * was being indexed); the indexers may move on while it is written: complete it with {@link #completePeriodic}.
+     */
+    public long create(int format, String appVersion, String checkpointsJson) {
+        Long g = jdbc.queryForObject("select coalesce(max(generation), 0) + 1 from working_set_snapshots", Map.of(), Long.class);
+        jdbc.update("insert into working_set_snapshots (generation, format, app_version, created_at, checkpoints) "
+                + "values (:g, :f, :v, :at, cast(:cp as jsonb))",
+                new MapSqlParameterSource().addValue("g", g).addValue("f", format).addValue("v", appVersion)
+                        .addValue("at", Sql.ts(clock.instant())).addValue("cp", checkpointsJson));
+        return g;
+    }
+
+    /** Makes a periodic generation the only visible one (its watermark was fixed at {@link #create(int, String, String)}). */
+    public void completePeriodic(long generation, long sizeBytes, String countsJson) {
+        tx.inTransaction(() -> {
+            int ok = jdbc.update("update working_set_snapshots set completed_at = :at, size_bytes = :size, counts = cast(:counts as jsonb) "
+                    + "where generation = :g", new MapSqlParameterSource().addValue("at", Sql.ts(clock.instant())).addValue("size", sizeBytes)
+                    .addValue("counts", countsJson).addValue("g", generation));
+            if (ok != 1) throw new IllegalStateException("snapshot generation " + generation + " vanished while it was written");
+            jdbc.update("delete from working_set_snapshots where generation <> :g", Map.of("g", generation));
+            return null;
+        });
+    }
+
+    /** Last block of one indexer: now, and in the watermark of a generation (null = no checkpoint there). */
+    public record Rewind(String indexerId, Long current, Long watermark) {}
+
+    /** Indexers whose checkpoint differs from a generation's watermark (what {@link #rewindCheckpoints} changes). */
+    public java.util.List<Rewind> rewindPlan(long generation) {
+        return jdbc.query("select coalesce(c.indexer_id, w.key), c.last_block, (w.value ->> 'last_block')::bigint "
+                + "from indexer_checkpoints c full join (select key, value from jsonb_each("
+                + "(select checkpoints from working_set_snapshots where generation = :g))) w on w.key = c.indexer_id "
+                + "where c.last_block is distinct from (w.value ->> 'last_block')::bigint "
+                + "or c.window_refs is distinct from w.value -> 'window_refs' order by 1", Map.of("g", generation),
+                (rs, i) -> new Rewind(rs.getString(1), (Long) rs.getObject(2), (Long) rs.getObject(3)));
+    }
+
+    /**
+     * Puts the indexer checkpoints back to a generation's watermark, in one transaction: the indexers then index again what
+     * was indexed after the snapshot (a crash). An indexer without checkpoint in the watermark (added since) loses its
+     * checkpoint and starts as a new one.
+     */
+    public void rewindCheckpoints(long generation) {
+        tx.inTransaction(() -> {
+            Map<String, Object> g = Map.of("g", generation, "at", Sql.ts(clock.instant()));
+            jdbc.update("delete from indexer_checkpoints where indexer_id not in (select key from jsonb_each("
+                    + "(select checkpoints from working_set_snapshots where generation = :g)))", g);
+            jdbc.update("insert into indexer_checkpoints (indexer_id, network, last_block, window_refs, updated_at) "
+                    + "select key, value ->> 'network', (value ->> 'last_block')::bigint, value -> 'window_refs', :at "
+                    + "from jsonb_each((select checkpoints from working_set_snapshots where generation = :g)) "
+                    + "on conflict (indexer_id) do update set network = excluded.network, last_block = excluded.last_block, "
+                    + "window_refs = excluded.window_refs, updated_at = excluded.updated_at", g);
+            return null;
+        });
+    }
+
     /** Starts a new, not yet visible generation, copying the indexer checkpoints as they are now. */
     public long create(int format, String appVersion) {
         Long g = jdbc.queryForObject("select coalesce(max(generation), 0) + 1 from working_set_snapshots", Map.of(), Long.class);

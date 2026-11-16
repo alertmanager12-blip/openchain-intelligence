@@ -43,6 +43,8 @@ public class MetricsConfiguration {
                     .description("Duration of the last restore attempt at start-up").register(registry);
             Gauge.builder("oci.snapshot.write.seconds", s, x -> nan.applyAsDouble(x.lastWriteMillis()) / 1000.0)
                     .description("Duration of the last completed snapshot write").register(registry);
+            Gauge.builder("oci.snapshot.pause.seconds", s, x -> nan.applyAsDouble(x.lastPauseMillis()) / 1000.0)
+                    .description("How long indexing waited for the last periodic snapshot copy").register(registry);
             Gauge.builder("oci.snapshot.bytes", s, x -> nan.applyAsDouble(x.lastWriteBytes()))
                     .description("Size of the last completed snapshot").register(registry);
             Gauge.builder("oci.snapshot.age.seconds", s, x -> x.ageSeconds())
