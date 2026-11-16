@@ -481,11 +481,23 @@ export class MockDb {
   exposure(address: string, network: NetworkId): Exposure {
     this.assertReachable(network, address);
     const rng = new Rng(`exp:${network}:${address}`);
+    const sym = tokensOf(network)[0].symbol;
     const entry = (hops: number) => {
       const cat = rng.pick(LABEL_CATEGORIES);
-      return { category: cat, hops, share: Math.round(rng.next() * 30) / 100, counterparty: fakeAddress(network, rng.int(1, 60)), evidenceLevel: (cat === 'sanctioned' ? 'CONFIRMED_BY_SOURCE' : cat === 'mixer' || cat === 'scam-report' ? 'RISK_SIGNAL' : 'ANOMALY') as EvidenceLevel };
+      const amount = String(rng.int(20, 50_000));
+      return {
+        category: cat, hops, share: Math.round(rng.next() * 30) / 100, counterparty: fakeAddress(network, rng.int(1, 60)), source: 'demo-list',
+        evidenceLevel: (hops > 1 ? 'RISK_SIGNAL' : cat === 'sanctioned' ? 'CONFIRMED_BY_SOURCE' : cat === 'mixer' || cat === 'scam-report' ? 'RISK_SIGNAL' : 'ANOMALY') as EvidenceLevel,
+        ...(hops === 1
+          ? { amounts: [{ token: sym, received: amount, sent: '0' }], transfers: rng.int(1, 6) }
+          : { traced: { token: sym, amount }, confidence: Math.round(Math.pow(0.5, hops - 1) * 100) / 100 }),
+      };
     };
-    return { address, network, direct: Array.from({ length: rng.int(1, 4) }, () => entry(1)), indirect: Array.from({ length: rng.int(1, 5) }, () => entry(rng.int(2, 3))) };
+    return {
+      address, network, direct: Array.from({ length: rng.int(0, 3) }, () => entry(1)), indirect: Array.from({ length: rng.int(0, 4) }, () => entry(rng.int(2, 3))),
+      ignored: [], counterparties: [],
+      coverage: { state: 'PARTIAL' as const, dataFrom: iso(48 * H), dataTo: iso(H), limits: ['Demo data: simulated working set.'] },
+    };
   }
 
   transaction(hash: string, network: NetworkId): TransactionAnalysis {

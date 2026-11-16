@@ -15,9 +15,9 @@ import io.openchain.core.provider.ProviderException;
 import io.openchain.core.risk.RiskLevel;
 import io.openchain.core.risk.RiskScore;
 import io.openchain.intelligence.IntelligencePipeline;
+import io.openchain.intelligence.exposure.ExposurePaths;
 import io.openchain.intelligence.flow.ValueFlow;
 import io.openchain.intelligence.label.AddressLabel;
-import io.openchain.intelligence.label.LabelCategory;
 import io.openchain.intelligence.profile.WalletProfile;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -26,10 +26,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -260,59 +258,124 @@ public class InvestigationService {
     // ---- exposure -----------------------------------------------------------------------------------------------
 
     /**
-     * Exposure to risky labelled categories through actual value flows (both directions for hop 1, inbound only
-     * beyond). {@code share} = share of the wallet's volume (hop 1) or the product of inbound shares along the path.
+     * Exposure to addresses listed in a risky category (Fund Flow Trace P0-A, docs/FUND_FLOW_TRACE_P0_A_EXPOSURE.md).
+     * Paths are qualified by {@link ExposurePaths}, the same rules as the exposure detector: unverified tokens and inbound
+     * dust create no exposure (listed in {@code ignored}), upstream flows must not be later than the downstream one,
+     * tracing stops at the first listed address and at exchanges and bridges. Amounts are exact and per token, never
+     * added across tokens. Non-risky labelled counterparties are listed apart. The data is the in-memory working set
+     * plus the address history when loaded: the coverage is reported as PARTIAL, never complete.
      */
     public Dto.ExposureDto exposure(Address a, int depth) {
-        List<Dto.ExposureEntryDto> direct = new ArrayList<>(), indirect = new ArrayList<>();
-        Map<Address, BigDecimal> volume = new HashMap<>();
-        BigDecimal total = BigDecimal.ZERO;
-        for (ValueFlow f : intelligence.flows().involving(a)) {
+        var cfg = ExposurePaths.withMaxHops(intelligence.detectionConfig().exposure(), depth);
+        List<ValueFlow> involving = intelligence.flows().involving(a);
+        LegacyShare legacy = new LegacyShare(a, involving);
+
+        List<Dto.ExposureEntryDto> direct = new ArrayList<>();
+        List<Dto.IgnoredTransferDto> ignored = new ArrayList<>();
+        for (ExposurePaths.Direct d : ExposurePaths.direct(a, intelligence.flows(), labels, cfg)) {
+            AddressLabel l = d.label();
+            String cat = ChainIngestionService.categoryId(l.category());
+            for (ValueFlow f : d.ignored()) {
+                ignored.add(new Dto.IgnoredTransferDto(l.address().value(), cat, l.source(),
+                        f.token().isUnverified() ? "unverified_token" : "below_dust_threshold", f.token().symbol(),
+                        f.amount().stripTrailingZeros().toPlainString(), f.txHash(), f.timestamp()));
+            }
+            if (!d.exposed()) continue;
+            Map<String, BigDecimal[]> perToken = new java.util.TreeMap<>();
+            for (ValueFlow f : d.flows()) {
+                BigDecimal[] io = perToken.computeIfAbsent(f.token().symbol(), k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+                if (f.to().equals(a)) io[0] = io[0].add(f.amount()); else io[1] = io[1].add(f.amount());
+            }
+            List<Dto.TokenFlowDto> amounts = new ArrayList<>();
+            perToken.forEach((sym, io) -> amounts.add(new Dto.TokenFlowDto(sym, plain(io[0]), plain(io[1]))));
+            List<String> hashes = d.flows().reversed().stream().map(ValueFlow::txHash).distinct().limit(MAX_HASHES).toList();
+            direct.add(new Dto.ExposureEntryDto(cat, 1, legacy.direct(l.address()), l.address().value(), l.evidenceLevel().name(),
+                    l.source(), amounts, d.flows().size(), hashes, null, null, l.sourceReliability()));
+        }
+
+        List<Dto.ExposureEntryDto> indirect = new ArrayList<>();
+        for (ExposurePaths.Indirect i : ExposurePaths.indirect(a, intelligence.flows(), labels, cfg)) {
+            AddressLabel l = i.label();
+            ValueFlow b = i.bottleneck();
+            List<Dto.PathHopDto> path = i.path().stream().map(f -> new Dto.PathHopDto(f.from().value(), f.to().value(), f.txHash(),
+                    f.token().symbol(), plain(f.amount()), f.timestamp())).toList();
+            // an inference: an indirect path is never more than a risk signal, whatever the label's own level
+            indirect.add(new Dto.ExposureEntryDto(ChainIngestionService.categoryId(l.category()), i.hops(), legacy.path(i.path()),
+                    l.address().value(), Signal.EvidenceLevel.RISK_SIGNAL.name(), l.source(), null, null,
+                    i.path().stream().map(ValueFlow::txHash).toList(), path,
+                    new Dto.TokenAmountDto(b.token().symbol(), plain(b.amount())), Math.round(i.confidence() * 10_000) / 10_000.0));
+        }
+
+        Map<String, Dto.LabelledCounterpartyDto> others = new LinkedHashMap<>();
+        Map<String, Integer> otherCounts = new HashMap<>();
+        for (ValueFlow f : involving) {
             if (f.from().equals(f.to())) continue;
-            volume.merge(f.counterparty(a), f.amount(), BigDecimal::add);
-            total = total.add(f.amount());
-        }
-        for (Map.Entry<Address, BigDecimal> e : volume.entrySet()) {
-            for (AddressLabel l : labels.findByAddress(e.getKey())) {
-                direct.add(entry(l, 1, share(e.getValue(), total)));
+            for (AddressLabel l : labels.findByAddress(f.counterparty(a))) {
+                if (l.category().risky()) continue;
+                String key = l.key();
+                otherCounts.merge(key, 1, Integer::sum);
+                others.putIfAbsent(key, new Dto.LabelledCounterpartyDto(l.address().value(), ChainIngestionService.categoryId(l.category()),
+                        l.source(), l.evidenceLevel().name(), 0));
             }
         }
-        // backwards BFS over inbound flows for hops 2..depth
-        record Node(Address address, int hops, double share) {}
-        Deque<Node> queue = new ArrayDeque<>();
-        Set<Address> seen = new HashSet<>(Set.of(a));
-        queue.add(new Node(a, 0, 1.0));
-        int visited = 0;
-        while (!queue.isEmpty() && visited < 5_000) {
-            Node n = queue.poll();
-            if (n.hops() >= depth) continue;
-            Map<Address, BigDecimal> in = new HashMap<>();
-            BigDecimal inTotal = BigDecimal.ZERO;
-            for (ValueFlow f : intelligence.flows().incoming(n.address())) {
-                if (f.from().equals(n.address())) continue;
-                in.merge(f.from(), f.amount(), BigDecimal::add);
-                inTotal = inTotal.add(f.amount());
-                visited++;
-            }
-            for (Map.Entry<Address, BigDecimal> e : in.entrySet()) {
-                double s = n.share() * share(e.getValue(), inTotal);
-                int hops = n.hops() + 1;
-                if (hops >= 2) for (AddressLabel l : labels.findByAddress(e.getKey())) {
-                    if (l.category().risky()) indirect.add(entry(l, hops, s));
-                }
-                boolean stop = labels.findByAddress(e.getKey()).stream()
-                        .anyMatch(l -> l.category() == LabelCategory.EXCHANGE || l.category() == LabelCategory.BRIDGE);
-                if (!stop && seen.add(e.getKey()) && s >= 0.001) queue.add(new Node(e.getKey(), hops, s));
-            }
-        }
-        indirect.sort(Comparator.comparingDouble(Dto.ExposureEntryDto::share).reversed());
-        direct.sort(Comparator.comparingDouble(Dto.ExposureEntryDto::share).reversed());
-        return new Dto.ExposureDto(a.value(), a.network().id(), depth, direct, indirect.size() > 50 ? indirect.subList(0, 50) : indirect);
+        List<Dto.LabelledCounterpartyDto> counterparties = others.entrySet().stream().map(e -> new Dto.LabelledCounterpartyDto(
+                e.getValue().counterparty(), e.getValue().category(), e.getValue().source(), e.getValue().evidenceLevel(),
+                otherCounts.get(e.getKey()))).toList();
+
+        return new Dto.ExposureDto(a.value(), a.network().id(), depth, direct, indirect, ignored, counterparties, coverage(a, involving));
     }
 
-    private static Dto.ExposureEntryDto entry(AddressLabel l, int hops, double share) {
-        return new Dto.ExposureEntryDto(ChainIngestionService.categoryId(l.category()), hops, Math.round(share * 10_000) / 10_000.0,
-                l.address().value(), l.evidenceLevel().name(), l.source());
+    static final int MAX_HASHES = 20;
+
+    /** PARTIAL until P0-B: says which data the answer rests on, so that "none found" is never read as "none at all". */
+    private Dto.CoverageDto coverage(Address a, List<ValueFlow> involving) {
+        List<String> limits = new ArrayList<>();
+        limits.add("Based on the flows held in memory (bounded working set, kept for a limited time) and on the address history "
+                + "when it was loaded; earlier activity may be missing. No exposure here means none in these data, not none at all.");
+        Dto.HistoryCoverageDto h = history.coverage(a);
+        limits.add("Address history: " + h.status() + (h.message() == null ? "" : " - " + h.message()));
+        limits.addAll(limitations(a.network()));
+        Instant from = involving.isEmpty() ? null : involving.getFirst().timestamp();
+        Instant to = involving.isEmpty() ? null : involving.getLast().timestamp();
+        return new Dto.CoverageDto("PARTIAL", from, to, limits);
+    }
+
+    private static String plain(BigDecimal v) { return v.signum() == 0 ? "0" : v.stripTrailingZeros().toPlainString(); }
+
+    /**
+     * The deprecated {@code share} of the v1 contract, computed as before (share of the volume summed over all tokens,
+     * no unit) so that existing consumers see no silent change of meaning (decision D6, option b).
+     */
+    private final class LegacyShare {
+        private final Map<Address, BigDecimal> volume = new HashMap<>();
+        private BigDecimal total = BigDecimal.ZERO;
+
+        LegacyShare(Address a, List<ValueFlow> involving) {
+            for (ValueFlow f : involving) {
+                if (f.from().equals(f.to())) continue;
+                volume.merge(f.counterparty(a), f.amount(), BigDecimal::add);
+                total = total.add(f.amount());
+            }
+        }
+
+        double direct(Address counterparty) { return round(share(volume.getOrDefault(counterparty, BigDecimal.ZERO), total)); }
+
+        /** Product, along the path, of the sender's share of the receiver's inbound volume. */
+        double path(List<ValueFlow> path) {
+            double s = 1.0;
+            for (ValueFlow f : path) {
+                BigDecimal fromSender = BigDecimal.ZERO, all = BigDecimal.ZERO;
+                for (ValueFlow g : intelligence.flows().incoming(f.to())) {
+                    if (g.from().equals(f.to())) continue;
+                    all = all.add(g.amount());
+                    if (g.from().equals(f.from())) fromSender = fromSender.add(g.amount());
+                }
+                s *= share(fromSender, all);
+            }
+            return round(s);
+        }
+
+        private double round(double v) { return Math.round(v * 10_000) / 10_000.0; }
     }
 
     private static double share(BigDecimal part, BigDecimal total) {

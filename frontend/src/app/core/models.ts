@@ -210,15 +210,57 @@ export interface Exposure {
   network: NetworkId;
   direct: ExposureEntry[];
   indirect: ExposureEntry[];
+  /** Transfers from listed addresses that create no exposure (unverified token, dust). */
+  ignored?: IgnoredTransfer[];
+  /** Labelled counterparties outside the risky categories (exchange, protocol...): information, not exposure. */
+  counterparties?: LabelledCounterparty[];
+  coverage?: ExposureCoverage;
 }
 
 export interface ExposureEntry {
   category: string;
   hops: number;
-  /** Share of volume, 0..1. */
+  /** @deprecated share of volume summed over all tokens (no unit); use `amounts` or `traced`. */
   share: number;
   counterparty: string;
   evidenceLevel: EvidenceLevel;
+  source?: string;
+  /** Direct: exact amounts per token (decimal strings), never added across tokens. */
+  amounts?: { token: string; received: string; sent: string }[] | null;
+  transfers?: number | null;
+  txHashes?: string[] | null;
+  /** Indirect: hops from the listed address to this wallet. */
+  path?: { from: string; to: string; txHash: string; token: string; amount: string; timestamp: string }[] | null;
+  /** Indirect: at most this amount (smallest hop), in this token. */
+  traced?: { token: string; amount: string } | null;
+  confidence?: number | null;
+}
+
+export interface IgnoredTransfer {
+  counterparty: string;
+  category: string;
+  source: string;
+  reason: 'unverified_token' | 'below_dust_threshold';
+  token: string;
+  amount: string;
+  txHash: string;
+  timestamp: string;
+}
+
+export interface LabelledCounterparty {
+  counterparty: string;
+  category: string;
+  source: string;
+  evidenceLevel: EvidenceLevel;
+  transfers: number;
+}
+
+export interface ExposureCoverage {
+  /** PARTIAL until the coverage model exists: "none found" means none in the data covered. */
+  state: 'COMPLETE' | 'PARTIAL' | 'TRUNCATED' | 'UNAVAILABLE' | 'NOT_YET_INDEXED';
+  dataFrom: string | null;
+  dataTo: string | null;
+  limits: string[];
 }
 
 export interface TransactionAnalysis {

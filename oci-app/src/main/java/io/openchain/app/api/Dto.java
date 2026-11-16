@@ -106,11 +106,41 @@ public final class Dto {
 
     public record GraphDto(String root, String network, List<GraphNodeDto> nodes, List<GraphEdgeDto> edges, boolean truncated) {}
 
-    public record ExposureEntryDto(String category, int hops, double share, String counterparty, String evidenceLevel,
-                                   String source) {}
+    /**
+     * One exposure (Fund Flow Trace P0-A). Direct: {@code amounts} per token and the transfers' hashes. Indirect:
+     * {@code path} (listed address first), {@code traced} (at most this amount, the smallest hop, in its token) and
+     * {@code confidence}. Amounts are exact decimal strings and are never added across tokens.
+     *
+     * @param share deprecated, kept for v1 compatibility: share of volume summed over all tokens (no unit). Use
+     *              {@code amounts} or {@code traced}. Removed at the next major API version.
+     */
+    public record ExposureEntryDto(String category, int hops, @Deprecated double share, String counterparty, String evidenceLevel,
+                                   String source, List<TokenFlowDto> amounts, Integer transfers, List<String> txHashes,
+                                   List<PathHopDto> path, TokenAmountDto traced, Double confidence) {}
+
+    /** Amount received from and sent to the listed address, in one token. */
+    public record TokenFlowDto(String token, String received, String sent) {}
+
+    public record TokenAmountDto(String token, String amount) {}
+
+    public record PathHopDto(String from, String to, String txHash, String token, String amount, Instant timestamp) {}
+
+    /** A transfer from a listed address that creates no exposure ({@code reason}: unverified_token, below_dust_threshold). */
+    public record IgnoredTransferDto(String counterparty, String category, String source, String reason, String token,
+                                     String amount, String txHash, Instant timestamp) {}
+
+    /** A labelled counterparty that is not in a risky category (exchange, protocol...): information, not exposure. */
+    public record LabelledCounterpartyDto(String counterparty, String category, String source, String evidenceLevel, int transfers) {}
+
+    /**
+     * What the answer is based on (ADR-0023 amendment 1: coverage is separate from the evidence level). {@code PARTIAL}
+     * until the coverage model of P0-B exists: "no exposure" then means none in the data covered, not none at all.
+     */
+    public record CoverageDto(String state, Instant dataFrom, Instant dataTo, List<String> limits) {}
 
     public record ExposureDto(String address, String network, int depth, List<ExposureEntryDto> direct,
-                              List<ExposureEntryDto> indirect) {}
+                              List<ExposureEntryDto> indirect, List<IgnoredTransferDto> ignored,
+                              List<LabelledCounterpartyDto> counterparties, CoverageDto coverage) {}
 
     public record CommentDto(String id, String author, String body, Instant createdAt) {}
 

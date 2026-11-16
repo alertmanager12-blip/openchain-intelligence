@@ -98,7 +98,7 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 | GET | `/wallets/{address}/analysis?network=` | wallet:read | Profile, risk score with contributions, signals, labels, data freshness |
 | GET | `/wallets/{address}/transactions?network=&cursor=&limit=` | transaction:read | Transactions, newest first, cursor paginated (`token`/`from`/`to`/`direction` filters: not implemented yet) |
 | GET | `/wallets/{address}/risk?network=` | risk:read | Current `RiskScore` + recent history |
-| GET | `/wallets/{address}/exposure?network=&depth=1..3` | investigation:read | Direct/indirect exposure to labelled categories (amount and share, by hop) |
+| GET | `/wallets/{address}/exposure?network=&depth=1..3` | investigation:read | Exposure to addresses listed in a risky category, qualified like the exposure detector: `direct[]` with exact `amounts` per token and `txHashes`, `indirect[]` with `path`, `traced` (at most this amount, in one token) and `confidence`; `ignored[]` (unverified token, dust: not exposure), `counterparties[]` (exchange, protocol: information), `coverage` (`PARTIAL`: none found means none in the data covered). Amounts are never added across tokens. `share` is deprecated (sum over all tokens, no unit) |
 | GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
 
 Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:

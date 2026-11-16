@@ -136,32 +136,56 @@
 
           <mat-tab>
             <ng-template mat-tab-label>Exposure@if (tabs()[3].count !== undefined) { <span class="count">{{ tabs()[3].count }}</span> }</ng-template>
-            <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="expRows().length === 0" emptyText="No exposure to labelled categories was found." skeleton="table" (retry)="exp.reload()">
-              <p class="small muted">Share of volume connected to labelled categories. Indirect exposure (2 hops or more) is weaker evidence than direct exposure.</p>
-              <div class="table-wrap"><table mat-table [dataSource]="expRows()">
-                <ng-container matColumnDef="category">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Category</th>
-                  <td mat-cell *matCellDef="let x" class="strong">{{ x.category }}</td>
-                </ng-container>
-                <ng-container matColumnDef="hops">
-                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Hops</th>
-                  <td mat-cell *matCellDef="let x" class="right">{{ x.hops }}</td>
-                </ng-container>
-                <ng-container matColumnDef="share">
-                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Share of volume</th>
-                  <td mat-cell *matCellDef="let x" class="right nowrap"><span class="share" aria-hidden="true"><span [style.width.%]="x.share * 100"></span></span> {{ pct(x.share) }}%</td>
-                </ng-container>
-                <ng-container matColumnDef="via">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Via</th>
-                  <td mat-cell *matCellDef="let x"><oci-addr [address]="x.counterparty" [network]="network()" /></td>
-                </ng-container>
-                <ng-container matColumnDef="evidence">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
-                  <td mat-cell *matCellDef="let x"><oci-evidence [value]="x.evidenceLevel" /></td>
-                </ng-container>
-                <tr mat-header-row *matHeaderRowDef="expCols"></tr>
-                <tr mat-row *matRowDef="let x; columns: expCols"></tr>
-              </table></div>
+            <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="false" skeleton="table" (retry)="exp.reload()">
+              @if (exp.value()?.coverage; as cov) {
+                <p class="small muted">Based on the data covered{{ cov.dataFrom ? ' from ' + (cov.dataFrom | date: 'medium') : '' }}{{ cov.dataTo ? ' to ' + (cov.dataTo | date: 'medium') : '' }} (coverage {{ cov.state | lowercase }}): earlier activity may be missing.</p>
+              }
+              @if (expRows().length === 0) {
+                <p class="small">No exposure to listed addresses was found in the data covered. This is not proof that none exists.</p>
+              } @else {
+                <p class="small muted">Exposure to addresses that a source lists in a risky category. Amounts are per token and never added across tokens. Indirect exposure (2 hops or more) is an inference: weaker evidence than direct exposure.</p>
+                <div class="table-wrap"><table mat-table [dataSource]="expRows()">
+                  <ng-container matColumnDef="category">
+                    <th mat-header-cell *matHeaderCellDef scope="col">Category</th>
+                    <td mat-cell *matCellDef="let x" class="strong">{{ x.category }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="hops">
+                    <th mat-header-cell *matHeaderCellDef scope="col" class="right">Hops</th>
+                    <td mat-cell *matCellDef="let x" class="right">{{ x.hops }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="amount">
+                    <th mat-header-cell *matHeaderCellDef scope="col">Amounts</th>
+                    <td mat-cell *matCellDef="let x">{{ expAmount(x) }}@if (x.confidence != null && x.hops > 1) { <span class="small muted"> · confidence {{ x.confidence }}</span> }</td>
+                  </ng-container>
+                  <ng-container matColumnDef="via">
+                    <th mat-header-cell *matHeaderCellDef scope="col">Listed address</th>
+                    <td mat-cell *matCellDef="let x"><oci-addr [address]="x.counterparty" [network]="network()" />@if (x.source) { <span class="small muted"> {{ x.source }}</span> }</td>
+                  </ng-container>
+                  <ng-container matColumnDef="evidence">
+                    <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                    <td mat-cell *matCellDef="let x"><oci-evidence [value]="x.evidenceLevel" /></td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="expCols"></tr>
+                  <tr mat-row *matRowDef="let x; columns: expCols"></tr>
+                </table></div>
+              }
+              @if (exp.value()?.ignored?.length) {
+                <h3 class="small strong">Ignored transfers</h3>
+                <p class="small muted">Anyone can send these to any address: they are not counted as exposure.</p>
+                <ul class="small">
+                  @for (i of exp.value()!.ignored!; track i.txHash + i.counterparty) {
+                    <li>{{ i.amount }} {{ i.token }} from <oci-addr [address]="i.counterparty" [network]="network()" /> ({{ i.category }}, {{ i.source }}): {{ ignoredReason(i.reason) }}</li>
+                  }
+                </ul>
+              }
+              @if (exp.value()?.counterparties?.length) {
+                <h3 class="small strong">Other labelled counterparties</h3>
+                <ul class="small">
+                  @for (c of exp.value()!.counterparties!; track c.counterparty + c.category + c.source) {
+                    <li><oci-addr [address]="c.counterparty" [network]="network()" /> {{ c.category }} ({{ c.source }}), {{ c.transfers }} transfer(s)</li>
+                  }
+                </ul>
+              }
             </oci-state>
           </mat-tab>
 
