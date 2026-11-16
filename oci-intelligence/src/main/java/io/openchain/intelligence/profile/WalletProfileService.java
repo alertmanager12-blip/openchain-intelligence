@@ -117,6 +117,35 @@ public final class WalletProfileService {
     public int size() { return accumulators.size(); }
 
     /**
+     * Writes every profile to the working-set snapshot (ADR-0024 step 3d), each under its own lock (consistent per wallet;
+     * the caller stops ingestion first for a snapshot consistent across wallets). Returns how many were written.
+     */
+    public int writeSnapshot(java.io.DataOutput out) throws java.io.IOException {
+        java.util.List<WalletProfileAccumulator> all = new java.util.ArrayList<>(accumulators.values());
+        all.removeIf(a -> a.retired);
+        all.sort(java.util.Comparator.comparing((WalletProfileAccumulator a) -> a.address().network().id())
+                .thenComparing(a -> a.address().value())); // deterministic: equal states give equal snapshots
+        out.writeInt(all.size());
+        for (WalletProfileAccumulator a : all) synchronized (a) { a.writeTo(out); }
+        return all.size();
+    }
+
+    /** Reads profiles written by {@link #writeSnapshot}, without installing them (all or nothing: see {@link #install}). */
+    public static java.util.List<WalletProfileAccumulator> readSnapshot(java.io.DataInput in) throws java.io.IOException {
+        int n = in.readInt();
+        if (n < 0) throw new io.openchain.intelligence.snapshot.SnapshotIO.SnapshotFormatException("invalid profile count " + n);
+        java.util.List<WalletProfileAccumulator> l = new java.util.ArrayList<>(Math.min(n, 1 << 20));
+        for (int i = 0; i < n; i++) l.add(WalletProfileAccumulator.readFrom(in, java.util.function.UnaryOperator.identity()));
+        return l;
+    }
+
+    /** Installs restored profiles into an empty service (start-up, before ingestion). */
+    public void install(java.util.List<WalletProfileAccumulator> restored) {
+        if (!accumulators.isEmpty()) throw new IllegalStateException("profiles must be restored into an empty service (" + accumulators.size() + " present)");
+        for (WalletProfileAccumulator a : restored) accumulators.put(a.address(), a);
+    }
+
+    /**
      * Marks the profile of {@code a} as created after an eviction: its first activity, age and transaction count are
      * lower bounds (see {@link #startUnknown}). No effect when the address has no profile.
      */

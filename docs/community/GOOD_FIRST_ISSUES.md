@@ -5,26 +5,26 @@ Drafts to create on GitHub by the maintainer (none is created yet). First writte
 `good first issue`, the roadmap phase (`docs/strategy/FEATURE_ROADMAP.md`: `phase-1` reliable intelligence core,
 `phase-2` graph intelligence) and an area label.
 
-Status on the working branch (`wip/adr-0024-step-3a`, not merged) on 2026-11-13: issues 1 and 5 are fixed there, and
-part (a) of issue 7 (commit `444e423`); the others are open. Check again before creating them.
+Status on 2026-11-13: issues 1 and 5 were replaced (the lag metric and the watchlist audit were fixed on the working
+branch `wip/adr-0024-step-3a`); part (a) of issue 7 is fixed there too (commit `444e423`), part (b) is open. File:line
+references of issues 1 and 5 are on the working branch. Check again before creating them.
 
 ---
 
-## 1. Indexer lag metric reports 0 when the chain head is unknown
+## 1. Honour a provider's Retry-After beyond 5 seconds
 
-Labels: `good first issue`, `phase-1`, `area:observability`
+Labels: `good first issue`, `phase-1`, `area:providers`
 
-When the provider fails, `TronGridProvider` and `EvmJsonRpcProvider` return a `NetworkStatus` whose head block is `0`
-(`oci-blockchain/.../tron/TronGridProvider.java:663`, `oci-blockchain/.../evm/EvmJsonRpcProvider.java:489`). The gauge
-`oci_indexer_lag_blocks` then computes `max(0, 0 - lastIndexed)` = **0** (`oci-app/.../config/MetricsConfiguration.java:36`),
-and `GET /api/v1/networks` does the same (`oci-app/.../api/InvestigationController.java:159`). An operator sees "no lag"
-exactly when indexing is down (observed on 2026-11-12 during TronGrid HTTP 429 episodes).
+When a provider answers HTTP 429 with `Retry-After`, `RetryPolicy` waits `max(retryAfter, backoff)` but then caps the
+wait at `maxBackoff` (`oci-blockchain/.../transport/RetryPolicy.java:42-45`), which is 5 s by default
+(`ResilienceConfig.java:27`). A provider asking for 30 s is called again after 5 s, which prolongs its rate limiting
+(observed with TronGrid on 2026-11-12).
 
-Files: `MetricsConfiguration.java`, `InvestigationController.java`, tests in `oci-app/src/test`.
+Files: `RetryPolicy.java`, `ResilienceConfig.java`, `oci-blockchain/src/test/.../transport/ResiliencePrimitivesTest.java`.
 
-Acceptance: when the latest status is unhealthy or its head is `0`, the gauge returns `NaN` and the API returns `null`
-for the lag (documented in `docs/api/README.md`); a unit test covers healthy, unhealthy and unknown cases; the frontend
-networks view shows "unknown" instead of `0`.
+Acceptance: a server `Retry-After` is honoured up to a separate, configurable bound (for example 60 s), and a longer one
+fails the attempt as retryable instead of blocking the indexer; the computed backoff keeps its 5 s cap; tests cover a
+`Retry-After` below, equal to and above both bounds with the recording sleeper.
 
 ## 2. Count blocks skipped when the resume gap is exceeded
 
@@ -63,18 +63,18 @@ Files: `JdbcIntelligenceJournal.java`, its persistence test.
 Acceptance: deletion in chunks (for example 10,000 rows per statement, looping until none is left); same total returned;
 the test purges more rows than one chunk and checks the count.
 
-## 5. Audit watchlist changes
+## 5. Fund flow graph: say that dates are UTC
 
-Labels: `good first issue`, `phase-1`, `area:security`
+Labels: `good first issue`, `phase-2`, `area:frontend`
 
-API keys, roles, rules and webhooks are written to the `oci.audit` log (see `ApiKeyService`), but adding or removing a
-watched wallet is not (`oci-app/.../watchlist/WatchlistService.java`), although the watchlist changes the scope of the
-behavioural rules.
+The date filter of the fund flow graph turns the chosen days into `T00:00:00Z` and `T23:59:59Z`
+(`frontend/src/app/features/investigation/investigation.ts:200-202`): the range is a UTC day, while the date picker
+shows local dates without saying so. An analyst east or west of UTC gets a range shifted by their offset.
 
-Files: `WatchlistService.java` (or `oci-app/.../api/WatchlistController.java`), a test.
+Files: `investigation.ts`, its template, a spec.
 
-Acceptance: `watchlist.add` and `watchlist.remove` audit lines with network, address, name and actor, in the same
-`key=value` format as the existing audit lines; a test captures them.
+Acceptance: the filter states "UTC" next to the dates (and in the tooltip of an edge's time), or offers a local/UTC
+choice that is applied consistently; a spec checks the generated `from`/`to` for one choice.
 
 ## 6. Unit tests for OIDC authority mapping
 

@@ -122,6 +122,17 @@ public class PersistenceConfiguration {
         io.openchain.app.journal.JdbcIntelligenceJournal intelligenceJournal(NamedParameterJdbcTemplate jdbc, OciProperties props) {
             return new io.openchain.app.journal.JdbcIntelligenceJournal(jdbc, props.getPersistence().getJournalCapacity());
         }
+        @Bean JdbcWorkingSetSnapshotStore workingSetSnapshotStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx, Clock clock) {
+            return new JdbcWorkingSetSnapshotStore(jdbc, tx, clock);
+        }
+        /** ADR-0024 step 3d, off by default (OCI_PERSISTENCE_WORKING_SET_SNAPSHOT). */
+        @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "oci.persistence.working-set-snapshot", havingValue = "true")
+        WorkingSetSnapshotService workingSetSnapshotService(JdbcWorkingSetSnapshotStore store,
+                                                            io.openchain.intelligence.IntelligencePipeline intelligence,
+                                                            io.openchain.app.chain.ChainIngestionService chains, Environment env, Clock clock) {
+            return new WorkingSetSnapshotService(store, intelligence, chains, env.getProperty("info.app.version", "unknown"), clock);
+        }
         @Bean io.openchain.blockchain.indexer.CheckpointStore checkpointStore(NamedParameterJdbcTemplate jdbc, Clock clock) {
             return new JdbcCheckpointStore(jdbc, clock);
         }

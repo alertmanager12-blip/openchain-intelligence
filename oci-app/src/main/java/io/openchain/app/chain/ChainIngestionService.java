@@ -204,6 +204,12 @@ public class ChainIngestionService {
     /** Re-evaluates the events whose evaluation failed (scheduled). Serialised with ingestion. Code review I5. */
     public synchronized int retryPendingEvaluations() { return evaluations.retryPending(); }
 
+    /**
+     * Runs {@code work} under the ingestion lock: no event is processed meanwhile (the working-set snapshot reads a state
+     * consistent across stores, ADR-0024 step 3d).
+     */
+    public synchronized void exclusive(Runnable work) { work.run(); }
+
     public int pendingEvaluations() { return evaluations.pending(); }
     public long evaluationFailures() { return evaluations.failed(); }
     public long evaluationsRetried() { return evaluations.retried(); }

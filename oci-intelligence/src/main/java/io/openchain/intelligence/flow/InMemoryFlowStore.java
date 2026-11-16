@@ -75,6 +75,7 @@ public final class InMemoryFlowStore implements FlowStore {
     }
 
     @Override public synchronized int size() { return byId.size(); }
+    @Override public synchronized List<ValueFlow> all() { return List.copyOf(byId.values()); }
     @Override public synchronized List<ValueFlow> outgoing(Address a) { return List.copyOf(out.getOrDefault(a, List.of())); }
     @Override public synchronized List<ValueFlow> incoming(Address a) { return List.copyOf(in.getOrDefault(a, List.of())); }
 }

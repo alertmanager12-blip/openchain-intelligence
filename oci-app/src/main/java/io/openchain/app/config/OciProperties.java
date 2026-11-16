@@ -407,6 +407,22 @@ public class OciProperties {
          */
         private boolean intelligenceJournal = false;
 
+        /**
+         * Working-set snapshot (OCI_PERSISTENCE_WORKING_SET_SNAPSHOT, default false; ADR-0024 step 3d): at an orderly
+         * shutdown the bounded working set (flows, wallet profiles, signals, scores, remembered balances) is written to
+         * PostgreSQL, and reloaded at start-up before the indexers if they have not moved since. PostgreSQL mode only,
+         * real chains only; incompatible with the intelligence journal. Needs a container stop grace period longer than
+         * {@link #snapshotShutdownTimeout} plus the write time (Docker's default is 10 s).
+         */
+        private boolean workingSetSnapshot = false;
+        /** How long an orderly shutdown waits for indexer polls in progress before writing the snapshot. */
+        private Duration snapshotShutdownTimeout = Duration.ofSeconds(20);
+
+        public boolean isWorkingSetSnapshot() { return workingSetSnapshot; }
+        public void setWorkingSetSnapshot(boolean v) { this.workingSetSnapshot = v; }
+        public Duration getSnapshotShutdownTimeout() { return snapshotShutdownTimeout; }
+        public void setSnapshotShutdownTimeout(Duration v) { this.snapshotShutdownTimeout = v; }
+
         public boolean isIntelligenceJournal() { return intelligenceJournal; }
         public void setIntelligenceJournal(boolean v) { this.intelligenceJournal = v; }
         /** Records queued for the write-behind journal before new ones are dropped (and counted). */

@@ -1,7 +1,9 @@
 # Phase 1, étape 1 — redémarrage sans perte : instantané du jeu de travail borné
 
-Statut : **conception validée le 2026-11-12, amendement de l'ADR-0024 (étape 3d) validé et reporté dans l'ADR ; aucune
-implémentation** (code de `94ea42c`). L'implémentation commence après la fin et la validation de la mesure mémoire de 12 h. **[F]** fait vérifié (référence) ; **[I]** inférence
+Statut : **conception validée le 2026-11-12, amendement de l'ADR-0024 (étape 3d) validé et reporté dans l'ADR.
+Implémentation partielle le 2026-11-16 (branche `wip/adr-0024-step-3a`, non fusionnée, désactivée par défaut)** : voir
+§ 10. L'implémentation devait commencer après la mesure mémoire de 12 h ; celle-ci reste sans résultat valide faute
+d'hôte fiable, et le travail fait ne touche ni la production ni sa configuration (option désactivée par défaut). **[F]** fait vérifié (référence) ; **[I]** inférence
 à mesurer ; **[P]** proposition.
 
 ## 1. Décisions prises (2026-11-12)
@@ -174,3 +176,34 @@ Rapport séparé, sur le modèle de la mesure de 12 h.
 | 8 | Mesure à volume réel (avec ton accord) | 1 jour + exécution |
 
 Total : environ **2,5 à 3,5 semaines** après la validation.
+
+## 10. État de l'implémentation (2026-11-16) [F]
+
+Fait, testé :
+
+| Élément | Où | Tests |
+|---|---|---|
+| Sérialisation exacte et versionnée : accumulateur de profil (clés récentes dans leur ordre, activité exacte et repliée, contreparties, contrats, marque « début inconnu »), flux, signaux, scores, soldes | `WalletProfileAccumulator.writeTo/readFrom`, `snapshot/RecordCodecs`, `snapshot/WorkingSetSnapshot` | `WalletProfileSnapshotTest` (4), `WorkingSetSnapshotTest` (4) : aller-retour exact et octets identiques, **même comportement après rechargement** pour les mêmes nouveaux événements, instances partagées, refus d'un format inconnu ou de données tronquées |
+| Stockage PostgreSQL par génération, en morceaux de 1 Mo, visible seulement une fois terminé, avec copie des points de reprise | `V11__working_set_snapshot`, `JdbcWorkingSetSnapshotStore` | `WorkingSetSnapshotServiceTest` (5, PostgreSQL 17) |
+| Arrêt ordonné : plus de nouvelle relève, relèves en cours attendues (`OCI_PERSISTENCE_SNAPSHOT_SHUTDOWN_TIMEOUT`), écriture sous le verrou d'ingestion ; rechargement avant les indexeurs | `Bootstrap.destroy/restoreWorkingSet`, `WorkingSetSnapshotService` | idem |
+| Contrôle CI « 0 test sauté » | `.github/workflows/ci.yml`, étape « No skipped test » | vérifié en local |
+
+Écarts assumés par rapport au § 4 :
+
+- **Rechargement seulement si les points de reprise n'ont pas bougé depuis l'instantané** (arrêt ordonné). Après un arrêt
+  brutal, rien n'est rechargé et l'état se reconstruit comme avant, au lieu de revenir au filigrane et de réindexer : sans
+  instantané périodique, le seul instantané disponible pourrait avoir des jours, et le retour en arrière réindexerait des
+  milliers de blocs. Le retour au filigrane viendra avec les instantanés périodiques.
+- **Morceaux binaires (`bytea`) plutôt que des tables par type remplies par `COPY`** : un seul format, versionné, déjà
+  testé en aller-retour exact ; une génération se remplace en une transaction.
+- **Désactivé par défaut** : l'écriture à l'arrêt demande un délai d'arrêt du conteneur supérieur aux 10 s par défaut de
+  Docker, donc une modification de `docker-compose.yml` (configuration de production, à ton accord).
+
+Reste à faire :
+
+1. Test de redémarrage de bout en bout (deux contextes d'application, chaîne scénarisée) : reprise au bloc suivant **sans
+   ré-indexation** et mêmes résultats qu'une exécution sans redémarrage (§ 5, points 1 à 5).
+2. Instantanés périodiques avec copie cohérente et retour au filigrane après un crash (§ 4.3 et 4.4, variante crash du § 5).
+3. Métriques `oci_snapshot_*` (§ 4.6) ; aujourd'hui : journaux et compteurs internes du service.
+4. Mesure à volume réel (§ 6), avec ton accord : durée d'écriture et de rechargement, taille, mémoire.
+5. `stop_grace_period` dans `docker-compose.yml` et activation par défaut : décisions à prendre.

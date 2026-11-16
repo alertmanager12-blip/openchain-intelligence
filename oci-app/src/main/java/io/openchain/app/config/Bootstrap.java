@@ -83,6 +83,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
     private final DemoScenarios demoScenarios;
     private final FreezeBackfillService backfills;
     private final io.openchain.app.history.AddressHistoryService history;
+    /** Working-set snapshot (ADR-0024 step 3d); null when disabled. Used only when {@link #snapshotsActive}. */
+    private final io.openchain.app.persistence.WorkingSetSnapshotService snapshots;
+    private volatile boolean snapshotsActive;
     /** Delay before retrying a real chain whose provider was unreachable at start-up. */
     private static final Duration START_RETRY = Duration.ofSeconds(30);
     // virtual threads: polls and lookups mostly wait on providers; one task per network runs in parallel
@@ -93,7 +96,9 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
                      AlertingPipeline alerting, AlertService alertService, ConnectorRegistry connectors, ApiKeyService keys,
                      UserDirectory users, TokenRegistry tokens, Clock clock, ObjectProvider<DemoNotificationSink> demoSink,
                      ObjectProvider<DemoScenarios> demoScenarios, FreezeBackfillService backfills,
-                     io.openchain.app.history.AddressHistoryService history) {
+                     io.openchain.app.history.AddressHistoryService history,
+                     ObjectProvider<io.openchain.app.persistence.WorkingSetSnapshotService> snapshots) {
+        this.snapshots = snapshots.getIfAvailable();
         this.backfills = backfills;
         this.history = history;
         this.demoSink = demoSink.getIfAvailable();
@@ -134,6 +139,7 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         rules.disableUnreachable();
         warnAboutNotificationRouting(demo);
         if (demo) for (String id : props.getDemo().getNetworks()) startSimulated(Network.fromId(id));
+        restoreWorkingSet(demo); // before any real indexer starts: they resume where the snapshot was taken
         props.getChains().forEach(this::startRealChain);
         // stored address histories are re-applied in the background: with a few dozen of them this takes minutes
         // (each event goes through the intelligence pipeline, serialised with live ingestion) and must not hold readiness
@@ -525,5 +531,37 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         };
     }
 
-    @Override public void destroy() { scheduler.shutdownNow(); }
+    /** ADR-0024 step 3d: reloads the working-set snapshot, if enabled and usable, before the real indexers start. */
+    private void restoreWorkingSet(boolean demo) {
+        if (snapshots == null) return;
+        if (demo) { log.warn("working-set snapshot ignored in demo mode (simulated chains are not persisted)"); return; }
+        if (props.getPersistence().isIntelligenceJournal()) {
+            log.warn("working-set snapshot disabled: the intelligence journal is on (the two would restore the same state twice)");
+            return;
+        }
+        snapshotsActive = true;
+        snapshots.restoreAtStartup();
+    }
+
+    /**
+     * Orderly shutdown. With the working-set snapshot active: no new poll is scheduled, polls in progress get
+     * {@code snapshot-shutdown-timeout} to finish (then they are interrupted), and the snapshot is written while nothing
+     * is indexed. Without it: everything stops at once, as before.
+     */
+    @Override public void destroy() {
+        if (!snapshotsActive) { scheduler.shutdownNow(); return; }
+        scheduler.shutdown(); // periodic tasks are cancelled, running ones finish
+        try {
+            Duration wait = props.getPersistence().getSnapshotShutdownTimeout();
+            if (!scheduler.awaitTermination(wait.toMillis(), TimeUnit.MILLISECONDS)) {
+                log.warn("shutdown: background tasks still running after {}; interrupting them before the snapshot", wait);
+                scheduler.shutdownNow();
+                scheduler.awaitTermination(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        snapshots.writeAtShutdown(); // under the ingestion lock: an interrupted poll cannot be half-way through an event
+        scheduler.shutdownNow();
+    }
 }

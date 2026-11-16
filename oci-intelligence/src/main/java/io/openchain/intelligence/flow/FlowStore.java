@@ -6,6 +6,9 @@ import java.util.List;
 /** Storage of value flows indexed by address. Implementations must be idempotent on {@link ValueFlow#eventId()}. */
 public interface FlowStore {
 
+    /** Every stored flow, for the working-set snapshot (ADR-0024 step 3d); any order. Unsupported by default. */
+    default java.util.List<ValueFlow> all() { throw new UnsupportedOperationException("snapshot of " + getClass().getSimpleName()); }
+
     /** @return true if stored, false if a flow with the same eventId already exists (duplicate ignored). */
     boolean add(ValueFlow flow);
 

@@ -36,6 +36,14 @@ public final class BalanceBook {
 
     public Optional<BigDecimal> senderBalanceBefore(String eventId) { return Optional.ofNullable(before.get(eventId)); }
 
+    /** Networks marked authoritative (working-set snapshot, ADR-0024 step 3d). */
+    public Set<Network> authoritativeNetworks() { return Set.copyOf(authoritative); }
+
+    /** Recorded balances, oldest first (the order decides which are forgotten next). */
+    public java.util.List<Map.Entry<String, BigDecimal>> entries() {
+        synchronized (before) { return before.entrySet().stream().map(e -> Map.entry(e.getKey(), e.getValue())).toList(); }
+    }
+
     /** Forgets the balance recorded for an event whose block left the canonical chain. */
     public void forget(String eventId) { before.remove(eventId); }
 }

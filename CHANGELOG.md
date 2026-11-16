@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 1 — restart without loss, ADR-0024 step 3d, first part)
+
+- **Working-set snapshot** (off by default, `OCI_PERSISTENCE_WORKING_SET_SNAPSHOT=true`, PostgreSQL mode): at an orderly shutdown, once the polls in progress are done, the bounded working set (flows, wallet profiles with their exact bounded state, signals, score histories, remembered balances) is written to PostgreSQL (`V11__working_set_snapshot`, versioned binary format, chunks of 1 MB) with a copy of the indexer checkpoints; at the next start it is reloaded before the indexers, which resume at the next block, only if the checkpoints did not move since. Any other case (crash after an earlier restore, newer format, corrupted data) restores nothing and says why: never a partial state. Needs a container stop grace period above the default 10 s. Not yet: periodic snapshots (recovery after a crash), `oci_snapshot_*` metrics, end-to-end restart test. See `docs/PERSISTENCE_SNAPSHOT_DESIGN.md` § 10.
+- **CI fails when a test is skipped** (the PostgreSQL integration tests skip themselves without Docker; in CI that would hide a persistence test that did not run).
+
 ### Fixed (code review of 2026-11-13, I8)
 
 - **An event processed again could be counted twice by an aggregation rule** (I8, verified by a test before the fix): once the engine's dedup cache (200,000 ids, about 50 minutes at chain-wide volume) has forgotten an event id, the same event (a signal evicted from memory and detected again, a block re-indexed after a failure) was added a second time to the window, and could fake a threshold. A window now counts each event id once (`window.duplicates` counter). Verified as not affected: stateless rules such as the shipped `sanctioned-exposure-signal` (the alert service recognises a trigger already used). Not fixed: a signal re-emitted after its first occurrence left the window counts in a later window, and the "signals in 24 h" figure counts it as new.

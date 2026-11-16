@@ -23,6 +23,12 @@ public final class InMemoryRiskScoreRepository implements RiskScoreRepository {
     }
     @Override public synchronized int addresses() { return data.size(); }
 
+    @Override public synchronized Map<Address, List<RiskScore>> all() {
+        Map<Address, List<RiskScore>> m = new java.util.LinkedHashMap<>();
+        data.forEach((a, l) -> m.put(a, List.copyOf(l)));
+        return m;
+    }
+
     @Override public synchronized int forget(java.util.Collection<Address> addresses) {
         int n = 0;
         for (Address a : addresses) if (data.remove(a) != null) n++;

@@ -16,6 +16,9 @@ public final class RiskScoringService {
     private final LabelRepository labels;
     private final SignalRepository signals;
     private final Function<Address, WalletProfile> profiles;
+    /** The score history store (working-set snapshot, ADR-0024 step 3d). */
+    public RiskScoreRepository repository() { return history; }
+
     private final RiskScoreRepository history;
     private final Clock clock;
 

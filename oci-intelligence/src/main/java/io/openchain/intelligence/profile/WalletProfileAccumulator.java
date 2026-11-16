@@ -201,6 +201,111 @@ public final class WalletProfileAccumulator {
     /** Entries held in the bounded collections (tests: the footprint does not grow with the number of transfers). */
     int retainedEntries() { return seenEvents.size() + txHashes.size() + activity.size() + counterparties.size() + contracts.size(); }
 
+    // ------------------------------------------------------------ snapshot (ADR-0024 step 3d)
+
+    /** Version of the binary format written by {@link #writeTo}. Change it with any change of the layout below. */
+    public static final int SNAPSHOT_FORMAT = 1;
+
+    /**
+     * Writes the complete state, exactly: remembered keys in their insertion order (it decides which are forgotten next),
+     * counts, totals, exact and folded activity, counterparties and contracts (sorted by address, so equal states give
+     * equal bytes), and the "start unknown" mark. Not written: {@code retired} (a retired accumulator is never in a
+     * snapshot). Callers synchronise on the accumulator.
+     */
+    public void writeTo(java.io.DataOutput out) throws java.io.IOException {
+        out.writeByte(SNAPSHOT_FORMAT);
+        io.openchain.intelligence.snapshot.SnapshotIO.writeAddress(out, address);
+        out.writeInt(seenEvents.size());
+        for (String k : seenEvents.keySet()) io.openchain.intelligence.snapshot.SnapshotIO.writeString(out, k);
+        out.writeInt(txHashes.size());
+        for (Map.Entry<String, Integer> e : txHashes.entrySet()) {
+            io.openchain.intelligence.snapshot.SnapshotIO.writeString(out, e.getKey());
+            out.writeInt(e.getValue());
+        }
+        out.writeLong(transactionCount);
+        out.writeInt(tokens.size());
+        for (Map.Entry<String, Tok> e : tokens.entrySet()) {
+            Tok k = e.getValue();
+            io.openchain.intelligence.snapshot.SnapshotIO.writeString(out, e.getKey());
+            io.openchain.intelligence.snapshot.SnapshotIO.writeString(out, k.symbol);
+            out.writeInt(k.decimals);
+            io.openchain.intelligence.snapshot.SnapshotIO.writeBigInteger(out, k.in);
+            io.openchain.intelligence.snapshot.SnapshotIO.writeBigInteger(out, k.out);
+            out.writeLong(k.inCount);
+            out.writeLong(k.outCount);
+        }
+        List<Map.Entry<Address, long[]>> cps = new ArrayList<>(counterparties.entrySet());
+        cps.sort(Comparator.comparing((Map.Entry<Address, long[]> e) -> e.getKey().network().id()).thenComparing(e -> e.getKey().value()));
+        out.writeInt(cps.size());
+        for (Map.Entry<Address, long[]> e : cps) {
+            io.openchain.intelligence.snapshot.SnapshotIO.writeAddress(out, e.getKey());
+            out.writeLong(e.getValue()[0]);
+            out.writeLong(e.getValue()[1]);
+        }
+        out.writeInt(activity.size());
+        for (Map.Entry<Instant, Integer> e : activity.entrySet()) {
+            io.openchain.intelligence.snapshot.SnapshotIO.writeInstant(out, e.getKey());
+            out.writeInt(e.getValue());
+        }
+        io.openchain.intelligence.snapshot.SnapshotIO.writeInstant(out, foldedFirst);
+        io.openchain.intelligence.snapshot.SnapshotIO.writeInstant(out, foldedLast);
+        io.openchain.intelligence.snapshot.SnapshotIO.writeDuration(out, foldedMaxGap);
+        List<Address> cs = new ArrayList<>(contracts);
+        cs.sort(Comparator.comparing((Address a) -> a.network().id()).thenComparing(Address::value));
+        out.writeInt(cs.size());
+        for (Address a : cs) io.openchain.intelligence.snapshot.SnapshotIO.writeAddress(out, a);
+        out.writeLong(inbound);
+        out.writeLong(outbound);
+        out.writeLong(contractCalls);
+        out.writeBoolean(startUnknown);
+    }
+
+    /**
+     * Reads an accumulator written by {@link #writeTo}.
+     *
+     * @param canonical shares equal addresses with the stored flows (CanonicalInstances); identity for none
+     * @throws io.openchain.intelligence.snapshot.SnapshotIO.SnapshotFormatException on an unknown version or bad data
+     */
+    public static WalletProfileAccumulator readFrom(java.io.DataInput in, java.util.function.UnaryOperator<Address> canonical)
+            throws java.io.IOException {
+        io.openchain.intelligence.snapshot.SnapshotIO.expectVersion(in, SNAPSHOT_FORMAT, "wallet profile");
+        Address address = io.openchain.intelligence.snapshot.SnapshotIO.readAddress(in, canonical);
+        if (address == null) throw new io.openchain.intelligence.snapshot.SnapshotIO.SnapshotFormatException("wallet profile without address");
+        WalletProfileAccumulator a = new WalletProfileAccumulator(address);
+        for (int i = 0, n = count(in, RECENT_KEYS); i < n; i++) a.seenEvents.add(io.openchain.intelligence.snapshot.SnapshotIO.readString(in));
+        for (int i = 0, n = count(in, RECENT_KEYS); i < n; i++) a.txHashes.put(io.openchain.intelligence.snapshot.SnapshotIO.readString(in), in.readInt());
+        a.transactionCount = in.readLong();
+        for (int i = 0, n = count(in, Integer.MAX_VALUE); i < n; i++) {
+            String key = io.openchain.intelligence.snapshot.SnapshotIO.readString(in);
+            Tok k = new Tok(io.openchain.intelligence.snapshot.SnapshotIO.readString(in), in.readInt());
+            k.in = io.openchain.intelligence.snapshot.SnapshotIO.readBigInteger(in);
+            k.out = io.openchain.intelligence.snapshot.SnapshotIO.readBigInteger(in);
+            k.inCount = in.readLong();
+            k.outCount = in.readLong();
+            a.tokens.put(key, k);
+        }
+        for (int i = 0, n = count(in, 2 * COUNTERPARTY_CAP); i < n; i++) {
+            Address c = io.openchain.intelligence.snapshot.SnapshotIO.readAddress(in, canonical);
+            a.counterparties.put(c, new long[]{in.readLong(), in.readLong()});
+        }
+        for (int i = 0, n = count(in, ACTIVITY_CAP); i < n; i++) a.activity.put(io.openchain.intelligence.snapshot.SnapshotIO.readInstant(in), in.readInt());
+        a.foldedFirst = io.openchain.intelligence.snapshot.SnapshotIO.readInstant(in);
+        a.foldedLast = io.openchain.intelligence.snapshot.SnapshotIO.readInstant(in);
+        a.foldedMaxGap = io.openchain.intelligence.snapshot.SnapshotIO.readDuration(in);
+        for (int i = 0, n = count(in, CONTRACT_CAP); i < n; i++) a.contracts.add(io.openchain.intelligence.snapshot.SnapshotIO.readAddress(in, canonical));
+        a.inbound = in.readLong();
+        a.outbound = in.readLong();
+        a.contractCalls = in.readLong();
+        a.startUnknown = in.readBoolean();
+        return a;
+    }
+
+    private static int count(java.io.DataInput in, int max) throws java.io.IOException {
+        int n = in.readInt();
+        if (n < 0 || n > max) throw new io.openchain.intelligence.snapshot.SnapshotIO.SnapshotFormatException("invalid count " + n + " (max " + max + ")");
+        return n;
+    }
+
     public WalletProfile build(int topN, List<RiskScore> riskHistory, Instant now) {
         Map<String, TokenFlowStats> tk = new LinkedHashMap<>();
         tokens.forEach((k, t) -> tk.put(k, new TokenFlowStats(k, t.symbol, t.decimals, t.in, t.out, t.inCount, t.outCount)));

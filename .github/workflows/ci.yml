@@ -28,6 +28,16 @@ jobs:
           cache: maven
       - name: Build and test
         run: mvn -B -ntp verify
+      - name: No skipped test
+        # the PostgreSQL integration tests skip themselves without Docker; in CI Docker is there, so a skipped test means
+        # that a restart or persistence test silently did not run (phase 1 exit criterion: "Skipped: 0")
+        run: |
+          skipped=$(grep -ho 'skipped="[0-9]*"' $(find . -path '*/target/surefire-reports/TEST-*.xml') | grep -o '[0-9]*' | paste -sd+ - | bc)
+          echo "skipped tests: ${skipped:-0}"
+          if [ "${skipped:-0}" -ne 0 ]; then
+            grep -l 'skipped="[1-9]' $(find . -path '*/target/surefire-reports/TEST-*.xml')
+            echo "::error::${skipped} test(s) skipped"; exit 1
+          fi
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v7
