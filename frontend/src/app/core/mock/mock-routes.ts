@@ -72,6 +72,7 @@ on('GET', '/signals', (req) => page(mockDb().signals, req, 20));
 on('GET', '/wallets/([^/]+)/analysis', (req, m) => mockDb().wallet(decodeURIComponent(m[1]), net(req)));
 on('GET', '/wallets/([^/]+)/transactions', (req, m) => mockDb().transactions(decodeURIComponent(m[1]), net(req), req.params.get('cursor'), Number(req.params.get('limit') ?? 25)));
 on('GET', '/wallets/([^/]+)/risk', (req, m) => mockDb().risk(decodeURIComponent(m[1]), net(req)));
+on('GET', '/wallets/([^/]+)/relations', (req, m) => ({ address: decodeURIComponent(m[1]), network: net(req), relations: [], limits: ['Demo data: no relation computed.'] }));
 on('GET', '/wallets/([^/]+)/exposure', (req, m) => mockDb().exposure(decodeURIComponent(m[1]), net(req)));
 on('GET', '/transactions/([^/]+)/analysis', (req, m) => mockDb().transaction(decodeURIComponent(m[1]), net(req)));
 on('GET', '/graph/([^/]+)/path', (req, m) => ({ source: decodeURIComponent(m[1]), target: req.params.get('target') ?? '', network: net(req), outcome: 'NO_PATH', hops: [], stops: [], note: 'Demo data: no path computed.', asOfBlock: null }));

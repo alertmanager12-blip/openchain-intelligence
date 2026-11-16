@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -59,6 +59,9 @@ export class ApiService {
   }
   walletRisk(address: string, network: NetworkId): Observable<RiskScore> {
     return this.http.get<RiskScore>(`${this.base}/wallets/${this.enc(address)}/risk`, { params: params({ network }) });
+  }
+  walletRelations(address: string, network: NetworkId): Observable<WalletRelations> {
+    return this.http.get<WalletRelations>(`${this.base}/wallets/${this.enc(address)}/relations`, { params: params({ network }) });
   }
   walletExposure(address: string, network: NetworkId): Observable<Exposure> {
     return this.http.get<Exposure>(`${this.base}/wallets/${this.enc(address)}/exposure`, { params: params({ network }) });

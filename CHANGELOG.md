@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 2 — relations between wallets)
+
+- **`GET /wallets/{a}/relations`** and "Possibly related wallets" in the wallet page's Exposure tab: wallets that share a funder within 24 h, send most of a token's outflow to the same address, or share at least 3 recipients. Every relation is an inference (`INFERRED`) with a confidence, the transfers it rests on and the wording "may be related; not proof of common ownership or control". False links are the main risk, so a service (labelled exchange, bridge, protocol or other, or more than 5,000 flows), a funder of more than 20 wallets in the window (payroll, airdrop), dust and unverified tokens never link wallets. This completes the phase 2 acceptance criterion "100 % of wallet relations marked INFERRED with confidence and evidence".
+
 ### Fixed (address histories could stop live indexing)
 
 - **Address histories and the freeze backfill no longer share live indexing's provider client.** On 2026-11-16 several TRON address histories made TronGrid refuse requests and opened the circuit breaker that live indexing also used: TRON stopped for about 80 minutes. Each real network now has two clients on the same endpoints, each with its own circuit breaker and rate limiter: live indexing (8 requests/s, burst 16) and background work (2 requests/s, burst 4). Together they send no more requests than the previous single client (10/s). A background breaker is named `<network>-background-primary` in the logs.

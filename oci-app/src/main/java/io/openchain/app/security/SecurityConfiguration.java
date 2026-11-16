@@ -82,6 +82,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/transactions").hasAuthority(authority(Scopes.TRANSACTION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/risk").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/exposure").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        .requestMatchers(HttpMethod.GET, API + "/wallets/*/relations").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/transactions/**").hasAuthority(authority(Scopes.TRANSACTION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/graph/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         // a read: checks which displayed transfers are still held (Fund Flow Trace P0-C)

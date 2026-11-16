@@ -236,6 +236,24 @@ export interface ExposureEntry {
   confidence?: number | null;
 }
 
+/** A relation between wallets: an inference, never identity (phase 2). */
+export interface WalletRelation {
+  other: string;
+  type: 'COMMON_FUNDER' | 'COMMON_SINK' | 'SHARED_COUNTERPARTIES';
+  level: 'INFERRED';
+  confidence: number;
+  via: string | null;
+  eventIds: string[];
+  explanation: string;
+}
+
+export interface WalletRelations {
+  address: string;
+  network: NetworkId;
+  relations: WalletRelation[];
+  limits: string[];
+}
+
 export interface IgnoredTransfer {
   counterparty: string;
   category: string;

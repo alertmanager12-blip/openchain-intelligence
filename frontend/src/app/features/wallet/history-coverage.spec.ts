@@ -85,6 +85,7 @@ describe('WalletPage history polling', () => {
         return of(analysis(cov(sequence[Math.min(calls.length - 1, sequence.length - 1)])));
       },
       walletExposure: () => of({ address: ADDR, network: 'ethereum', direct: [], indirect: [] }),
+      walletRelations: () => of({ address: ADDR, network: 'ethereum', relations: [], limits: [] }),
       walletTransactions: () => of({ items: [], nextCursor: null }),
       watchlist: () => of([]),
     };

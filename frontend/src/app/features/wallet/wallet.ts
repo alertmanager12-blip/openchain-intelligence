@@ -68,6 +68,8 @@ export class WalletPage {
   readonly notEnabled = computed(() => isNetworkNotEnabled(this.w.error()));
   private readonly pollMs = inject(HISTORY_POLL_MS);
   readonly exp = apiResource({ params: this.key, stream: (k) => this.api.walletExposure(k.address, k.network) });
+  readonly rel = apiResource({ params: this.key, stream: (k) => this.api.walletRelations(k.address, k.network) });
+  readonly relLabel = (t: string) => (t === 'COMMON_FUNDER' ? 'common funder' : t === 'COMMON_SINK' ? 'common destination' : 'shared counterparties');
 
   /** Transaction pages: the cursor resets when the wallet changes; pages accumulate for "Load more". */
   private readonly cursor = linkedSignal<string, string | null>({ source: () => this.address() + this.network(), computation: () => null });

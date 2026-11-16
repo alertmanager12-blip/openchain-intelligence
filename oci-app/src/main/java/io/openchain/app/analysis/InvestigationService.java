@@ -590,6 +590,15 @@ public class InvestigationService {
                 List.copyOf(stops.values()), asOf);
     }
 
+    /** Relations between this wallet and others (phase 2): inferences with confidence and evidence, never identity. */
+    public Dto.WalletRelationsDto relations(Address a) {
+        var r = io.openchain.intelligence.relations.WalletRelations.find(a, traceSource(),
+                io.openchain.intelligence.relations.WalletRelations.Config.defaults(intelligence.detectionConfig().exposure().dustThresholds()));
+        List<Dto.WalletRelationDto> rel = r.relations().stream().map(x -> new Dto.WalletRelationDto(x.other().value(), x.type().name(),
+                x.level(), x.confidence(), x.via() == null ? null : x.via().value(), x.eventIds(), x.explanation())).toList();
+        return new Dto.WalletRelationsDto(a.value(), a.network().id(), rel, r.limits(), coverage(a, intelligence.flows().involving(a)));
+    }
+
     /** A path value could have taken from {@code source} to {@code target} (Fund Flow Trace P0-C, T9). */
     public Dto.GraphPathDto graphPath(Address source, Address target, String tokenFilter, Instant from, Instant to, int maxHops) {
         String tokenKey = null;
