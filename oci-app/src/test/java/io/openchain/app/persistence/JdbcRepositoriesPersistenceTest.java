@@ -78,13 +78,13 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(12); // V1..V12 (V12: client scopes)
-        assertThat(first.targetSchemaVersion).isEqualTo("12");
+        assertThat(first.migrationsExecuted).isEqualTo(13); // V1..V13 (V13: indexing coverage)
+        assertThat(first.targetSchemaVersion).isEqualTo("13");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
                 "alert_comments", "deliveries", "label_reports", "backfill_progress", "backfill_freeze_events", "address_history_progress",
-                "address_history_events", "working_set_snapshots", "working_set_snapshot_chunks", "client_scopes", "flyway_schema_history");
+                "address_history_events", "working_set_snapshots", "working_set_snapshot_chunks", "client_scopes", "indexer_gaps", "indexer_live_coverage", "flyway_schema_history");
         assertThat(PostgresSupport.migrate(fresh).migrationsExecuted).isZero();
     }
 
@@ -121,6 +121,21 @@ class JdbcRepositoriesPersistenceTest {
         restarted.revoke(c.key().id(), "admin");
         assertThat(first.verify(c.plaintext())).isEmpty();
         assertThat(first.find(c.key().id()).orElseThrow().revoked()).isTrue();
+    }
+
+    /** Fund Flow Trace P0-B (V13): gaps and the start of continuous live indexing survive a restart. */
+    @Test
+    void indexingCoverageIsPersisted() {
+        var store = new JdbcIndexingCoverageStore(jdbc);
+        java.time.Instant t = java.time.Instant.parse("2026-11-16T12:00:00Z");
+        io.openchain.app.chain.IndexingCoverage.onStart(store, io.openchain.core.model.Network.TRON, null, 1_000, 7_200, t);
+        io.openchain.app.chain.IndexingCoverage.onStart(store, io.openchain.core.model.Network.TRON, 5_000L, 20_000, 7_200, t.plusSeconds(60));
+        io.openchain.app.chain.IndexingCoverage.onStart(store, io.openchain.core.model.Network.TRON, 5_000L, 20_000, 7_200, t.plusSeconds(90)); // same gap again
+        var again = new JdbcIndexingCoverageStore(jdbc);
+        assertThat(again.gaps(io.openchain.core.model.Network.TRON)).containsExactly(new io.openchain.app.chain.IndexingCoverage.Gap(
+                io.openchain.core.model.Network.TRON, 5_001, 19_999, io.openchain.app.chain.IndexingCoverage.Cause.RESUME_GAP, t.plusSeconds(60)));
+        assertThat(again.liveStart(io.openchain.core.model.Network.TRON).orElseThrow().fromBlock()).isEqualTo(20_000);
+        assertThat(again.liveStart(io.openchain.core.model.Network.ETHEREUM)).isEmpty();
     }
 
     /** Decision D1 (V12): a key keeps its client scope across restarts and stops authenticating when the scope is disabled. */

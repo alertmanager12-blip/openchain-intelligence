@@ -267,6 +267,14 @@ public class ChainIngestionService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setCheckpointStore(io.openchain.blockchain.indexer.CheckpointStore store) { if (store != null) this.realCheckpoints = store; }
 
+    /** Indexing gaps and start of continuous live indexing (Fund Flow Trace P0-B): memory by default, PostgreSQL (V13). */
+    private volatile IndexingCoverage.Store indexingCoverage = new IndexingCoverage.MemoryStore();
+
+    public IndexingCoverage.Store indexingCoverage() { return indexingCoverage; }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setIndexingCoverage(IndexingCoverage.Store store) { if (store != null) this.indexingCoverage = store; }
+
     public synchronized NetworkRuntime register(BlockchainProvider provider, SimulatedChainProvider simulator,
                                                 DemoLedgerProvider ledger, IndexerConfig config, Duration blockTime) {
         Network n = provider.network();

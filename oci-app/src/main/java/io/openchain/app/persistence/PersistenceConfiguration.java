@@ -140,6 +140,9 @@ public class PersistenceConfiguration {
         @Bean io.openchain.blockchain.indexer.CheckpointStore checkpointStore(NamedParameterJdbcTemplate jdbc, Clock clock) {
             return new JdbcCheckpointStore(jdbc, clock);
         }
+        @Bean io.openchain.app.chain.IndexingCoverage.Store indexingCoverageStore(NamedParameterJdbcTemplate jdbc) {
+            return new JdbcIndexingCoverageStore(jdbc);
+        }
         @Bean io.openchain.app.history.AddressHistoryStore addressHistoryStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
             return new io.openchain.app.history.JdbcAddressHistoryStore(jdbc, tx);
         }

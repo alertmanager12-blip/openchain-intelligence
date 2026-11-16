@@ -429,11 +429,14 @@ public class Bootstrap implements ApplicationRunner, DisposableBean {
         String indexerId = n.id() + "-indexer";
         var store = chains.realCheckpoints();
         var saved = store.load(indexerId);
+        // coverage metadata (Fund Flow Trace P0-B): the skipped range is recorded, not only logged
+        io.openchain.app.chain.IndexingCoverage.onStart(chains.indexingCoverage(), n, saved.map(x -> x.lastBlock()).orElse(null),
+                start, c.getMaxResumeGap(), clock.instant());
         if (saved.isEmpty()) return;
         long last = saved.get().lastBlock();
         if (c.getMaxResumeGap() > 0 && start - last > c.getMaxResumeGap()) {
             log.warn("chain {}: checkpoint at block {} is {} blocks behind; resuming at block {} (blocks {}..{} are NOT indexed, "
-                    + "max-resume-gap {})", n.id(), last, start - last, start, last + 1, start - 1, c.getMaxResumeGap());
+                    + "max-resume-gap {}; recorded in indexer_gaps)", n.id(), last, start - last, start, last + 1, start - 1, c.getMaxResumeGap());
             store.save(indexerId, new io.openchain.blockchain.indexer.Checkpoint(n, start - 1, List.of()));
         } else {
             log.info("chain {}: resuming after block {} (checkpoint; the start position computed from the head is {})", n.id(), last, start);

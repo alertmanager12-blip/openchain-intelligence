@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 2 — indexing coverage recorded, Fund Flow Trace P0-B, first part)
+
+- **Blocks that were not indexed are now recorded, not only logged** (`V13__indexing_coverage`): a range skipped at a resume (`max-resume-gap`) goes to `indexer_gaps`, and the first block of the current run of continuous live indexing to `indexer_live_coverage`. On a network already indexed before this version, the first start sets that block with `exact = false`: continuity before it is unknown (earlier gaps were only in the logs). Metadata only; indexing itself is unchanged. These records feed the per-address coverage (next part), so that an answer can say which blocks it saw.
+
 ### Fixed (phase 2 — `/exposure` qualified like the detector, Fund Flow Trace P0-A, decision D6)
 
 - **`GET /wallets/{a}/exposure` and the Exposure tab no longer show exposure that is not one.** The endpoint now uses the exposure detector's own rules (one shared function, `ExposurePaths`): a fake-token transfer or a dust transfer from a listed address is no longer exposure (listed under `ignored` with its reason); funds received *after* an outflow are no longer presented as its origin; an exchange or another non-risky label is no longer direct exposure (listed under `counterparties`); tracing stops at the first listed address met upstream. Amounts are exact and per token, never added across tokens: `amounts` (direct), `traced` with the full `path` and a `confidence` (indirect, always a risk signal). `coverage` (`PARTIAL`) says which data the answer rests on, and the tab says "none found in the data covered", not "none". Expect fewer entries than before: the removed ones were artefacts. `share` stays for v1 compatibility, unchanged in meaning (sum over all tokens, no unit) and deprecated; the tab no longer shows it.
