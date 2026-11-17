@@ -4,6 +4,7 @@
       [matTooltip]="watched() ? 'One of your wallets: behavioural rules focus on it' : 'Add to your own wallets: behavioural rules will focus on it'">
       {{ watched() ? 'Unwatch' : 'Watch' }}</button>
     <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">Risk breakdown</a>
+    <button matButton="outlined" class="hide-sm" type="button" [disabled]="investigating()" (click)="investigate()" title="Run the investigation plan on this wallet and keep its report">Investigate</button>
     <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
   </oci-page-header>
 

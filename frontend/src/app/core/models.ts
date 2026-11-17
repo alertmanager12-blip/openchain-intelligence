@@ -367,6 +367,23 @@ export interface TraceDetail extends Omit<TraceSummary, never> {
     attributions: { address: { value: string }; tokenKey: string }[] } | null;
 }
 
+export interface InvestigationAssertion {
+  id: string; type: string; step: string; level: 'OBSERVED' | 'INFERRED' | 'CONFIRMED'; subject: string;
+  params: Record<string, string>; evidence: string[];
+}
+
+export interface InvestigationReport {
+  plan: string; templates: string; subject: string; assertions: number;
+  sections: { title: string; sentences: { text: string; assertionId: string; level: string }[] }[];
+}
+
+export interface InvestigationDetail {
+  id: string; lineageId: string; version: number; previousId: string | null; network: NetworkId; subject: string; plan: string;
+  status: TraceStatus; resultStatus: 'COMPLETE' | 'PARTIAL' | null; stale: boolean; staleEventIds: string[] | null; error: string | null;
+  createdBy: string | null; createdAt: string; completedAt: string | null; frozenFlows: number;
+  assertions: InvestigationAssertion[] | null; diff: { added: string[]; removed: string[] } | null; report: InvestigationReport | null;
+}
+
 /** A path value could have taken (directed, chronological, one token), computed by the server. */
 export interface GraphPath {
   source: string;

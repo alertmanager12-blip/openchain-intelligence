@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -72,6 +72,16 @@ export class ApiService {
   graph(address: string, q: GraphQuery): Observable<Graph> {
     return this.http.get<Graph>(`${this.base}/graph/${this.enc(address)}`, { params: params({ ...q }) });
   }
+  // --- investigations (ADR-0022 amendment 2)
+  investigations(): Observable<TraceSummary[]> { return this.http.get<TraceSummary[]>(`${this.base}/investigations`); }
+  investigation(id: string): Observable<InvestigationDetail> { return this.http.get<InvestigationDetail>(`${this.base}/investigations/${this.enc(id)}`); }
+  createInvestigation(network: NetworkId, address: string): Observable<InvestigationDetail> {
+    return this.http.post<InvestigationDetail>(`${this.base}/investigations`, { network, address });
+  }
+  rerunInvestigation(id: string): Observable<InvestigationDetail> {
+    return this.http.post<InvestigationDetail>(`${this.base}/investigations/${this.enc(id)}/rerun`, {});
+  }
+
   // --- stored traces (ADR-0022)
   traces(): Observable<TraceSummary[]> { return this.http.get<TraceSummary[]>(`${this.base}/traces`); }
   trace(id: string): Observable<TraceDetail> { return this.http.get<TraceDetail>(`${this.base}/traces/${this.enc(id)}`); }

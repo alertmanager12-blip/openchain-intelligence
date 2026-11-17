@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — investigations in the console, ADR-0022 amendment 2, fourth step)
+
+- **"Investigations" page** (menu Investigate, shortcut `v`) and **"Investigate"** on the wallet page: run the plan on a wallet and read its report section by section, every sentence with its level (observed, inferred, confirmed) and the id of the assertion it comes from; clicking the id shows the assertion with its exact parameters and evidence. Versions, the changes since the previous one and the STALE mark are shown; "Run again" makes a new version.
+
 ### Added (phase 3 — investigations and their report, ADR-0022 amendment 2, second and third steps)
 
 - **Investigation report** built only from the stored assertions (`report@1`): every sentence is a fixed template filled with one assertion and cites its id; coverage and limits come first; "no direct exposure in blocks X to Y" only with complete coverage, otherwise "none found in the data covered, not proof that none exists"; relations worded "may be related, not proof of common ownership or control"; amounts exact and shown in token units.
