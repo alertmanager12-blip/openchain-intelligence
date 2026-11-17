@@ -486,7 +486,7 @@ public class InvestigationService {
     // ---- directed graph (Fund Flow Trace P0-C) ------------------------------------------------------------------
 
     /** Flows held in memory, labels, and the P0-B coverage of each address; opening balances unknown. */
-    private Trace.Source traceSource() {
+    public Trace.Source traceSource() {
         return new Trace.Source() {
             @Override public List<ValueFlow> outgoing(Address a) { return intelligence.flows().outgoing(a); }
             @Override public List<ValueFlow> incoming(Address a) { return intelligence.flows().incoming(a); }

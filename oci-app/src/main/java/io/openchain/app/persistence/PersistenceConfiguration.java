@@ -63,6 +63,7 @@ public class PersistenceConfiguration {
         @Bean AlertRepository alertRepository() { return new InMemoryAlertRepository(); }
         @Bean DeliveryStore deliveryStore() { return new InMemoryDeliveryStore(); }
         @Bean ApiKeyRepository apiKeyRepository() { return new InMemoryApiKeyRepository(); }
+        @Bean io.openchain.app.trace.TraceArtifactStore traceArtifactStore() { return new io.openchain.app.trace.InMemoryTraceArtifactStore(); }
         @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory() { return io.openchain.app.security.ClientScopeDirectory.inMemory(); }
         @Bean UserRepository userRepository() { return new InMemoryUserRepository(); }
         @Bean ConnectorRepository connectorRepository() { return new InMemoryConnectorRepository(); }
@@ -108,6 +109,9 @@ public class PersistenceConfiguration {
         }
 
         @Bean ApiKeyRepository apiKeyRepository(NamedParameterJdbcTemplate jdbc) { return new JdbcApiKeyRepository(jdbc); }
+        @Bean io.openchain.app.trace.TraceArtifactStore traceArtifactStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
+            return new io.openchain.app.trace.JdbcTraceArtifactStore(jdbc, tx);
+        }
         @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory(NamedParameterJdbcTemplate jdbc) {
             return io.openchain.app.security.ClientScopeDirectory.jdbc(jdbc);
         }

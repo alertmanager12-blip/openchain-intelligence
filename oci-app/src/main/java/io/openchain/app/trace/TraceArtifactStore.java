@@ -21,6 +21,15 @@ public interface TraceArtifactStore {
 
     int latestVersion(String clientScope, String lineageId);
 
+    /** Runs left PENDING or RUNNING (by a restart), oldest first, across scopes (system work). */
+    List<TraceArtifact> unfinished();
+
+    /** Runs of {@code clientScope} PENDING or RUNNING. */
+    int countActive(String clientScope);
+
+    /** Runs of {@code clientScope} created at or after {@code since}. */
+    int countSince(String clientScope, java.time.Instant since);
+
     /** Marks STALE every artifact holding one of these event ids; returns their ids. */
     List<String> markStale(Set<String> eventIds);
 }

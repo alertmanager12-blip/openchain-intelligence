@@ -37,6 +37,19 @@ public final class InMemoryTraceArtifactStore implements TraceArtifactStore {
                 .mapToInt(TraceArtifact::version).max().orElse(0);
     }
 
+    @Override public synchronized List<TraceArtifact> unfinished() {
+        return byId.values().stream().filter(a -> a.status() == TraceArtifact.Status.PENDING || a.status() == TraceArtifact.Status.RUNNING)
+                .sorted(Comparator.comparing(TraceArtifact::createdAt).thenComparing(TraceArtifact::id)).toList();
+    }
+
+    @Override public synchronized int countActive(String scope) {
+        return (int) unfinished().stream().filter(a -> a.clientScope().equals(scope)).count();
+    }
+
+    @Override public synchronized int countSince(String scope, java.time.Instant since) {
+        return (int) byId.values().stream().filter(a -> a.clientScope().equals(scope) && !a.createdAt().isBefore(since)).count();
+    }
+
     @Override public synchronized List<String> markStale(Set<String> eventIds) {
         List<String> hit = new ArrayList<>();
         for (TraceArtifact a : List.copyOf(byId.values())) {

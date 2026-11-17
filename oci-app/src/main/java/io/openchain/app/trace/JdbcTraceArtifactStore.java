@@ -100,6 +100,32 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
         });
     }
 
+    @Override public List<TraceArtifact> unfinished() {
+        return tx.inTransaction(() -> {
+            scope("*");
+            return jdbc.query("select " + COLUMNS + " from trace_artifacts where status in ('PENDING', 'RUNNING') order by created_at, id",
+                    Map.of(), MAPPER);
+        });
+    }
+
+    @Override public int countActive(String s) {
+        return tx.inTransaction(() -> {
+            scope(s);
+            Integer n = jdbc.queryForObject("select count(*) from trace_artifacts where client_scope_id = :s and status in ('PENDING', 'RUNNING')",
+                    Map.of("s", s), Integer.class);
+            return n == null ? 0 : n;
+        });
+    }
+
+    @Override public int countSince(String s, java.time.Instant since) {
+        return tx.inTransaction(() -> {
+            scope(s);
+            Integer n = jdbc.queryForObject("select count(*) from trace_artifacts where client_scope_id = :s and created_at >= :t",
+                    Map.of("s", s, "t", Sql.ts(since)), Integer.class);
+            return n == null ? 0 : n;
+        });
+    }
+
     @Override public List<String> markStale(Set<String> eventIds) {
         if (eventIds.isEmpty()) return List.of();
         return tx.inTransaction(() -> {

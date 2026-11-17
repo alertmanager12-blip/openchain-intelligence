@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — trace API, ADR-0022 amendment 1, second step)
+
+- **`/traces`**: run the trace engine as a stored, queued job (`POST /traces`, 202), poll it (`GET /traces/{id}`), list the client's traces, read the frozen evidence, export (audited), re-run as a new version with its diff, cancel a pending run. One worker and a bounded queue of 50, off the ingestion path; runs left unfinished by a restart resume at start. Budgets per client: 3 traces pending or running, 100 per day (429 beyond). New permission **`investigation:write`** (role ANALYST and above); existing API keys keep their permissions: an administrator adds it to a key that should run traces. Every route is limited to the caller's client scope: another client's trace answers 404 exactly like an unknown id (negative tests N1-N12).
+
 ### Added (phase 3 — trace artifacts, ADR-0022 amendment 1, first step)
 
 - **Stored trace runs with their frozen evidence** (`V14__trace_artifacts`; not exposed by the API yet). A run of the trace engine is stored with its request, engine version, result, and every flow, label, coverage flag and opening balance it read; running the engine again on that evidence gives the same result. A run on newer data is a new version of the same lineage, with the `TraceDiff` against the previous one; a stored version is never recomputed. An artifact holding a flow later retracted by a reorganisation is marked `STALE` with the event ids concerned. Every row carries its client scope; reads always filter by it, and row-level security policies (forced) hide other scopes' rows from any role that is not superuser or `BYPASSRLS`. The production database user is the owner superuser today, so there the repository filter is the guarantee; a dedicated non-superuser role is needed for the policies to apply.

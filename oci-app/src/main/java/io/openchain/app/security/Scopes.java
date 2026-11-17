@@ -16,6 +16,8 @@ public final class Scopes {
     public static final String TRANSACTION_READ = "transaction:read";
     public static final String RISK_READ = "risk:read";
     public static final String INVESTIGATION_READ = "investigation:read";
+    /** Run, re-run and cancel stored traces (ADR-0022): they use provider quota and storage, so they are not a read. */
+    public static final String INVESTIGATION_WRITE = "investigation:write";
     public static final String ALERTS_READ = "alerts:read";
     public static final String ALERTS_WRITE = "alerts:write";
     public static final String RULES_READ = "rules:read";
@@ -28,7 +30,7 @@ public final class Scopes {
     /** API keys, users, operational endpoints. */
     public static final String KEYS_ADMIN = "keys:admin";
 
-    public static final List<String> ALL = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, ALERTS_READ,
+    public static final List<String> ALL = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, INVESTIGATION_WRITE, ALERTS_READ,
             ALERTS_WRITE, RULES_READ, RULES_WRITE, WEBHOOKS_READ, WEBHOOKS_WRITE, LABELS_REPORT, WATCHLIST_WRITE, KEYS_ADMIN);
 
     public static final List<String> READ = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, ALERTS_READ,
@@ -56,7 +58,7 @@ public final class Scopes {
         switch (role.trim().toUpperCase(Locale.ROOT)) {
             case "ADMIN" -> s.addAll(ALL);
             case "RULE_AUTHOR" -> { s.addAll(forRole("ANALYST")); s.add(RULES_WRITE); }
-            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); s.add(WATCHLIST_WRITE); }
+            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); s.add(WATCHLIST_WRITE); s.add(INVESTIGATION_WRITE); }
             case "VIEWER" -> s.addAll(READ);
             default -> { }
         }
