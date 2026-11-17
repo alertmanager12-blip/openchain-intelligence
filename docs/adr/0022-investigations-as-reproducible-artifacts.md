@@ -143,3 +143,42 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
   updated or deleted (application and database); isolation between client scopes (as N1 to N12); a decision on version N
   is shown on version N+1 for the same assertion id and not for a changed one; an unknown assertion answers 404; the
   four-eyes rule when enabled; comments with control characters are escaped in the audit log.
+
+## Amendment 4 (2026-11-17): rule proposals from an investigation
+
+- Status: proposed (phase 3 of `docs/strategy/FEATURE_ROADMAP.md`: "rules proposed from an investigation (YAML draft, never
+  enabled automatically)", acceptance "valid draft, tested by dry-run"; this text awaits review). Builds on amendments 2
+  (assertions) and 3 (reviews).
+
+### Decision
+
+1. **Deterministic drafts, no AI.** A fixed template per assertion type, versioned `proposal@1`, turns stored assertions
+   into rule drafts in the existing format `openchain.io/rule/v1`. The same assertions and reviews give the same YAML,
+   byte for byte. Templates use existing fields only.
+2. **Templates of `proposal@1`**:
+   - `TRACE_ATTRIBUTION` (an address value reached): alert when that address sends funds on (the next hop of the path).
+   - `RELATION` with `COMMON_FUNDER`: alert when that funder sends to other addresses.
+   - `PATTERN` dispersion or peel chain: the dispersion rule (model of `fund-splitting`) limited to the subject as sender.
+   - `DIRECT_EXPOSURE`: alert on a new transfer between the subject and that listed counterparty.
+3. **What never becomes a proposal**: an assertion whose current review (amendment 3) is `REJECTED`; coverage and limit
+   assertions. Any other assertion can; its current review (accepted, needs evidence, none) is shown with the proposal.
+4. **Every draft is checked before it is shown**: valid for the rule loader; embedded examples generated from its
+   evidence pass (the evidence event `MATCH`, a counter-example `NO_MATCH`); a dry run on the in-memory event history
+   (`RuleTester`, no notification possible) gives events in scope and triggers, with the time window actually covered,
+   which may be short and is said so. A draft that fails any check is not proposed and the reason is listed.
+5. **Provenance and limits in the YAML**: `enabled: false`; `author: investigation:<id>@v<version>`; tags `proposed`,
+   `investigation`; a documentation block citing the assertion ids and stating that addresses are inferred and that an
+   alert is not a finding. Ids are deterministic (`inv-<hash>-<template>`).
+6. **Nothing is stored.** Proposals are computed on request from the stored assertions:
+   `GET /api/v1/investigations/{id}/rule-proposals` (`investigation:read`). Adopting one is the existing
+   `POST /api/v1/rules` (`rules:write`): the rule is created **disabled**; enabling it is the separate, audited
+   `POST /rules/{id}/enable`. Nothing in this amendment can enable a rule.
+7. **Console**: "Propose rules" on an investigation lists each draft with its YAML, the assertion and its review, the dry
+   run result, and "Create as disabled rule".
+
+### Consequences
+
+- No table, no permission; one read endpoint and templates in the intelligence module.
+- Tests required: same assertions give the same YAML; every template gives a draft valid for the loader whose examples
+  pass; a rejected assertion gives no proposal; a proposal adopted through `POST /rules` is disabled; the dry run never
+  notifies; another client's investigation answers 404.
