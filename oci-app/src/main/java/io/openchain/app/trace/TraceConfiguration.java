@@ -44,6 +44,12 @@ public class TraceConfiguration {
         return s;
     }
 
+    @Bean
+    AssertionReviewService assertionReviewService(TraceArtifactStore store, AssertionReviewStore reviews, Clock clock,
+                                                  io.openchain.app.config.OciProperties props) {
+        return new AssertionReviewService(store, reviews, clock, () -> props.getInvestigation().isFourEyes());
+    }
+
     /** A transfer retracted by a reorganisation makes STALE every stored trace that froze it (all client scopes). */
     @Bean
     ApplicationRunner staleOnReorg(io.openchain.app.chain.ChainIngestionService chains, TraceArtifactStore store) {

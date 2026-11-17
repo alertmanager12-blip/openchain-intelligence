@@ -18,6 +18,8 @@ public final class Scopes {
     public static final String INVESTIGATION_READ = "investigation:read";
     /** Run, re-run and cancel stored traces (ADR-0022): they use provider quota and storage, so they are not a read. */
     public static final String INVESTIGATION_WRITE = "investigation:write";
+    /** Accept, reject or ask evidence for an investigation's assertions (ADR-0022 amendment 3); reading reviews needs investigation:read. */
+    public static final String INVESTIGATION_REVIEW = "investigation:review";
     public static final String ALERTS_READ = "alerts:read";
     public static final String ALERTS_WRITE = "alerts:write";
     public static final String RULES_READ = "rules:read";
@@ -30,8 +32,8 @@ public final class Scopes {
     /** API keys, users, operational endpoints. */
     public static final String KEYS_ADMIN = "keys:admin";
 
-    public static final List<String> ALL = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, INVESTIGATION_WRITE, ALERTS_READ,
-            ALERTS_WRITE, RULES_READ, RULES_WRITE, WEBHOOKS_READ, WEBHOOKS_WRITE, LABELS_REPORT, WATCHLIST_WRITE, KEYS_ADMIN);
+    public static final List<String> ALL = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, INVESTIGATION_WRITE, INVESTIGATION_REVIEW,
+            ALERTS_READ, ALERTS_WRITE, RULES_READ, RULES_WRITE, WEBHOOKS_READ, WEBHOOKS_WRITE, LABELS_REPORT, WATCHLIST_WRITE, KEYS_ADMIN);
 
     public static final List<String> READ = List.of(WALLET_READ, TRANSACTION_READ, RISK_READ, INVESTIGATION_READ, ALERTS_READ,
             RULES_READ, WEBHOOKS_READ);
@@ -52,13 +54,13 @@ public final class Scopes {
         return out;
     }
 
-    /** VIEWER (read), ANALYST (+ alerts:write, labels:report), RULE_AUTHOR (+ rules:write), ADMIN (everything). */
+    /** VIEWER (read), ANALYST (+ alerts:write, labels:report, watchlist:write, investigation:write and :review), RULE_AUTHOR (+ rules:write), ADMIN (everything). */
     public static Set<String> forRole(String role) {
         Set<String> s = new LinkedHashSet<>();
         switch (role.trim().toUpperCase(Locale.ROOT)) {
             case "ADMIN" -> s.addAll(ALL);
             case "RULE_AUTHOR" -> { s.addAll(forRole("ANALYST")); s.add(RULES_WRITE); }
-            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); s.add(WATCHLIST_WRITE); s.add(INVESTIGATION_WRITE); }
+            case "ANALYST" -> { s.addAll(forRole("VIEWER")); s.add(ALERTS_WRITE); s.add(LABELS_REPORT); s.add(WATCHLIST_WRITE); s.add(INVESTIGATION_WRITE); s.add(INVESTIGATION_REVIEW); }
             case "VIEWER" -> s.addAll(READ);
             default -> { }
         }

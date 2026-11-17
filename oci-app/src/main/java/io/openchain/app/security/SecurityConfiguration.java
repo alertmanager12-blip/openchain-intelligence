@@ -91,6 +91,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        // reviews of assertions (ADR-0022 amendment 3): a separate permission from running investigations
+                        .requestMatchers(HttpMethod.POST, API + "/investigations/*/assertions/*/reviews").hasAuthority(authority(Scopes.INVESTIGATION_REVIEW))
                         .requestMatchers(API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))
