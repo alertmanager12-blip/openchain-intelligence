@@ -18,6 +18,7 @@ public class OciProperties {
     private final Ingestion ingestion = new Ingestion();
     private final Notifications notifications = new Notifications();
     private final Persistence persistence = new Persistence();
+    private final Investigation investigation = new Investigation();
     /** Real chain providers, keyed by network id (tron, ethereum, bsc, polygon). Off unless enabled. */
     private Map<String, Chain> chains = new LinkedHashMap<>();
 
@@ -28,8 +29,21 @@ public class OciProperties {
     public Ingestion getIngestion() { return ingestion; }
     public Notifications getNotifications() { return notifications; }
     public Persistence getPersistence() { return persistence; }
+    public Investigation getInvestigation() { return investigation; }
     public Map<String, Chain> getChains() { return chains; }
     public void setChains(Map<String, Chain> chains) { this.chains = chains; }
+
+    /** Investigations (ADR-0022). */
+    public static class Investigation {
+        /**
+         * OCI_INVESTIGATION_FOUR_EYES: the actor who created an investigation may not review its assertions (403), ADR-0022
+         * amendment 3. Off by default: useful with several analysts, blocking for one.
+         */
+        private boolean fourEyes = false;
+
+        public boolean isFourEyes() { return fourEyes; }
+        public void setFourEyes(boolean fourEyes) { this.fourEyes = fourEyes; }
+    }
 
     public static class Demo {
         /** OCI_DEMO_MODE: simulated chains, demo labels and a generated admin API key. */

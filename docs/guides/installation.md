@@ -66,6 +66,7 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_SECURITY_OIDC_ISSUER_URI` / `OCI_SECURITY_OIDC_AUDIENCE` | — | OIDC issuer (enables JWT bearer authentication) and optional audience |
 | `OCI_SECURITY_MULTI_CLIENT` | `false` | Several client scopes on one instance. Off (one instance per client): every key and token is in the `default` scope. On: an OIDC token must carry exactly one known, active client scope in `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` (else 401) |
 | `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` | `oci_client_scope` | Token claim naming the caller's client scope (multi-client mode) |
+| `OCI_INVESTIGATION_FOUR_EYES` | `false` | Four-eyes rule on investigation reviews (ADR-0022 amendment 3): the actor who created an investigation may not review its assertions (403). Useful with several analysts |
 | `OCI_CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Allowed browser origins |
 | `OCI_RULES_DIRS` | `rules,../rules` | Rule pack directories (first existing wins); the image ships `/app/rules` |
 | `OCI_TELEGRAM_BOT_TOKEN` | — | Enables TELEGRAM connectors (the chat id is given per connector; a group id is negative, e.g. `-100…`) |

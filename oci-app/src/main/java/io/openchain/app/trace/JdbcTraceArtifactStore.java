@@ -76,7 +76,7 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
     }
 
     @Override public Optional<TraceArtifact> find(String s, String id) {
-        return readInScope(s, con -> {
+        return ScopedRead.inScope(jdbc, s, con -> {
             TraceArtifact a = null;
             try (var ps = con.prepareStatement("select " + COLUMNS + " from trace_artifacts where id = ? and client_scope_id = ?")) {
                 ps.setString(1, id);
@@ -96,7 +96,7 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
     }
 
     @Override public List<TraceArtifact> list(String s, int limit, TraceArtifact.Kind kind) {
-        return readInScope(s, con -> {
+        return ScopedRead.inScope(jdbc, s, con -> {
             List<TraceArtifact> out = new ArrayList<>();
             try (var ps = con.prepareStatement("select " + COLUMNS + " from trace_artifacts where client_scope_id = ? and kind = ? "
                     + "order by created_at desc, id limit ?")) {
@@ -106,34 +106,6 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
                 try (var rs = ps.executeQuery()) { int i = 0; while (rs.next()) out.add(MAPPER.mapRow(rs, i++)); }
             }
             return out;
-        });
-    }
-
-    /**
-     * Read-only work in one transaction with {@code oci.scope} set for row-level security. Plain JDBC on purpose: reads
-     * share no code path with the writes (static analysis of GET endpoints, CodeQL "unprotected from CSRF", 2026-11-17).
-     */
-    private <T> T readInScope(String scope, org.springframework.jdbc.core.ConnectionCallback<T> work) {
-        return jdbc.getJdbcTemplate().execute((org.springframework.jdbc.core.ConnectionCallback<T>) con -> {
-            boolean auto = con.getAutoCommit();
-            boolean ro = con.isReadOnly();
-            con.setAutoCommit(false);
-            con.setReadOnly(true);
-            try {
-                try (var ps = con.prepareStatement("select set_config('oci.scope', ?, true)")) {
-                    ps.setString(1, scope);
-                    ps.execute();
-                }
-                T r = work.doInConnection(con);
-                con.commit();
-                return r;
-            } catch (java.sql.SQLException | RuntimeException e) {
-                con.rollback();
-                throw e;
-            } finally {
-                con.setReadOnly(ro);
-                con.setAutoCommit(auto);
-            }
         });
     }
 

@@ -104,3 +104,42 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
   working set.
 - Tests required: replay gives identical assertions and report; each assertion type has a template and a level rule
   test (an inference is never CONFIRMED); "no exposure" without COMPLETE coverage never appears; a STALE trace propagates.
+
+## Amendment 3 (2026-11-17): human review of assertions
+
+- Status: proposed (phase 3 of `docs/strategy/FEATURE_ROADMAP.md`: "human validation of assertions (accept/reject,
+  comment), logged"; this text awaits review). Builds on amendment 2 (assertions and report).
+
+### Decision
+
+1. **A review is a decision next to an assertion, never a change to it.** An analyst records, on one assertion of one
+   investigation, a decision `ACCEPTED`, `REJECTED` or `NEEDS_EVIDENCE`, with an optional comment (at most 2,000
+   characters). The assertion, its level, its evidence and the report text are unchanged: the report stays deterministic
+   and replayable, and what the data show stays distinct from what a person concluded.
+2. **The level never changes.** Accepting an `INFERRED` assertion does not make it `CONFIRMED`: under ADR-0023
+   amendment 1 `CONFIRMED` depends on the source only. Review is a third axis, beside level and coverage.
+3. **An append-only journal.** Reviews are rows of `assertion_reviews` (investigation, assertion id, decision, comment,
+   actor, time, client scope), with forced row-level security and 404 for another scope, as amendment 1. A review is never
+   updated or deleted (database grants and a trigger refuse it); a new decision is a new row, the latest one is the
+   current decision, and the history stays visible. Reviews are deleted only with their investigation (retention of
+   amendment 1). Every review is also written to the audit log.
+4. **The report is annotated, not rewritten.** Each sentence shows its current decision, its author and date beside it;
+   a rejected assertion stays in the report, marked rejected (removing it would hide what was claimed). Comments are shown
+   as human comments and never enter the generated text.
+5. **Versions.** Assertion ids are a hash of type, subject, parameters and evidence. A decision taken on version N is
+   shown on a later version where the same assertion id appears, marked "decided on version N"; it is not copied. An
+   assertion that changed has a new id and no decision.
+6. **A STALE investigation keeps its reviews**, with a warning that evidence a decision relied on left the canonical chain.
+7. **Permission and separation of duties.** A new permission `investigation:review` (ANALYST and above) is required to
+   review; reading reviews needs `investigation:read`. An optional rule per instance, `OCI_INVESTIGATION_FOUR_EYES`
+   (off by default), refuses a review by the actor who created the investigation (403).
+8. **API**: `POST /api/v1/investigations/{id}/assertions/{assertionId}/reviews` and
+   `GET /api/v1/investigations/{id}/reviews`; an assertion that is not in that investigation answers 404.
+
+### Consequences
+
+- One more table (V16) and one permission; nothing changes in the plan, the assertions or the report text.
+- Tests required: the report text is identical before and after reviews; the level never changes; a review cannot be
+  updated or deleted (application and database); isolation between client scopes (as N1 to N12); a decision on version N
+  is shown on version N+1 for the same assertion id and not for a changed one; an unknown assertion answers 404; the
+  four-eyes rule when enabled; comments with control characters are escaped in the audit log.

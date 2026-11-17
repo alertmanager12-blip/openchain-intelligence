@@ -31,9 +31,10 @@ Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served 
 | `labels:report` | submit and list label reports |
 | `watchlist:write` | add and remove the organisation's own wallets (reading the watchlist needs `wallet:read`) |
 | `investigation:write` | run, re-run and cancel stored traces (they use provider quota and storage) |
+| `investigation:review` | accept, reject or ask evidence for the assertions of an investigation (ADR-0022 amendment 3) |
 | `keys:admin` | API keys, users, operational (actuator) endpoints |
 
-Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `watchlist:write`, `investigation:write`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
+Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `watchlist:write`, `investigation:write`, `investigation:review`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
 
 ## Errors — RFC 9457 `application/problem+json`
 
@@ -107,6 +108,8 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 | POST | `/investigations` | investigation:write | `{ network, address }` → 202: runs the deterministic plan `plan@1` (coverage, labels, exposure, traces out and in, patterns, relations, signals) on frozen evidence; same budgets as traces |
 | GET | `/investigations`, `/investigations/{id}`, `/investigations/{id}/report` | investigation:read | The client's investigations: typed `assertions` (level, exact parameters, evidence, deterministic id) and a `report` built only from them, every sentence citing its assertion; coverage and limits first. Another client's investigation answers 404 |
 | POST | `/investigations/{id}/rerun` | investigation:write | A new version on the current data, with the assertions added and removed |
+| POST | `/investigations/{id}/assertions/{assertionId}/reviews` | investigation:review | `{ decision: ACCEPTED\|REJECTED\|NEEDS_EVIDENCE, comment? }` (comment at most 2,000 characters) → 201: a human decision next to the assertion. It never changes the assertion, its level or the report text; append-only (a new decision is a new review). 404 for an assertion that is not in this investigation, 409 while it has not finished, 403 under the four-eyes rule (`OCI_INVESTIGATION_FOUR_EYES`) for its creator |
+| GET | `/investigations/{id}/reviews` | investigation:read | `history`: every review of the investigation's versions up to this one, oldest first, each with the version it was taken on; `current`: per assertion of this version, its latest decision, `inherited` when taken on an earlier version (shown, never copied); `decided` / `total` |
 | GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
 
 Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:

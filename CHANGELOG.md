@@ -8,6 +8,12 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — human review of assertions, ADR-0022 amendment 3, steps 1 to 3)
+
+- **Reviews in the console** (Investigations page): Accept, Reject and Needs evidence on every sentence of the report, with an optional comment; the current decision, its author, date and version (marked when decided on an earlier version) and the human comment are shown beside the sentence, which is never changed; a counter of reviewed assertions, an "Undecided only" filter, the review history of an assertion next to its evidence, and a warning when a STALE investigation has reviews. `investigation:review` in Settings → API keys.
+- **Reviews of investigation assertions**: `POST /investigations/{id}/assertions/{assertionId}/reviews` records `ACCEPTED`, `REJECTED` or `NEEDS_EVIDENCE` with an optional comment; `GET /investigations/{id}/reviews` returns the history and the current decision per assertion. A review sits next to the assertion and never changes it, its level or the report text. Append-only, enforced by the database (`V16__assertion_reviews`: updates and direct deletes refused by a trigger, also for superusers; reviews are deleted only with their investigation), client scope with forced row-level security, audit log entry per review. A decision taken on one version is shown on later versions for the same assertion id, marked inherited, never copied.
+- **Permission `investigation:review`** (ANALYST and above), separate from running investigations; optional four-eyes rule `OCI_INVESTIGATION_FOUR_EYES` (off by default).
+
 ### Fixed (operations)
 
 - **Ethereum stopped indexing after a restart with lag (prod 2026-11-17).** publicnode answers state at an older block (`eth_getCode`, `eth_getBalance` at a block number) with HTTP 403 and the JSON-RPC error "Archive requests require a personal token". Every 403 was treated as a temporary block (the TronGrid rule), so these refusals were retried, opened the circuit and blocked indexing, and the existing fallback to `latest` never ran. A 403 carrying a JSON-RPC error is now a refusal of that request, classified by the JSON-RPC client (non-retryable): the fallback runs and the circuit stays closed. A 403 without a JSON-RPC error (TronGrid) is still a temporary block.

@@ -384,6 +384,24 @@ export interface InvestigationDetail {
   assertions: InvestigationAssertion[] | null; diff: { added: string[]; removed: string[] } | null; report: InvestigationReport | null;
 }
 
+/** A human decision on one assertion (ADR-0022 amendment 3): it never changes the assertion, its level or the report. */
+export type ReviewDecision = 'ACCEPTED' | 'REJECTED' | 'NEEDS_EVIDENCE';
+
+export interface AssertionReview {
+  id: string; investigationId: string; version: number; assertionId: string; decision: ReviewDecision; comment: string | null;
+  actor: string; createdAt: string;
+}
+
+/** The latest decision on one assertion; inherited when taken on an earlier version (shown, never copied). */
+export interface CurrentReview {
+  decision: ReviewDecision; comment: string | null; actor: string; createdAt: string; version: number; inherited: boolean;
+}
+
+export interface InvestigationReviews {
+  investigationId: string; version: number; stale: boolean; history: AssertionReview[]; current: Record<string, CurrentReview>;
+  decided: number; total: number;
+}
+
 /** A path value could have taken (directed, chronological, one token), computed by the server. */
 export interface GraphPath {
   source: string;
