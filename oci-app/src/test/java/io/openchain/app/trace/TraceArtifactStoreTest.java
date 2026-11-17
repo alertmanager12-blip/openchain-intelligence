@@ -114,6 +114,29 @@ class TraceArtifactStoreTest {
         });
     }
 
+    /** ADR-0022 amendment 2: an investigation stored in PostgreSQL replays to the same assertions from its stored inputs. */
+    @Test void anInvestigationReplaysToTheSameAssertions() {
+        flow(a("a"), a("b"), 100, 1); flow(a("b"), a("c"), 60, 2); flow(a("c"), a("a"), 10, 3);
+        var signal = new io.openchain.core.detection.Signal("sig_test", io.openchain.core.detection.SignalType.FAST_FORWARDING, a("a"), "0xt",
+                io.openchain.core.detection.Severity.MEDIUM, 0.7, io.openchain.core.detection.Signal.EvidenceLevel.ANOMALY,
+                List.of(new io.openchain.core.detection.Signal.Evidence("flow", "received then sent", "0xt", "oci", T0)), "fast-forwarding@1", T0,
+                "Fast forwarding", "Received then forwarded");
+        TraceArtifactService svc = service();
+        var exposure = io.openchain.intelligence.detection.DetectionConfig.defaults().exposure();
+        svc.setInvestigationInputs(x -> new io.openchain.intelligence.investigation.InvestigationPlan.Inputs(x,
+                new io.openchain.intelligence.investigation.InvestigationPlan.Coverage("PARTIAL", 1L, 9L, List.of("test")), List.of(signal), exposure,
+                io.openchain.intelligence.relations.WalletRelations.Config.defaults(exposure.dustThresholds()), new Trace.Limits(3, 500, 20_000)));
+        TraceArtifact inv = svc.submitInvestigation("default", a("a"), "analyst");
+        TraceArtifact stored = store.find("default", inv.id()).orElseThrow();
+        assertThat(stored.kind()).isEqualTo(TraceArtifact.Kind.INVESTIGATION);
+        assertThat(stored.status()).isEqualTo(TraceArtifact.Status.DONE);
+        var assertions = TraceJson.assertions(stored.resultJson());
+        assertThat(assertions).anyMatch(x -> x.type() == io.openchain.intelligence.investigation.InvestigationPlan.Type.SIGNAL);
+        assertThat(svc.replayInvestigation("default", inv.id())).hasValue(assertions);
+        assertThat(store.list("default", 10)).as("traces only").isEmpty();
+        assertThat(store.list("default", 10, TraceArtifact.Kind.INVESTIGATION)).extracting(TraceArtifact::id).containsExactly(inv.id());
+    }
+
     /** N1, N4, N7: another scope's artifact is invisible, by id or in a list. */
     @Test void anArtifactOfAnotherScopeIsInvisible() {
         flow(a("a"), a("b"), 100, 1);

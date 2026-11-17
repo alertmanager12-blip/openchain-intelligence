@@ -19,7 +19,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
  */
 public final class JdbcTraceArtifactStore implements TraceArtifactStore {
     private static final String COLUMNS = "id, client_scope_id, lineage_id, version, previous_id, network, seed, direction, engine_version, "
-            + "status, result_status, stale, stale_event_ids, request, result, evidence, diff, error, created_by, created_at, completed_at";
+            + "status, result_status, stale, stale_event_ids, request, result, evidence, diff, error, created_by, created_at, completed_at, kind";
 
     private final NamedParameterJdbcTemplate jdbc;
     private final TransactionRunner tx;
@@ -39,7 +39,7 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
                 .addValue("staleIds", a.staleEventIds() == null ? null : TypedJson.write(a.staleEventIds()))
                 .addValue("request", a.requestJson()).addValue("result", a.resultJson()).addValue("evidence", a.evidenceJson())
                 .addValue("diff", a.diffJson()).addValue("error", a.error()).addValue("createdBy", a.createdBy())
-                .addValue("createdAt", Sql.ts(a.createdAt())).addValue("completedAt", Sql.ts(a.completedAt()));
+                .addValue("createdAt", Sql.ts(a.createdAt())).addValue("completedAt", Sql.ts(a.completedAt())).addValue("kind", a.kind().name());
     }
 
     @Override public void insert(TraceArtifact a) {
@@ -47,7 +47,7 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
             scope(a.clientScope());
             jdbc.update("insert into trace_artifacts (" + COLUMNS + ") values (:id, :scope, :lineage, :version, :previous, :network, :seed, "
                     + ":direction, :engine, :status, :resultStatus, :stale, cast(:staleIds as jsonb), cast(:request as jsonb), cast(:result as jsonb), "
-                    + "cast(:evidence as jsonb), cast(:diff as jsonb), :error, :createdBy, :createdAt, :completedAt)", params(a));
+                    + "cast(:evidence as jsonb), cast(:diff as jsonb), :error, :createdBy, :createdAt, :completedAt, :kind)", params(a));
             flows(a);
             return null;
         });
@@ -83,11 +83,11 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
         });
     }
 
-    @Override public List<TraceArtifact> list(String s, int limit) {
+    @Override public List<TraceArtifact> list(String s, int limit, TraceArtifact.Kind kind) {
         return tx.inTransaction(() -> {
             scope(s);
-            return jdbc.query("select " + COLUMNS + " from trace_artifacts where client_scope_id = :s order by created_at desc, id limit :l",
-                    Map.of("s", s, "l", limit), MAPPER);
+            return jdbc.query("select " + COLUMNS + " from trace_artifacts where client_scope_id = :s and kind = :k order by created_at desc, id limit :l",
+                    Map.of("s", s, "l", limit, "k", kind.name()), MAPPER);
         });
     }
 
@@ -151,7 +151,7 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
                 Map.of("id", a.id()), String.class);
         return new TraceArtifact(a.id(), a.clientScope(), a.lineageId(), a.version(), a.previousId(), a.network(), a.seed(), a.direction(),
                 a.engineVersion(), a.status(), a.resultStatus(), a.stale(), a.staleEventIds(), a.requestJson(), a.resultJson(), a.evidenceJson(),
-                a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), ids);
+                a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), ids, a.kind());
     }
 
     private static final RowMapper<TraceArtifact> MAPPER = (rs, n) -> new TraceArtifact(rs.getString("id"), rs.getString("client_scope_id"),
@@ -160,5 +160,6 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
             rs.getString("result_status"), rs.getBoolean("stale"),
             rs.getString("stale_event_ids") == null ? null : TypedJson.readStrings(rs.getString("stale_event_ids")),
             rs.getString("request"), rs.getString("result"), rs.getString("evidence"), rs.getString("diff"), rs.getString("error"),
-            rs.getString("created_by"), Sql.instant(rs, "created_at"), Sql.instant(rs, "completed_at"), List.of());
+            rs.getString("created_by"), Sql.instant(rs, "created_at"), Sql.instant(rs, "completed_at"), List.of(),
+            TraceArtifact.Kind.valueOf(rs.getString("kind")));
 }

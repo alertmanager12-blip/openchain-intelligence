@@ -27,8 +27,8 @@ public final class InMemoryTraceArtifactStore implements TraceArtifactStore {
         return Optional.ofNullable(byId.get(id)).filter(a -> a.clientScope().equals(scope));
     }
 
-    @Override public synchronized List<TraceArtifact> list(String scope, int limit) {
-        return byId.values().stream().filter(a -> a.clientScope().equals(scope))
+    @Override public synchronized List<TraceArtifact> list(String scope, int limit, TraceArtifact.Kind kind) {
+        return byId.values().stream().filter(a -> a.clientScope().equals(scope) && a.kind() == kind)
                 .sorted(Comparator.comparing(TraceArtifact::createdAt).reversed().thenComparing(TraceArtifact::id)).limit(limit).toList();
     }
 
@@ -60,7 +60,7 @@ public final class InMemoryTraceArtifactStore implements TraceArtifactStore {
             all.addAll(ids);
             byId.put(a.id(), new TraceArtifact(a.id(), a.clientScope(), a.lineageId(), a.version(), a.previousId(), a.network(), a.seed(),
                     a.direction(), a.engineVersion(), a.status(), a.resultStatus(), true, List.copyOf(all), a.requestJson(), a.resultJson(),
-                    a.evidenceJson(), a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), a.eventIds()));
+                    a.evidenceJson(), a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), a.eventIds(), a.kind()));
             hit.add(a.id());
         }
         return hit;

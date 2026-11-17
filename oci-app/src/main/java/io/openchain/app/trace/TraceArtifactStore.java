@@ -16,8 +16,11 @@ public interface TraceArtifactStore {
 
     Optional<TraceArtifact> find(String clientScope, String id);
 
-    /** Newest first. */
-    List<TraceArtifact> list(String clientScope, int limit);
+    /** Newest first, of one kind. */
+    List<TraceArtifact> list(String clientScope, int limit, TraceArtifact.Kind kind);
+
+    /** Trace artifacts, newest first. */
+    default List<TraceArtifact> list(String clientScope, int limit) { return list(clientScope, limit, TraceArtifact.Kind.TRACE); }
 
     int latestVersion(String clientScope, String lineageId);
 

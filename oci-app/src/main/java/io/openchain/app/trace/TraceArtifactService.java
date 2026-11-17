@@ -1,6 +1,7 @@
 package io.openchain.app.trace;
 
 import io.openchain.app.security.ApiKeyService;
+import io.openchain.intelligence.investigation.InvestigationPlan;
 import io.openchain.intelligence.trace.FrozenSource;
 import io.openchain.intelligence.trace.Trace;
 import io.openchain.intelligence.trace.TraceDiff;
@@ -39,6 +40,12 @@ public final class TraceArtifactService {
     private final Clock clock;
     private final Executor executor;
     private final Budget budget;
+    /** Inputs of the investigation plan for one address (coverage and signals as of now); null: investigations disabled. */
+    private volatile java.util.function.Function<io.openchain.core.model.Address, InvestigationPlan.Inputs> investigationInputs;
+
+    public void setInvestigationInputs(java.util.function.Function<io.openchain.core.model.Address, InvestigationPlan.Inputs> f) {
+        this.investigationInputs = f;
+    }
 
     public TraceArtifactService(TraceArtifactStore store, Supplier<Trace.Source> liveSource, Clock clock) {
         this(store, liveSource, clock, Runnable::run, Budget.DEFAULTS);
@@ -82,7 +89,7 @@ public final class TraceArtifactService {
 
     /** Queues a new version of {@code previousId}; empty when it is not an artifact of {@code scope}. */
     public synchronized Optional<TraceArtifact> submitRerun(String scope, String previousId, String actor) {
-        Optional<TraceArtifact> prev = store.find(scope, previousId);
+        Optional<TraceArtifact> prev = store.find(scope, previousId).filter(x -> x.kind() == TraceArtifact.Kind.TRACE);
         if (prev.isEmpty()) return Optional.empty();
         checkBudget(scope);
         TraceArtifact p = pending(scope, TraceJson.request(prev.get().requestJson()), actor, prev.get().lineageId(),
@@ -101,6 +108,70 @@ public final class TraceArtifactService {
             store.update(with(p, TraceArtifact.Status.FAILED, null, null, null, null, "trace queue full", List.of()));
             throw new BudgetExceeded("the trace queue is full; try again later");
         }
+    }
+
+    // ---- investigations (ADR-0022 amendment 2) ------------------------------------------------------------------
+
+    public static final String INVESTIGATION_ENGINE = InvestigationPlan.VERSION + "+" + Trace.ENGINE_VERSION;
+
+    /** Stores a PENDING investigation of {@code subject} (its plan inputs taken now) and queues it. */
+    public synchronized TraceArtifact submitInvestigation(String scope, io.openchain.core.model.Address subject, String actor) {
+        checkBudget(scope);
+        TraceArtifact p = pendingInvestigation(scope, subject, actor, UUID.randomUUID().toString(), 1, null);
+        store.insert(p);
+        ApiKeyService.AUDIT.info("investigation.create id={} network={} subject={} clientScope={} actor={}", p.id(), p.network(), p.seed(), scope, actor);
+        queue(p);
+        return p;
+    }
+
+    /** A new version of an investigation on the current data (new inputs), with the assertions added and removed. */
+    public synchronized Optional<TraceArtifact> submitInvestigationRerun(String scope, String previousId, String actor) {
+        Optional<TraceArtifact> prev = store.find(scope, previousId).filter(a -> a.kind() == TraceArtifact.Kind.INVESTIGATION);
+        if (prev.isEmpty()) return Optional.empty();
+        checkBudget(scope);
+        InvestigationPlan.Inputs old = TraceJson.inputs(prev.get().requestJson());
+        TraceArtifact p = pendingInvestigation(scope, old.subject(), actor, prev.get().lineageId(),
+                store.latestVersion(scope, prev.get().lineageId()) + 1, prev.get());
+        store.insert(p);
+        ApiKeyService.AUDIT.info("investigation.rerun id={} previous={} clientScope={} actor={}", p.id(), previousId, scope, actor);
+        queue(p);
+        return Optional.of(p);
+    }
+
+    private TraceArtifact pendingInvestigation(String scope, io.openchain.core.model.Address subject, String actor, String lineage, int version,
+                                               TraceArtifact previous) {
+        var f = investigationInputs;
+        if (f == null) throw new IllegalStateException("investigations are not configured");
+        InvestigationPlan.Inputs in = f.apply(subject);
+        return new TraceArtifact(UUID.randomUUID().toString(), scope, lineage, version, previous == null ? null : previous.id(),
+                subject.network().id(), subject.value(), "BOTH", INVESTIGATION_ENGINE, TraceArtifact.Status.PENDING, null, false, null,
+                TraceJson.write(in), null, null, null, null, actor, clock.instant(), null, List.of(), TraceArtifact.Kind.INVESTIGATION);
+    }
+
+    /** The plan run again on the frozen evidence and stored inputs of an investigation. */
+    public Optional<List<InvestigationPlan.Assertion>> replayInvestigation(String scope, String id) {
+        return store.find(scope, id).filter(a -> a.kind() == TraceArtifact.Kind.INVESTIGATION && a.evidenceJson() != null)
+                .map(a -> InvestigationPlan.run(TraceJson.inputs(a.requestJson()), new FrozenSource(TraceJson.evidence(a.evidenceJson()))));
+    }
+
+    private TraceArtifact executeInvestigation(TraceArtifact current) {
+        InvestigationPlan.Inputs in = TraceJson.inputs(current.requestJson());
+        var recorder = FrozenSource.recording(liveSource.get());
+        List<InvestigationPlan.Assertion> assertions = InvestigationPlan.run(in, recorder);
+        FrozenSource.Snapshot evidence = recorder.snapshot();
+        String diff = null;
+        if (current.previousId() != null) {
+            diff = store.find(current.clientScope(), current.previousId()).filter(x -> x.resultJson() != null).map(x -> {
+                java.util.Set<String> before = new java.util.TreeSet<>(TraceJson.assertions(x.resultJson()).stream().map(InvestigationPlan.Assertion::id).toList());
+                java.util.Set<String> after = new java.util.TreeSet<>(assertions.stream().map(InvestigationPlan.Assertion::id).toList());
+                java.util.Set<String> added = new java.util.TreeSet<>(after); added.removeAll(before);
+                java.util.Set<String> removed = new java.util.TreeSet<>(before); removed.removeAll(after);
+                return TraceJson.write(java.util.Map.of("added", added, "removed", removed));
+            }).orElse(null);
+        }
+        String state = "COMPLETE".equals(in.coverage().state()) ? "COMPLETE" : "PARTIAL";
+        return with(current, TraceArtifact.Status.DONE, state, TraceJson.write(assertions), TraceJson.write(evidence), diff, null,
+                evidence.flows().stream().map(fl -> fl.eventId()).toList());
     }
 
     /** Cancels a PENDING run of {@code scope}; empty when unknown in that scope, unchanged when already started or done. */
@@ -141,6 +212,11 @@ public final class TraceArtifactService {
         if (current.status() == TraceArtifact.Status.DONE || (current.status() == TraceArtifact.Status.FAILED)) return current; // cancelled or done
         try {
             store.update(with(current, TraceArtifact.Status.RUNNING, null, null, null, null, null, List.of()));
+            if (current.kind() == TraceArtifact.Kind.INVESTIGATION) {
+                TraceArtifact done = executeInvestigation(current);
+                store.update(done);
+                return done;
+            }
             Trace.Request req = TraceJson.request(current.requestJson());
             var recorder = FrozenSource.recording(liveSource.get());
             Trace.Result result = TraceEngine.run(req, recorder);
@@ -167,7 +243,7 @@ public final class TraceArtifactService {
         boolean finished = status == TraceArtifact.Status.DONE || status == TraceArtifact.Status.FAILED;
         return new TraceArtifact(a.id(), a.clientScope(), a.lineageId(), a.version(), a.previousId(), a.network(), a.seed(), a.direction(),
                 a.engineVersion(), status, resultStatus, a.stale(), a.staleEventIds(), a.requestJson(), result, evidence, diff, error,
-                a.createdBy(), a.createdAt(), finished ? clock.instant() : null, eventIds);
+                a.createdBy(), a.createdAt(), finished ? clock.instant() : null, eventIds, a.kind());
     }
 
     /** The engine run again on the frozen evidence of a stored artifact. */
@@ -179,4 +255,6 @@ public final class TraceArtifactService {
     public Optional<TraceArtifact> find(String scope, String id) { return store.find(scope, id); }
 
     public List<TraceArtifact> list(String scope, int limit) { return store.list(scope, limit); }
+
+    public List<TraceArtifact> list(String scope, int limit, TraceArtifact.Kind kind) { return store.list(scope, limit, kind); }
 }

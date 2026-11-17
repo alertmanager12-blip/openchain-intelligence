@@ -333,7 +333,7 @@ public class InvestigationService {
 
     /** Which blocks the answer rests on (Fund Flow Trace P0-B): {@link AddressCoverage}, plus the known blind spots. */
     /** Coverage of one address (Fund Flow Trace P0-B): address history, blocks indexed live, recorded gaps, trim. */
-    AddressCoverage.Result addressCoverage(Address a) {
+    public AddressCoverage.Result addressCoverage(Address a) {
         Network n = a.network();
         Dto.HistoryCoverageDto h = history.coverage(a);
         AddressCoverage.History hist = "NOT_CONFIGURED".equals(h.status()) ? null : new AddressCoverage.History(h.status(),

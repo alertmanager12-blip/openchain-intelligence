@@ -90,6 +90,8 @@ public class SecurityConfiguration {
                         // stored traces (ADR-0022): reading needs investigation:read, running investigation:write
                         .requestMatchers(HttpMethod.GET, API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
+                        .requestMatchers(HttpMethod.GET, API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        .requestMatchers(API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))
                         // demo evidence (demo mode only): wallets + alerts

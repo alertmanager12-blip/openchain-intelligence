@@ -11,6 +11,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 ### Added (phase 3 — investigations and their report, ADR-0022 amendment 2, second and third steps)
 
 - **Investigation report** built only from the stored assertions (`report@1`): every sentence is a fixed template filled with one assertion and cites its id; coverage and limits come first; "no direct exposure in blocks X to Y" only with complete coverage, otherwise "none found in the data covered, not proof that none exists"; relations worded "may be related, not proof of common ownership or control"; amounts exact and shown in token units.
+- **`/investigations`**: run the plan on an address as a stored, queued job with its frozen evidence and inputs (`V15__investigation_artifacts`: investigations are artifacts of kind `INVESTIGATION`, with the same client scope, row-level security, versions, budgets and STALE marking as traces), read its assertions and report, re-run it as a new version with the assertions added and removed. Replaying an investigation on its frozen evidence gives the same assertions (tested on PostgreSQL).
 
 ### Added (phase 3 — deterministic investigation plan, ADR-0022 amendment 2, first step)
 

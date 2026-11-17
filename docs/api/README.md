@@ -104,6 +104,9 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 | POST | `/traces` | investigation:write | `{ network, seed, direction: out\|in, depth?, maxNodes?, token?, method?: PROPORTIONAL\|FIFO, from?, to? }` → 202: a stored trace (ADR-0022), queued; poll `GET /traces/{id}`. 429 when the client's budget (3 running, 100 per day) or the queue is full |
 | GET | `/traces`, `/traces/{id}`, `/traces/{id}/evidence`, `/traces/{id}/export` | investigation:read | The client's traces: status, request, result, diff with the previous version, `stale` (a frozen flow was retracted by a reorganisation), the frozen flows; export is audited. Another client's trace answers 404 like an unknown id |
 | POST | `/traces/{id}/rerun`, `/traces/{id}/cancel` | investigation:write | A new version on the current data (with its diff); cancel a run still pending |
+| POST | `/investigations` | investigation:write | `{ network, address }` → 202: runs the deterministic plan `plan@1` (coverage, labels, exposure, traces out and in, patterns, relations, signals) on frozen evidence; same budgets as traces |
+| GET | `/investigations`, `/investigations/{id}`, `/investigations/{id}/report` | investigation:read | The client's investigations: typed `assertions` (level, exact parameters, evidence, deterministic id) and a `report` built only from them, every sentence citing its assertion; coverage and limits first. Another client's investigation answers 404 |
+| POST | `/investigations/{id}/rerun` | investigation:write | A new version on the current data, with the assertions added and removed |
 | GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
 
 Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:

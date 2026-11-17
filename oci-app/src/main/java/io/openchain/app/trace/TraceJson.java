@@ -20,4 +20,12 @@ public final class TraceJson {
     public static FrozenSource.Snapshot evidence(String json) { return JSON.readValue(json, FrozenSource.Snapshot.class); }
 
     public static TraceDiff.Diff diff(String json) { return JSON.readValue(json, TraceDiff.Diff.class); }
+
+    public static io.openchain.intelligence.investigation.InvestigationPlan.Inputs inputs(String json) {
+        return JSON.readValue(json, io.openchain.intelligence.investigation.InvestigationPlan.Inputs.class);
+    }
+
+    public static java.util.List<io.openchain.intelligence.investigation.InvestigationPlan.Assertion> assertions(String json) {
+        return java.util.List.of(JSON.readValue(json, io.openchain.intelligence.investigation.InvestigationPlan.Assertion[].class));
+    }
 }

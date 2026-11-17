@@ -75,13 +75,13 @@ public class TraceController {
 
     @GetMapping("/{id}")
     public TraceDetail get(@PathVariable String id, Authentication auth) {
-        return detail(traces.find(ClientScope.of(auth), id).orElseThrow(() -> ApiException.notFound(NOT_FOUND)));
+        return detail(traces.find(ClientScope.of(auth), id).filter(TraceController::isTrace).orElseThrow(() -> ApiException.notFound(NOT_FOUND)));
     }
 
     /** The frozen flows the run read (its evidence). */
     @GetMapping("/{id}/evidence")
     public Map<String, Object> evidence(@PathVariable String id, Authentication auth) {
-        TraceArtifact a = traces.find(ClientScope.of(auth), id).orElseThrow(() -> ApiException.notFound(NOT_FOUND));
+        TraceArtifact a = traces.find(ClientScope.of(auth), id).filter(TraceController::isTrace).orElseThrow(() -> ApiException.notFound(NOT_FOUND));
         if (a.evidenceJson() == null) return Map.of("id", a.id(), "status", a.status().name(), "flows", List.of());
         return Map.of("id", a.id(), "status", a.status().name(), "flows", TraceJson.evidence(a.evidenceJson()).flows());
     }
@@ -90,7 +90,7 @@ public class TraceController {
     @GetMapping("/{id}/export")
     public Map<String, Object> export(@PathVariable String id, Authentication auth) {
         String scope = ClientScope.of(auth);
-        TraceArtifact a = traces.find(scope, id).orElseThrow(() -> ApiException.notFound(NOT_FOUND));
+        TraceArtifact a = traces.find(scope, id).filter(TraceController::isTrace).orElseThrow(() -> ApiException.notFound(NOT_FOUND));
         ApiKeyService.AUDIT.info("trace.export id={} clientScope={} actor={}", id, scope, auth.getName());
         return Map.of("trace", detail(a), "evidence", a.evidenceJson() == null ? Map.of() : TraceJson.evidence(a.evidenceJson()));
     }
@@ -105,8 +105,12 @@ public class TraceController {
     /** Cancels a run still pending; a started or finished run is returned unchanged. */
     @PostMapping("/{id}/cancel")
     public TraceDetail cancel(@PathVariable String id, Authentication auth) {
-        return detail(traces.cancel(ClientScope.of(auth), id, auth.getName()).orElseThrow(() -> ApiException.notFound(NOT_FOUND)));
+        String scope = ClientScope.of(auth);
+        traces.find(scope, id).filter(TraceController::isTrace).orElseThrow(() -> ApiException.notFound(NOT_FOUND));
+        return detail(traces.cancel(scope, id, auth.getName()).orElseThrow(() -> ApiException.notFound(NOT_FOUND)));
     }
+
+    static boolean isTrace(TraceArtifact a) { return a.kind() == TraceArtifact.Kind.TRACE; }
 
     private static TraceArtifact submit(java.util.function.Supplier<TraceArtifact> s) {
         try {

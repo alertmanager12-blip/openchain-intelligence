@@ -28,8 +28,20 @@ public class TraceConfiguration {
     }
 
     @Bean
-    TraceArtifactService traceArtifactService(TraceArtifactStore store, InvestigationService investigation, Clock clock, ExecutorService traceExecutor) {
-        return new TraceArtifactService(store, investigation::traceSource, clock, traceExecutor, TraceArtifactService.Budget.DEFAULTS);
+    TraceArtifactService traceArtifactService(TraceArtifactStore store, InvestigationService investigation, Clock clock, ExecutorService traceExecutor,
+                                              io.openchain.intelligence.IntelligencePipeline intelligence) {
+        TraceArtifactService s = new TraceArtifactService(store, investigation::traceSource, clock, traceExecutor, TraceArtifactService.Budget.DEFAULTS);
+        // inputs of the investigation plan, taken when it is requested and stored with it (replayable)
+        s.setInvestigationInputs(a -> {
+            var c = investigation.addressCoverage(a);
+            var exposure = intelligence.detectionConfig().exposure();
+            return new io.openchain.intelligence.investigation.InvestigationPlan.Inputs(a,
+                    new io.openchain.intelligence.investigation.InvestigationPlan.Coverage(c.state().name(), c.fromBlock(), c.toBlock(), c.reasons()),
+                    intelligence.signals().findByAddress(a), exposure,
+                    io.openchain.intelligence.relations.WalletRelations.Config.defaults(exposure.dustThresholds()),
+                    new io.openchain.intelligence.trace.Trace.Limits(3, 500, 20_000));
+        });
+        return s;
     }
 
     /** A transfer retracted by a reorganisation makes STALE every stored trace that froze it (all client scopes). */
