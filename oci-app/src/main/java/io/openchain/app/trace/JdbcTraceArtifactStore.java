@@ -76,18 +76,64 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
     }
 
     @Override public Optional<TraceArtifact> find(String s, String id) {
-        return tx.inTransaction(() -> {
-            scope(s);
-            return jdbc.query("select " + COLUMNS + " from trace_artifacts where id = :id and client_scope_id = :s", Map.of("id", id, "s", s), MAPPER)
-                    .stream().findFirst().map(a -> withIds(a));
+        return readInScope(s, con -> {
+            TraceArtifact a = null;
+            try (var ps = con.prepareStatement("select " + COLUMNS + " from trace_artifacts where id = ? and client_scope_id = ?")) {
+                ps.setString(1, id);
+                ps.setString(2, s);
+                try (var rs = ps.executeQuery()) { if (rs.next()) a = MAPPER.mapRow(rs, 0); }
+            }
+            if (a == null) return Optional.<TraceArtifact>empty();
+            List<String> ids = new ArrayList<>();
+            try (var ps = con.prepareStatement("select event_id from trace_artifact_flows where artifact_id = ? order by event_id")) {
+                ps.setString(1, id);
+                try (var rs = ps.executeQuery()) { while (rs.next()) ids.add(rs.getString(1)); }
+            }
+            return Optional.of(new TraceArtifact(a.id(), a.clientScope(), a.lineageId(), a.version(), a.previousId(), a.network(), a.seed(),
+                    a.direction(), a.engineVersion(), a.status(), a.resultStatus(), a.stale(), a.staleEventIds(), a.requestJson(), a.resultJson(),
+                    a.evidenceJson(), a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), ids, a.kind()));
         });
     }
 
     @Override public List<TraceArtifact> list(String s, int limit, TraceArtifact.Kind kind) {
-        return tx.inTransaction(() -> {
-            scope(s);
-            return jdbc.query("select " + COLUMNS + " from trace_artifacts where client_scope_id = :s and kind = :k order by created_at desc, id limit :l",
-                    Map.of("s", s, "l", limit, "k", kind.name()), MAPPER);
+        return readInScope(s, con -> {
+            List<TraceArtifact> out = new ArrayList<>();
+            try (var ps = con.prepareStatement("select " + COLUMNS + " from trace_artifacts where client_scope_id = ? and kind = ? "
+                    + "order by created_at desc, id limit ?")) {
+                ps.setString(1, s);
+                ps.setString(2, kind.name());
+                ps.setInt(3, limit);
+                try (var rs = ps.executeQuery()) { int i = 0; while (rs.next()) out.add(MAPPER.mapRow(rs, i++)); }
+            }
+            return out;
+        });
+    }
+
+    /**
+     * Read-only work in one transaction with {@code oci.scope} set for row-level security. Plain JDBC on purpose: reads
+     * share no code path with the writes (static analysis of GET endpoints, CodeQL "unprotected from CSRF", 2026-11-17).
+     */
+    private <T> T readInScope(String scope, org.springframework.jdbc.core.ConnectionCallback<T> work) {
+        return jdbc.getJdbcTemplate().execute((org.springframework.jdbc.core.ConnectionCallback<T>) con -> {
+            boolean auto = con.getAutoCommit();
+            boolean ro = con.isReadOnly();
+            con.setAutoCommit(false);
+            con.setReadOnly(true);
+            try {
+                try (var ps = con.prepareStatement("select set_config('oci.scope', ?, true)")) {
+                    ps.setString(1, scope);
+                    ps.execute();
+                }
+                T r = work.doInConnection(con);
+                con.commit();
+                return r;
+            } catch (java.sql.SQLException | RuntimeException e) {
+                con.rollback();
+                throw e;
+            } finally {
+                con.setReadOnly(ro);
+                con.setAutoCommit(auto);
+            }
         });
     }
 
@@ -144,14 +190,6 @@ public final class JdbcTraceArtifactStore implements TraceArtifactStore {
             }
             return ids;
         });
-    }
-
-    private TraceArtifact withIds(TraceArtifact a) {
-        List<String> ids = jdbc.queryForList("select event_id from trace_artifact_flows where artifact_id = :id order by event_id",
-                Map.of("id", a.id()), String.class);
-        return new TraceArtifact(a.id(), a.clientScope(), a.lineageId(), a.version(), a.previousId(), a.network(), a.seed(), a.direction(),
-                a.engineVersion(), a.status(), a.resultStatus(), a.stale(), a.staleEventIds(), a.requestJson(), a.resultJson(), a.evidenceJson(),
-                a.diffJson(), a.error(), a.createdBy(), a.createdAt(), a.completedAt(), ids, a.kind());
     }
 
     private static final RowMapper<TraceArtifact> MAPPER = (rs, n) -> new TraceArtifact(rs.getString("id"), rs.getString("client_scope_id"),

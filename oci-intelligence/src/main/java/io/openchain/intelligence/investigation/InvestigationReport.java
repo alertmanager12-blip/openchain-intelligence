@@ -99,15 +99,25 @@ public final class InvestigationReport {
         return low.equals(high) ? low : low + " to " + high;
     }
 
+    /** Decimals of a token as stored in an assertion; 0 when absent or malformed (the amount is then shown in raw units). */
+    static int decimals(String decimals) {
+        if (decimals == null) return 0;
+        try {
+            return Math.max(0, Integer.parseInt(decimals.trim()));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     static String units(String raw, String decimals) {
-        int d = decimals == null ? 0 : Integer.parseInt(decimals);
+        int d = decimals(decimals);
         BigDecimal v = new BigDecimal(raw).movePointLeft(d).stripTrailingZeros();
         return v.signum() == 0 ? "0" : v.toPlainString();
     }
 
     /** An exact fraction "n/d" of raw units, shown in token units with at most 6 decimals (display only). */
     static String fraction(String f, String decimals) {
-        int d = decimals == null ? 0 : Integer.parseInt(decimals);
+        int d = decimals(decimals);
         String[] nd = f.split("/");
         BigDecimal v = new BigDecimal(nd[0]);
         if (nd.length == 2) v = v.divide(new BigDecimal(nd[1]), MathContext.DECIMAL128);
