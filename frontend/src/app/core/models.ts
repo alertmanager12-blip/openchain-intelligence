@@ -402,6 +402,24 @@ export interface InvestigationReviews {
   decided: number; total: number;
 }
 
+/** Rule drafts proposed from an investigation (ADR-0022 amendment 4): always disabled, never stored. */
+export type ProposalTemplate = 'NEXT_HOP' | 'COMMON_FUNDER' | 'SUBJECT_DISPERSION' | 'LISTED_COUNTERPARTY';
+
+export interface ProposalDryRun {
+  totalEvents: number; eventsInScope: number; conditionMatches: number; triggers: number; estimatedAlerts: number;
+  from: string | null; to: string | null; estimatedAlertsPerDay: number; warnings: string[];
+}
+
+export interface RuleProposal {
+  ruleId: string; template: ProposalTemplate; assertionIds: string[]; reviews: Record<string, ReviewDecision>; yaml: string; enabled: boolean;
+  checks: { valid: boolean; examplesPassed: number; testsPassed: number }; dryRun: ProposalDryRun;
+}
+
+export interface RuleProposals {
+  investigationId: string; version: number; proposalVersion: string; proposals: RuleProposal[];
+  skipped: { assertionId: string; reason: string }[];
+}
+
 /** A path value could have taken (directed, chronological, one token), computed by the server. */
 export interface GraphPath {
   source: string;
