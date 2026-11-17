@@ -79,6 +79,26 @@ class HttpJsonTransportTest {
         assertThat(server.hits).hasValue(1);
     }
 
+    /**
+     * Prod, 2026-11-17: publicnode refuses state at an older block (eth_getCode, eth_getBalance at a block number) with HTTP 403
+     * and a JSON-RPC error "Archive requests require a personal token". That is a definitive refusal of this request, not a
+     * temporary block: it goes to the JSON-RPC client (non-retryable, so callers fall back to "latest"), is not retried and
+     * never opens the circuit. A 403 without a JSON-RPC error (TronGrid) stays a temporary block.
+     */
+    @Test void aJsonRpcErrorSentWithHttp403IsARefusalOfThatRequestNotABlock() {
+        server.route("/", r -> new Response(403, "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32602,\"message\":\"Archive requests "
+                + "require a personal token. Get one at: https://www.allnodes.com/publicnode\"},\"id\":1}", Map.of()));
+        HttpJsonTransport t = transport(fastResilience(4, 2));
+        JsonRpcClient rpc = new JsonRpcClient(t);
+        for (int i = 0; i < 5; i++) {
+            assertThatThrownBy(() -> rpc.call("eth_getCode", "0x00", "0x1934e19")).isInstanceOf(JsonRpcException.class)
+                    .hasMessageContaining("RPC error -32602").satisfies(e -> assertThat(((ProviderException) e).retryable()).isFalse());
+        }
+        assertThat(server.hits).as("not retried").hasValue(5);
+        server.route("/", r -> Response.ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":\"0x1\"}"));
+        assertThat(rpc.call("eth_blockNumber").asText()).as("the circuit stayed closed").isEqualTo("0x1");
+    }
+
     @Test void jsonRpcErrorSentWithHttp400IsClassifiedByTheJsonRpcClient() {
         // dRPC free plan (observed 2026-11-07): {"error":{"message":"ranges over 10000 blocks are not supported...","code":35}} + HTTP 400
         server.route("/", r -> new Response(400, "{\"id\":1,\"jsonrpc\":\"2.0\",\"error\":{\"message\":\"ranges over 10000 blocks "

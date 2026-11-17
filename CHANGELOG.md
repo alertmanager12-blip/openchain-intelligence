@@ -10,6 +10,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ### Fixed (operations)
 
+- **Ethereum stopped indexing after a restart with lag (prod 2026-11-17).** publicnode answers state at an older block (`eth_getCode`, `eth_getBalance` at a block number) with HTTP 403 and the JSON-RPC error "Archive requests require a personal token". Every 403 was treated as a temporary block (the TronGrid rule), so these refusals were retried, opened the circuit and blocked indexing, and the existing fallback to `latest` never ran. A 403 carrying a JSON-RPC error is now a refusal of that request, classified by the JSON-RPC client (non-retryable): the fallback runs and the circuit stays closed. A 403 without a JSON-RPC error (TronGrid) is still a temporary block.
 - **An open circuit now names the failure that opened it.** After a restart, prod logged only "circuit open for endpoint ..." on both chains, never the cause. The breaker keeps the failure that tripped it (our provider errors: endpoint name and status, never the URL; any other exception: its class only), puts it in the open-circuit message, and logs one warning each time it opens.
 
 ### Added (phase 3 — investigations in the console, ADR-0022 amendment 2, fourth step)
