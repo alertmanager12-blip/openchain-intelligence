@@ -85,7 +85,7 @@ export class ApiService {
     return this.http.get<InvestigationReviews>(`${this.base}/investigations/${this.enc(id)}/reviews`);
   }
   ruleProposals(id: string): Observable<RuleProposals> {
-    return this.http.get<RuleProposals>(`${this.base}/investigations/${this.enc(id)}/rule-proposals`);
+    return this.http.post<RuleProposals>(`${this.base}/investigations/${this.enc(id)}/rule-proposals`, {});
   }
   reviewAssertion(id: string, assertionId: string, decision: ReviewDecision, comment: string | null): Observable<AssertionReview> {
     return this.http.post<AssertionReview>(`${this.base}/investigations/${this.enc(id)}/assertions/${this.enc(assertionId)}/reviews`,

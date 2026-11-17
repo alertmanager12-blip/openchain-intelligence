@@ -157,9 +157,10 @@ public class InvestigationRunController {
 
     /**
      * Rule drafts proposed from this investigation (ADR-0022 amendment 4): checked and dry-run, never stored, always
-     * disabled. Adopting one is {@code POST /rules} (rules:write), which creates it disabled.
+     * disabled. Adopting one is {@code POST /rules} (rules:write), which creates it disabled. A POST like
+     * {@code POST /rules/test}: a dry run computed on request; it needs investigation:read only.
      */
-    @GetMapping("/{id}/rule-proposals")
+    @PostMapping("/{id}/rule-proposals")
     public RuleProposalService.View ruleProposals(@PathVariable String id, Authentication auth) {
         try {
             return proposals.propose(ClientScope.of(auth), id);

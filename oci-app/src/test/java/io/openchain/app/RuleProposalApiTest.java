@@ -70,8 +70,10 @@ class RuleProposalApiTest extends ApiTestSupport {
         String id = investigate(me);
 
         int sentBefore = outbound.calls.size();
-        String r = body(mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", READER_INV)).andExpect(status().isOk()));
+        String r = body(mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", READER_INV)).andExpect(status().isOk()));
         assertThat(outbound.calls).as("the dry run never notifies").hasSize(sentBefore);
+        // a POST, like POST /rules/test: computing a dry run on request; investigation:read is enough, there is no GET
+        mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", READER_INV)).andExpect(status().isMethodNotAllowed());
         assertThat((String) JsonPath.read(r, "$.proposalVersion")).isEqualTo("proposal@1");
         List<String> templates = JsonPath.read(r, "$.proposals[*].template");
         assertThat(templates).contains("NEXT_HOP", "LISTED_COUNTERPARTY");
@@ -92,7 +94,7 @@ class RuleProposalApiTest extends ApiTestSupport {
         String created = body(mvc.perform(get("/api/v1/rules/" + ruleId).header("X-API-Key", ADMIN)).andExpect(status().isOk()));
         assertThat((Boolean) JsonPath.read(created, "$.enabled")).isFalse();
         // and asking for proposals again changes nothing in the rules
-        mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)).andExpect(status().isOk());
         assertThat((Boolean) JsonPath.read(body(mvc.perform(get("/api/v1/rules/" + ruleId).header("X-API-Key", ADMIN))), "$.enabled")).isFalse();
     }
 
@@ -100,19 +102,19 @@ class RuleProposalApiTest extends ApiTestSupport {
         Address me = tron("rejecting"), x = tron("rejNext");
         flow(me, x, "700", 1);
         String id = investigate(me);
-        String r = body(mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)).andExpect(status().isOk()));
+        String r = body(mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)).andExpect(status().isOk()));
         List<String> ids = JsonPath.read(r, "$.proposals[?(@.template == 'NEXT_HOP')].assertionIds[0]");
         assertThat(ids).isNotEmpty();
         mvc.perform(post("/api/v1/investigations/" + id + "/assertions/" + ids.getFirst() + "/reviews").header("X-API-Key", ANALYST)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"REJECTED\"}")).andExpect(status().isCreated());
-        String after = body(mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)));
+        String after = body(mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", ANALYST)));
         assertThat((List<String>) JsonPath.read(after, "$.proposals[*].assertionIds[*]")).doesNotContain(ids.getFirst());
         assertThat((List<String>) JsonPath.read(after, "$.skipped[?(@.assertionId == '" + ids.getFirst() + "')].reason")).containsExactly("rejected by a review");
 
         scopes.register("client-p", "P");
         String keyP = keys.create("p", List.of(Scopes.INVESTIGATION_READ), Duration.ofHours(1), "test", "client-p").plaintext();
-        mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", keyP)).andExpect(status().isNotFound());
-        mvc.perform(get("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", READER)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", keyP)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/v1/investigations/" + id + "/rule-proposals").header("X-API-Key", READER)).andExpect(status().isForbidden());
     }
 
     static final String READER_INV = "oci_test_invread1_TestInvReaderKeyOnlyForUnitTests00000001";

@@ -174,7 +174,8 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
    `investigation`; a documentation block citing the assertion ids and stating that addresses are inferred and that an
    alert is not a finding. Ids are deterministic (`inv-<hash>-<template>`).
 6. **Nothing is stored.** Proposals are computed on request from the stored assertions:
-   `GET /api/v1/investigations/{id}/rule-proposals` (`investigation:read`). Adopting one is the existing
+   `POST /api/v1/investigations/{id}/rule-proposals` (`investigation:read`; a POST like `POST /rules/test`, since it
+   computes a dry run on request, but it stores nothing and needs no write permission). Adopting one is the existing
    `POST /api/v1/rules` (`rules:write`): the rule is created **disabled**; enabling it is the separate, audited
    `POST /rules/{id}/enable`. Nothing in this amendment can enable a rule.
 7. **Console**: "Propose rules" on an investigation lists each draft with its YAML, the assertion and its review, the dry
