@@ -2,7 +2,8 @@ import { DatePipe, LowerCasePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
-import { AssertionReview, CurrentReview, InvestigationAssertion, InvestigationDetail, InvestigationReviews, ReviewDecision, TraceSummary } from '../../core/models';
+import { RouterLink } from '@angular/router';
+import { AssertionReview, CurrentReview, InvestigationAssertion, InvestigationDetail, InvestigationReviews, ProposalDryRun, ProposalTemplate, ReviewDecision, RuleProposal, RuleProposals, TraceSummary } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
@@ -16,7 +17,7 @@ import { UI } from '../../shared/ui';
  */
 @Component({
   selector: 'oci-investigations',
-  imports: [DatePipe, LowerCasePipe, PageHeader, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
+  imports: [DatePipe, LowerCasePipe, RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     .grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
@@ -38,6 +39,8 @@ import { UI } from '../../shared/ui';
     .human { display: block; font-style: italic; margin-left: 72px; font-size: 11px; color: var(--ink-2); white-space: pre-wrap; }
     .editor { margin: 4px 0 8px 72px; display: grid; gap: 4px; max-width: 520px; }
     .editor textarea { font: inherit; font-size: 12px; min-height: 48px; }
+    .proposal { border-top: 1px solid var(--line, #ddd); padding: 8px 0; }
+    .proposal pre { max-height: 320px; overflow: auto; }
   `,
   template: `
     <div class="page">
@@ -82,6 +85,9 @@ import { UI } from '../../shared/ui';
                   {{ undecidedOnly() ? 'Show all sentences' : 'Undecided only' }}</button>
                 <span class="small muted">{{ rv.decided }} of {{ rv.total }} assertion(s) reviewed</span>
               }
+              @if (d.status === 'DONE') {
+                <button matButton="outlined" class="sm" type="button" (click)="propose(d)" [disabled]="proposing()">Propose rules</button>
+              }
             </div>
             @if (d.stale && (reviews()?.decided ?? 0) > 0) { <p class="note note--warn">Some reviews were taken on evidence that has since left the canonical chain: check them again.</p> }
             @if (d.report; as r) {
@@ -115,6 +121,34 @@ import { UI } from '../../shared/ui';
                 }
               }
               <p class="small muted">Report {{ r.templates }}: every sentence comes from one assertion; nothing else is said. Reviews are human decisions shown beside it: they change no sentence and no level.</p>
+            }
+            @if (proposals(); as pr) {
+              <h3 class="small strong">Proposed rules ({{ pr.proposalVersion }})</h3>
+              <p class="small muted">Drafts built from the assertions by fixed templates. They are disabled and stored nowhere: creating one adds a disabled rule, which you review and enable yourself in Rules. An alert from such a rule is a lead to check, not a finding.</p>
+              @if (pr.proposals.length === 0) { <p class="small muted">No draft for this investigation.</p> }
+              @for (p of pr.proposals; track p.ruleId) {
+                <div class="proposal">
+                  <p class="small"><strong>{{ templateLabel(p.template) }}</strong> <span class="mono">{{ p.ruleId }}</span> — from
+                    @for (a of p.assertionIds; track a) {
+                      <button type="button" class="cite" (click)="cite(d, a)">{{ a }}</button>@if (p.reviews[a]) { <span class="small"> ({{ decisionLabel(p.reviews[a]) | lowercase }})</span> }
+                    }
+                  </p>
+                  <p class="small">{{ checksLine(p) }}</p>
+                  <p class="small">{{ dryRunLine(p.dryRun) }}</p>
+                  @for (w of p.dryRun.warnings; track w) { <p class="small warn">{{ w }}</p> }
+                  <details><summary class="small">YAML</summary><pre>{{ p.yaml }}</pre></details>
+                  <div class="actions">
+                    <button matButton="outlined" class="sm" type="button" (click)="adopt(p)" [disabled]="adopted().has(p.ruleId)">
+                      {{ adopted().has(p.ruleId) ? 'Created (disabled)' : 'Create as disabled rule' }}</button>
+                    @if (adopted().has(p.ruleId)) { <a class="small" routerLink="/rules/code">Open in Rules</a> }
+                  </div>
+                </div>
+              }
+              @if (pr.skipped.length > 0) {
+                <details><summary class="small">{{ pr.skipped.length }} assertion(s) not proposed</summary>
+                  @for (k of pr.skipped; track k.assertionId + k.reason) { <p class="small"><span class="mono">{{ k.assertionId }}</span>: {{ k.reason }}</p> }
+                </details>
+              }
             }
             @if (shown(); as a) {
               <h3 class="small strong">Assertion {{ a.id }}</h3>
@@ -155,6 +189,12 @@ export class InvestigationsPage {
   readonly reviewLine = reviewLine;
   readonly historyOf = historyOf;
   readonly decisionLabel = decisionLabel;
+  readonly proposals = signal<RuleProposals | null>(null);
+  readonly proposing = signal(false);
+  readonly adopted = signal<ReadonlySet<string>>(new Set());
+  readonly templateLabel = templateLabel;
+  readonly checksLine = checksLine;
+  readonly dryRunLine = dryRunLine;
   private timer?: ReturnType<typeof setTimeout>;
 
   readonly short = (a: string) => (a.length > 14 ? `${a.slice(0, 8)}…${a.slice(-4)}` : a);
@@ -170,7 +210,7 @@ export class InvestigationsPage {
     this.selected.set(id);
     this.shown.set(null);
     this.editing.set(null);
-    if (this.detail()?.id !== id) this.reviews.set(null);
+    if (this.detail()?.id !== id) { this.reviews.set(null); this.proposals.set(null); this.adopted.set(new Set()); }
     clearTimeout(this.timer);
     this.api.investigation(id).subscribe({
       next: (d) => {
@@ -206,6 +246,21 @@ export class InvestigationsPage {
     });
   }
 
+  propose(d: InvestigationDetail): void {
+    this.proposing.set(true);
+    this.api.ruleProposals(d.id).subscribe({
+      next: (p) => { this.proposing.set(false); if (this.selected() === d.id) this.proposals.set(p); },
+      error: (e: ApiError) => { this.proposing.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+    });
+  }
+
+  adopt(p: RuleProposal): void {
+    this.api.createRule(p.yaml).subscribe({
+      next: () => { this.adopted.set(new Set([...this.adopted(), p.ruleId])); this.toasts.success('Rule created, disabled', p.ruleId); },
+      error: (e: ApiError) => this.toasts.error(e.title, e.detail ?? undefined),
+    });
+  }
+
   cite(d: InvestigationDetail, id: string): void { this.shown.set(d.assertions?.find((a) => a.id === id) ?? null); }
 
   rerun(d: InvestigationDetail): void {
@@ -237,4 +292,20 @@ export function visibleSentence(assertionId: string, reviews: InvestigationRevie
 
 export function historyOf(assertionId: string, reviews: InvestigationReviews | null): AssertionReview[] {
   return reviews ? reviews.history.filter((r) => r.assertionId === assertionId) : [];
+}
+
+export function templateLabel(t: ProposalTemplate): string {
+  return { NEXT_HOP: 'Funds move on', COMMON_FUNDER: 'Shared funder', SUBJECT_DISPERSION: 'Dispersion again', LISTED_COUNTERPARTY: 'Listed counterparty' }[t];
+}
+
+export function checksLine(p: RuleProposal): string {
+  return `Valid, disabled; ${p.checks.examplesPassed} example(s)` + (p.checks.testsPassed > 0 ? ` and ${p.checks.testsPassed} test(s)` : '') + ' passed.';
+}
+
+/** The dry run with the window it actually covered: an empty or short history is said, never hidden. */
+export function dryRunLine(d: ProposalDryRun): string {
+  if (d.totalEvents === 0 || !d.from || !d.to) return 'Dry run: no event of this network in memory, so nothing could be tested on real traffic.';
+  const day = (s: string) => s.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
+  return `Dry run on ${d.totalEvents} event(s) from ${day(d.from)} to ${day(d.to)}: ${d.eventsInScope} in scope, ${d.triggers} trigger(s), `
+    + `about ${d.estimatedAlertsPerDay.toFixed(1)} alert(s) per day.`;
 }

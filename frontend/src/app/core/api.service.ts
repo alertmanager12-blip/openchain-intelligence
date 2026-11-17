@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -83,6 +83,9 @@ export class ApiService {
   }
   investigationReviews(id: string): Observable<InvestigationReviews> {
     return this.http.get<InvestigationReviews>(`${this.base}/investigations/${this.enc(id)}/reviews`);
+  }
+  ruleProposals(id: string): Observable<RuleProposals> {
+    return this.http.post<RuleProposals>(`${this.base}/investigations/${this.enc(id)}/rule-proposals`, {});
   }
   reviewAssertion(id: string, assertionId: string, decision: ReviewDecision, comment: string | null): Observable<AssertionReview> {
     return this.http.post<AssertionReview>(`${this.base}/investigations/${this.enc(id)}/assertions/${this.enc(assertionId)}/reviews`,
