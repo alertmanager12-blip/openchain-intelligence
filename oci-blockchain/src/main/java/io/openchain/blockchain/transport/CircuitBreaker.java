@@ -22,6 +22,11 @@ public final class CircuitBreaker {
     private int consecutiveFailures;
     private Instant openedAt;
     private boolean probeInFlight;
+    /** Why the circuit last opened: the failure that tripped it, for the logs (null while it never opened). */
+    private String openReason;
+    private String lastOpenCause;
+
+    private static final System.Logger LOG = System.getLogger(CircuitBreaker.class.getName());
 
     public CircuitBreaker(String name, int failureThreshold, Duration openDuration, Clock clock) {
         this.name = name;
@@ -35,6 +40,9 @@ public final class CircuitBreaker {
         return state;
     }
 
+    /** The failure that last opened the circuit, as "Class: message" (class only for an exception that is not ours). */
+    public synchronized String lastOpenCause() { return lastOpenCause; }
+
     public <T> T execute(Supplier<T> call) {
         acquirePermission();
         try {
@@ -42,19 +50,19 @@ public final class CircuitBreaker {
             onSuccess();
             return result;
         } catch (ProviderException e) {
-            if (e.retryable()) onFailure(); else onSuccess();
+            if (e.retryable()) onFailure(e); else onSuccess();
             throw e;
         } catch (RuntimeException | Error e) {
             // an Error too (OutOfMemoryError while reading a response): otherwise a half-open probe that dies this way
             // leaves probeInFlight set, and the endpoint is refused for ever
-            onFailure();
+            onFailure(e);
             throw e;
         }
     }
 
     private synchronized void acquirePermission() {
         State s = state();
-        if (s == State.OPEN) throw new CircuitOpenException("circuit open for endpoint " + name);
+        if (s == State.OPEN) throw new CircuitOpenException("circuit open for endpoint " + name + " (" + openReason + ")");
         if (s == State.HALF_OPEN) {
             if (probeInFlight) throw new CircuitOpenException("circuit half-open (probe in flight) for endpoint " + name);
             probeInFlight = true;
@@ -67,12 +75,27 @@ public final class CircuitBreaker {
         state = State.CLOSED;
     }
 
-    private synchronized void onFailure() {
+    private synchronized void onFailure(Throwable cause) {
         probeInFlight = false;
         consecutiveFailures++;
         if (state == State.HALF_OPEN || consecutiveFailures >= failureThreshold) {
+            lastOpenCause = describe(cause);
+            openReason = (state == State.HALF_OPEN ? "half-open probe failed" : "after " + consecutiveFailures + " consecutive failure(s)")
+                    + ", last: " + lastOpenCause;
             state = State.OPEN;
             openedAt = clock.instant();
+            LOG.log(System.Logger.Level.WARNING, "circuit opened for endpoint {0} for {1}: {2}", name, openDuration, openReason);
         }
+    }
+
+    /**
+     * Our provider exceptions carry the endpoint name and a status, never the URL (which may hold a key); any other
+     * exception is named by its class only.
+     */
+    static String describe(Throwable t) {
+        String c = t.getClass().getSimpleName();
+        if (!(t instanceof ProviderException) || t.getMessage() == null) return c;
+        String m = t.getMessage();
+        return c + ": " + (m.length() > 200 ? m.substring(0, 200) + "..." : m);
     }
 }

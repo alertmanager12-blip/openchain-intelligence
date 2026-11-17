@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (operations)
+
+- **An open circuit now names the failure that opened it.** After a restart, prod logged only "circuit open for endpoint ..." on both chains, never the cause. The breaker keeps the failure that tripped it (our provider errors: endpoint name and status, never the URL; any other exception: its class only), puts it in the open-circuit message, and logs one warning each time it opens.
+
 ### Added (phase 3 — investigations in the console, ADR-0022 amendment 2, fourth step)
 
 - **"Investigations" page** (menu Investigate, shortcut `v`) and **"Investigate"** on the wallet page: run the plan on a wallet and read its report section by section, every sentence with its level (observed, inferred, confirmed) and the id of the assertion it comes from; clicking the id shows the assertion with its exact parameters and evidence. Versions, the changes since the previous one and the STALE mark are shown; "Run again" makes a new version.
