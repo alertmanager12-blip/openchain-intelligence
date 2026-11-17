@@ -236,6 +236,24 @@ export interface ExposureEntry {
   confidence?: number | null;
 }
 
+/** A relation between wallets: an inference, never identity (phase 2). */
+export interface WalletRelation {
+  other: string;
+  type: 'COMMON_FUNDER' | 'COMMON_SINK' | 'SHARED_COUNTERPARTIES';
+  level: 'INFERRED';
+  confidence: number;
+  via: string | null;
+  eventIds: string[];
+  explanation: string;
+}
+
+export interface WalletRelations {
+  address: string;
+  network: NetworkId;
+  relations: WalletRelation[];
+  limits: string[];
+}
+
 export interface IgnoredTransfer {
   counterparty: string;
   category: string;
@@ -319,6 +337,51 @@ export interface Graph {
   status?: 'COMPLETE' | 'PARTIAL' | null;
   stops?: GraphStop[] | null;
   asOfBlock?: number | null;
+}
+
+export type TraceStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+
+export interface TraceSummary {
+  id: string; lineageId: string; version: number; previousId: string | null; network: NetworkId; seed: string;
+  direction: 'FORWARD' | 'BACKWARD'; status: TraceStatus; resultStatus: 'COMPLETE' | 'PARTIAL' | null; stale: boolean;
+  createdBy: string | null; createdAt: string; completedAt: string | null;
+}
+
+/** Exact raw amount as a fraction (no rounding until display). */
+export interface Fraction { num: number | string; den: number | string }
+
+export interface TraceResultJson {
+  status: 'COMPLETE' | 'PARTIAL';
+  nodes: { address: { value: string }; depth: number; labels: string[] }[];
+  edges: { eventId: string; aliases: string[]; txHash: string; timestamp: string; from: { value: string }; to: { value: string };
+    tokenKey: string; rawAmount: number | string; token: Token }[];
+  attributions: { address: { value: string }; tokenKey: string; depth: number; low: Fraction; high: Fraction; partial: boolean }[];
+  stops: { address: { value: string }; tokenKey: string | null; reason: string; detail: string }[];
+  findings: { type: string; level: string; addresses: { value: string }[]; eventIds: string[]; detail: string }[];
+}
+
+export interface TraceDetail extends Omit<TraceSummary, never> {
+  staleEventIds: string[] | null; engineVersion: string; error: string | null; frozenFlows: number;
+  request: unknown; result: TraceResultJson | null;
+  diff: { evidence: { kind: 'ADDED' | 'REMOVED' | 'MOVED'; beforeEventId: string | null; afterEventId: string | null; txHash: string }[];
+    attributions: { address: { value: string }; tokenKey: string }[] } | null;
+}
+
+export interface InvestigationAssertion {
+  id: string; type: string; step: string; level: 'OBSERVED' | 'INFERRED' | 'CONFIRMED'; subject: string;
+  params: Record<string, string>; evidence: string[];
+}
+
+export interface InvestigationReport {
+  plan: string; templates: string; subject: string; assertions: number;
+  sections: { title: string; sentences: { text: string; assertionId: string; level: string }[] }[];
+}
+
+export interface InvestigationDetail {
+  id: string; lineageId: string; version: number; previousId: string | null; network: NetworkId; subject: string; plan: string;
+  status: TraceStatus; resultStatus: 'COMPLETE' | 'PARTIAL' | null; stale: boolean; staleEventIds: string[] | null; error: string | null;
+  createdBy: string | null; createdAt: string; completedAt: string | null; frozenFlows: number;
+  assertions: InvestigationAssertion[] | null; diff: { added: string[]; removed: string[] } | null; report: InvestigationReport | null;
 }
 
 /** A path value could have taken (directed, chronological, one token), computed by the server. */

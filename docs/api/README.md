@@ -30,9 +30,10 @@ Base path: `/api/v1`. JSON over HTTPS, UTF-8. An OpenAPI 3.1 document is served 
 | `webhooks:read` / `webhooks:write` | connector listing / connector create, delete, test |
 | `labels:report` | submit and list label reports |
 | `watchlist:write` | add and remove the organisation's own wallets (reading the watchlist needs `wallet:read`) |
+| `investigation:write` | run, re-run and cancel stored traces (they use provider quota and storage) |
 | `keys:admin` | API keys, users, operational (actuator) endpoints |
 
-Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `watchlist:write`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
+Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `watchlist:write`, `investigation:write`), `RULE_AUTHOR` (+ `rules:write`), `ADMIN` (+ `webhooks:write`, `keys:admin`). API keys are never accepted in URL query parameters (400). A key can only be created with permissions its creator holds.
 
 ## Errors — RFC 9457 `application/problem+json`
 
@@ -99,6 +100,13 @@ On 429, `Retry-After` (seconds) is set. Expensive endpoints (`/graph`, `/rules/{
 | GET | `/wallets/{address}/transactions?network=&cursor=&limit=` | transaction:read | Transactions, newest first, cursor paginated (`token`/`from`/`to`/`direction` filters: not implemented yet) |
 | GET | `/wallets/{address}/risk?network=` | risk:read | Current `RiskScore` + recent history |
 | GET | `/wallets/{address}/exposure?network=&depth=1..3` | investigation:read | Exposure to addresses listed in a risky category, qualified like the exposure detector: `direct[]` with exact `amounts` per token and `txHashes`, `indirect[]` with `path`, `traced` (at most this amount, in one token) and `confidence`; `ignored[]` (unverified token, dust: not exposure), `counterparties[]` (exchange, protocol: information), `coverage` (`COMPLETE` for `fromBlock..toBlock` only when history and live indexing join without a hole, else `PARTIAL` with reasons; `segments`, `knownGaps`). Amounts are never added across tokens. `share` is deprecated (sum over all tokens, no unit) |
+| GET | `/wallets/{address}/relations?network=` | investigation:read | Possibly related wallets: `COMMON_FUNDER` (same sender within 24 h, not a distributor of more than 20 wallets), `COMMON_SINK` (both send at least half of a token's outflow to the same address), `SHARED_COUNTERPARTIES` (at least 3 common recipients, confidence by overlap). Each relation is `INFERRED` with a `confidence`, `via`, its `eventIds` and an explanation; services (labelled exchange, bridge, protocol, other, or more than 5,000 flows), dust and unverified tokens never link wallets. Not proof of common ownership |
+| POST | `/traces` | investigation:write | `{ network, seed, direction: out\|in, depth?, maxNodes?, token?, method?: PROPORTIONAL\|FIFO, from?, to? }` → 202: a stored trace (ADR-0022), queued; poll `GET /traces/{id}`. 429 when the client's budget (3 running, 100 per day) or the queue is full |
+| GET | `/traces`, `/traces/{id}`, `/traces/{id}/evidence`, `/traces/{id}/export` | investigation:read | The client's traces: status, request, result, diff with the previous version, `stale` (a frozen flow was retracted by a reorganisation), the frozen flows; export is audited. Another client's trace answers 404 like an unknown id |
+| POST | `/traces/{id}/rerun`, `/traces/{id}/cancel` | investigation:write | A new version on the current data (with its diff); cancel a run still pending |
+| POST | `/investigations` | investigation:write | `{ network, address }` → 202: runs the deterministic plan `plan@1` (coverage, labels, exposure, traces out and in, patterns, relations, signals) on frozen evidence; same budgets as traces |
+| GET | `/investigations`, `/investigations/{id}`, `/investigations/{id}/report` | investigation:read | The client's investigations: typed `assertions` (level, exact parameters, evidence, deterministic id) and a `report` built only from them, every sentence citing its assertion; coverage and limits first. Another client's investigation answers 404 |
+| POST | `/investigations/{id}/rerun` | investigation:write | A new version on the current data, with the assertions added and removed |
 | GET | `/transactions/{hash}/analysis?network=` | transaction:read | Decoded transfers, counterparties' risk, signals for this tx, confirmation status |
 
 Example — `GET /api/v1/wallets/TXYZ…/analysis?network=tron`:

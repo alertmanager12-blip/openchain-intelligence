@@ -116,6 +116,13 @@ public class InvestigationController {
         return investigation.risk(a, true);
     }
 
+    /** Relations with other wallets: inferences (common funder, common destination, shared counterparties), never identity. */
+    @GetMapping("/wallets/{address}/relations")
+    public Dto.WalletRelationsDto relations(@PathVariable String address, @RequestParam String network) {
+        Network n = investigation.network(network);
+        return investigation.relations(investigation.address(n, address));
+    }
+
     @GetMapping("/wallets/{address}/exposure")
     public Dto.ExposureDto exposure(@PathVariable String address, @RequestParam String network,
                                     @RequestParam(defaultValue = "3") int depth) {

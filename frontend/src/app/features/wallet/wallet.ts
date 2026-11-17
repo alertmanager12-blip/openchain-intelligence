@@ -68,6 +68,19 @@ export class WalletPage {
   readonly notEnabled = computed(() => isNetworkNotEnabled(this.w.error()));
   private readonly pollMs = inject(HISTORY_POLL_MS);
   readonly exp = apiResource({ params: this.key, stream: (k) => this.api.walletExposure(k.address, k.network) });
+  readonly rel = apiResource({ params: this.key, stream: (k) => this.api.walletRelations(k.address, k.network) });
+  readonly investigating = signal(false);
+
+  /** Runs the investigation plan on this wallet (ADR-0022 amendment 2) and opens its report. */
+  investigate(): void {
+    this.investigating.set(true);
+    this.api.createInvestigation(this.network(), this.address()).subscribe({
+      next: (i) => { this.investigating.set(false); void this.router.navigate(['/investigations'], { queryParams: { id: i.id } }); },
+      error: (e: { title: string; detail?: string | null }) => { this.investigating.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+    });
+  }
+
+  readonly relLabel = (t: string) => (t === 'COMMON_FUNDER' ? 'common funder' : t === 'COMMON_SINK' ? 'common destination' : 'shared counterparties');
 
   /** Transaction pages: the cursor resets when the wallet changes; pages accumulate for "Load more". */
   private readonly cursor = linkedSignal<string, string | null>({ source: () => this.address() + this.network(), computation: () => null });

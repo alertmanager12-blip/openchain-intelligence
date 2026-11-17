@@ -34,6 +34,7 @@ describe('WalletPage on a network this instance does not index', () => {
       networks: () => of(enabled.map((network) => ({ network, enabled: true }) as NetworkStatus)),
       walletAnalysis: (_: string, n: string) => throwError(() => notEnabled(n)),
       walletExposure: (_: string, n: string) => throwError(() => notEnabled(n)),
+      walletRelations: (_: string, n: string) => throwError(() => notEnabled(n)),
       walletTransactions: (_: string, n: string) => throwError(() => notEnabled(n)),
       watchlist: () => of([]),
     };

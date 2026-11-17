@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
  * Fund Flow Trace P0-D, first part: scenarios 1, 2, 5, 8 to 13 of docs/FUND_FLOW_TRACE_P0_D_ENGINE.md § 5, plus
  * determinism and limits. Amounts in whole units of a 0-decimal test token, so that raw = human.
  */
-class TraceEngineTest {
+public class TraceEngineTest {
     static final Network NET = Network.ETHEREUM;
     static final Token USD = new Token(NET, "0xusd0000000000000000000000000000000000001", "USDT", 0);
     static final Token ETH = Token.nativeOf(NET, "ETH", 0);
@@ -40,14 +40,14 @@ class TraceEngineTest {
 
     /** In-memory source: flows, coverage, opening balances (default 0, i.e. known empty), labels. */
     public static final class Src implements Trace.Source {
-        final List<ValueFlow> flows = new ArrayList<>();
-        final Set<Address> incomplete = new HashSet<>();
-        final Map<Address, Optional<BigInteger>> opening = new HashMap<>();
+        public final List<ValueFlow> flows = new ArrayList<>();
+        public final Set<Address> incomplete = new HashSet<>();
+        public final Map<Address, Optional<BigInteger>> opening = new HashMap<>();
         final Map<Address, List<AddressLabel>> labels = new HashMap<>();
         int seq;
 
-        ValueFlow flow(Address from, Address to, long amount, int t) { return flow(from, to, amount, USD, t); }
-        ValueFlow flow(Address from, Address to, long amount, Token tok, int t) {
+        public ValueFlow flow(Address from, Address to, long amount, int t) { return flow(from, to, amount, USD, t); }
+        public ValueFlow flow(Address from, Address to, long amount, Token tok, int t) {
             String tx = "0x%064x".formatted(++seq);
             ValueFlow f = new ValueFlow(NET.id() + ":" + tx + ":0", NET, tx, T0.plusSeconds(60L * t), from, to, tok, BigInteger.valueOf(amount));
             flows.add(f);
@@ -60,7 +60,7 @@ class TraceEngineTest {
             return opening.getOrDefault(x, Optional.of(BigInteger.ZERO));
         }
         @Override public List<AddressLabel> labels(Address x) { return labels.getOrDefault(x, List.of()); }
-        void label(Address x, LabelCategory c) {
+        public void label(Address x, LabelCategory c) {
             labels.computeIfAbsent(x, k -> new ArrayList<>()).add(new AddressLabel(x, c, "test " + c, "test-list", 1.0, T0,
                     c == LabelCategory.SANCTIONED ? EvidenceLevel.CONFIRMED_BY_SOURCE : EvidenceLevel.RISK_SIGNAL, "test://" + x.value()));
         }

@@ -2,8 +2,10 @@
 
 Statut : **socle implémenté le 2026-11-16** (décision D1, option b) : table `client_scopes` (V12), `client_scope_id` sur
 `api_keys` et `users`, périmètre porté par la clé ou par la revendication OIDC (`oci.security.multi-client`, désactivé par
-défaut), administration des clés limitée au périmètre de l'appelant, tests N8 et N9. Restent avec l'API de traçage : les
-tables du traçage avec `client_scope_id` et RLS, les tests N1 à N7 et N10 à N12, le journal `audit_log`. Le nom retenu est
+défaut), administration des clés limitée au périmètre de l'appelant, tests N8 et N9. Fait le 2026-11-17 avec l'API de traçage (ADR-0022) :
+tables `trace_artifacts` avec `client_scope_id` et RLS forcée (V14), tests N1 à N12 (`TraceApiTest`, N8 `JwtClientScopeTest`,
+N10 `TraceArtifactStoreTest`). Reste : le journal `audit_log` (le journal `oci.audit` trace création, relance, annulation et
+export), et un rôle PostgreSQL non superutilisateur pour que la RLS s'applique en production. Le nom retenu est
 `client_scope` (et non `scope`), pour ne pas le confondre avec les permissions des clés (`api_keys.scopes`).
 
 Texte d'origine (2026-11-12, code de `94ea42c`), stratégie : **[F]** fait vérifié (référence) ;

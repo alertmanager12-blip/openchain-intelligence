@@ -4,6 +4,7 @@
       [matTooltip]="watched() ? 'One of your wallets: behavioural rules focus on it' : 'Add to your own wallets: behavioural rules will focus on it'">
       {{ watched() ? 'Unwatch' : 'Watch' }}</button>
     <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">Risk breakdown</a>
+    <button matButton="outlined" class="hide-sm" type="button" [disabled]="investigating()" (click)="investigate()" title="Run the investigation plan on this wallet and keep its report">Investigate</button>
     <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
   </oci-page-header>
 
@@ -196,6 +197,21 @@
                     <li><oci-addr [address]="c.counterparty" [network]="network()" /> {{ c.category }} ({{ c.source }}), {{ c.transfers }} transfer(s)</li>
                   }
                 </ul>
+              }
+              <h3 class="small strong">Possibly related wallets</h3>
+              @if (rel.error()) {
+                <p class="small muted">Relations unavailable ({{ rel.error()!.title }}).</p>
+              } @else if (rel.value(); as r) {
+                <p class="small muted">Inferred from on-chain flows (common funder, common destination, shared counterparties). Services such as exchanges never link wallets. Not proof of common ownership or control.</p>
+                @if (r.relations.length === 0) {
+                  <p class="small">No relation found in the data covered.</p>
+                } @else {
+                  <ul class="small">
+                    @for (x of r.relations; track x.other + x.type) {
+                      <li><oci-addr [address]="x.other" [network]="network()" />: {{ relLabel(x.type) }}@if (x.via) { via <oci-addr [address]="x.via" [network]="network()" /> }, confidence {{ x.confidence }}, {{ x.eventIds.length }} transfer(s) as evidence</li>
+                    }
+                  </ul>
+                }
               }
             </oci-state>
           </mat-tab>

@@ -8,6 +8,39 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — investigations in the console, ADR-0022 amendment 2, fourth step)
+
+- **"Investigations" page** (menu Investigate, shortcut `v`) and **"Investigate"** on the wallet page: run the plan on a wallet and read its report section by section, every sentence with its level (observed, inferred, confirmed) and the id of the assertion it comes from; clicking the id shows the assertion with its exact parameters and evidence. Versions, the changes since the previous one and the STALE mark are shown; "Run again" makes a new version.
+
+### Added (phase 3 — investigations and their report, ADR-0022 amendment 2, second and third steps)
+
+- **Investigation report** built only from the stored assertions (`report@1`): every sentence is a fixed template filled with one assertion and cites its id; coverage and limits come first; "no direct exposure in blocks X to Y" only with complete coverage, otherwise "none found in the data covered, not proof that none exists"; relations worded "may be related, not proof of common ownership or control"; amounts exact and shown in token units.
+- **`/investigations`**: run the plan on an address as a stored, queued job with its frozen evidence and inputs (`V15__investigation_artifacts`: investigations are artifacts of kind `INVESTIGATION`, with the same client scope, row-level security, versions, budgets and STALE marking as traces), read its assertions and report, re-run it as a new version with the assertions added and removed. Replaying an investigation on its frozen evidence gives the same assertions (tested on PostgreSQL).
+
+### Added (phase 3 — deterministic investigation plan, ADR-0022 amendment 2, first step)
+
+- **Investigation plan `plan@1`** (`oci-intelligence`, `io.openchain.intelligence.investigation`; not exposed yet): on one address, in a fixed order, coverage, labels, direct exposure (and ignored transfers), traces out and in (attributions, stops), patterns, relations and the detectors' signals, each as a typed assertion with exact parameters, its evidence and a deterministic id; no free text. Levels follow ADR-0023 amendment 1: facts about the flows and the run are OBSERVED, a label is CONFIRMED only when its source confirms it, and exposure, attribution, patterns, relations and signals are INFERRED even when built on a confirmed label. The same inputs give the same assertions, and so does a replay on the frozen evidence.
+
+### Added (phase 3 — stored traces in the console, ADR-0022 amendment 1, fourth step)
+
+- **"Stored traces" page** (menu Investigate, shortcut `t`): the client's traces with status, version and the STALE mark; for one trace, its request, the value attributed per wallet and token (method stated as a convention; an interval when an opening balance is unknown), the patterns found, where it stopped, the changes since the previous version, and actions to run it again (new version), cancel a pending run, export the JSON and open the seed in the graph. **"Save trace"** on the fund flow graph stores the trace of the root in the chosen direction (Out or In) and opens it.
+
+### Added (phase 3 — stale traces after a reorganisation, ADR-0022 amendment 1, third step)
+
+- **A transfer that leaves the canonical chain marks `STALE` every stored trace that froze it**, in every client scope, with the event ids concerned (`GET /traces/{id}`: `stale`, `staleEventIds`). The trace stays readable as it was computed and explainable from its frozen evidence; re-run it for a new version on the current chain. A failure to mark is logged and never stops ingestion.
+
+### Added (phase 3 — trace API, ADR-0022 amendment 1, second step)
+
+- **`/traces`**: run the trace engine as a stored, queued job (`POST /traces`, 202), poll it (`GET /traces/{id}`), list the client's traces, read the frozen evidence, export (audited), re-run as a new version with its diff, cancel a pending run. One worker and a bounded queue of 50, off the ingestion path; runs left unfinished by a restart resume at start. Budgets per client: 3 traces pending or running, 100 per day (429 beyond). New permission **`investigation:write`** (role ANALYST and above); existing API keys keep their permissions: an administrator adds it to a key that should run traces. Every route is limited to the caller's client scope: another client's trace answers 404 exactly like an unknown id (negative tests N1-N12).
+
+### Added (phase 3 — trace artifacts, ADR-0022 amendment 1, first step)
+
+- **Stored trace runs with their frozen evidence** (`V14__trace_artifacts`; not exposed by the API yet). A run of the trace engine is stored with its request, engine version, result, and every flow, label, coverage flag and opening balance it read; running the engine again on that evidence gives the same result. A run on newer data is a new version of the same lineage, with the `TraceDiff` against the previous one; a stored version is never recomputed. An artifact holding a flow later retracted by a reorganisation is marked `STALE` with the event ids concerned. Every row carries its client scope; reads always filter by it, and row-level security policies (forced) hide other scopes' rows from any role that is not superuser or `BYPASSRLS`. The production database user is the owner superuser today, so there the repository filter is the guarantee; a dedicated non-superuser role is needed for the policies to apply.
+
+### Added (phase 2 — relations between wallets)
+
+- **`GET /wallets/{a}/relations`** and "Possibly related wallets" in the wallet page's Exposure tab: wallets that share a funder within 24 h, send most of a token's outflow to the same address, or share at least 3 recipients. Every relation is an inference (`INFERRED`) with a confidence, the transfers it rests on and the wording "may be related; not proof of common ownership or control". False links are the main risk, so a service (labelled exchange, bridge, protocol or other, or more than 5,000 flows), a funder of more than 20 wallets in the window (payroll, airdrop), dust and unverified tokens never link wallets. This completes the phase 2 acceptance criterion "100 % of wallet relations marked INFERRED with confidence and evidence".
+
 ### Fixed (address histories could stop live indexing)
 
 - **Address histories and the freeze backfill no longer share live indexing's provider client.** On 2026-11-16 several TRON address histories made TronGrid refuse requests and opened the circuit breaker that live indexing also used: TRON stopped for about 80 minutes. Each real network now has two clients on the same endpoints, each with its own circuit breaker and rate limiter: live indexing (8 requests/s, burst 16) and background work (2 requests/s, burst 4). Together they send no more requests than the previous single client (10/s). A background breaker is named `<network>-background-primary` in the logs.

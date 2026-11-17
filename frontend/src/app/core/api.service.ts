@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -60,6 +60,9 @@ export class ApiService {
   walletRisk(address: string, network: NetworkId): Observable<RiskScore> {
     return this.http.get<RiskScore>(`${this.base}/wallets/${this.enc(address)}/risk`, { params: params({ network }) });
   }
+  walletRelations(address: string, network: NetworkId): Observable<WalletRelations> {
+    return this.http.get<WalletRelations>(`${this.base}/wallets/${this.enc(address)}/relations`, { params: params({ network }) });
+  }
   walletExposure(address: string, network: NetworkId): Observable<Exposure> {
     return this.http.get<Exposure>(`${this.base}/wallets/${this.enc(address)}/exposure`, { params: params({ network }) });
   }
@@ -69,6 +72,25 @@ export class ApiService {
   graph(address: string, q: GraphQuery): Observable<Graph> {
     return this.http.get<Graph>(`${this.base}/graph/${this.enc(address)}`, { params: params({ ...q }) });
   }
+  // --- investigations (ADR-0022 amendment 2)
+  investigations(): Observable<TraceSummary[]> { return this.http.get<TraceSummary[]>(`${this.base}/investigations`); }
+  investigation(id: string): Observable<InvestigationDetail> { return this.http.get<InvestigationDetail>(`${this.base}/investigations/${this.enc(id)}`); }
+  createInvestigation(network: NetworkId, address: string): Observable<InvestigationDetail> {
+    return this.http.post<InvestigationDetail>(`${this.base}/investigations`, { network, address });
+  }
+  rerunInvestigation(id: string): Observable<InvestigationDetail> {
+    return this.http.post<InvestigationDetail>(`${this.base}/investigations/${this.enc(id)}/rerun`, {});
+  }
+
+  // --- stored traces (ADR-0022)
+  traces(): Observable<TraceSummary[]> { return this.http.get<TraceSummary[]>(`${this.base}/traces`); }
+  trace(id: string): Observable<TraceDetail> { return this.http.get<TraceDetail>(`${this.base}/traces/${this.enc(id)}`); }
+  createTrace(r: { network: NetworkId; seed: string; direction: 'out' | 'in'; depth?: number }): Observable<TraceDetail> {
+    return this.http.post<TraceDetail>(`${this.base}/traces`, r);
+  }
+  rerunTrace(id: string): Observable<TraceDetail> { return this.http.post<TraceDetail>(`${this.base}/traces/${this.enc(id)}/rerun`, {}); }
+  cancelTrace(id: string): Observable<TraceDetail> { return this.http.post<TraceDetail>(`${this.base}/traces/${this.enc(id)}/cancel`, {}); }
+  exportTrace(id: string): Observable<unknown> { return this.http.get<unknown>(`${this.base}/traces/${this.enc(id)}/export`); }
   graphPath(source: string, target: string, network: NetworkId, token?: string): Observable<GraphPath> {
     return this.http.get<GraphPath>(`${this.base}/graph/${this.enc(source)}/path`, { params: params({ network, target, token }) });
   }

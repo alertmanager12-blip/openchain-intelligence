@@ -211,7 +211,10 @@ class WorkingSetRestartTest {
      */
     static String wallClockFree(String profile) {
         return profile.replaceAll("computedAt=[^,\\]]+", "computedAt=*").replaceAll("ageSeconds=\\d+", "ageSeconds=*")
-                .replaceAll(", age [^,]+, decay", ", age *, decay");
+                .replaceAll(", age [^,]+, decay", ", age *, decay")
+                // the decay depends on the signal's age by the wall clock: a run that lasts (a laptop asleep mid-test,
+                // 2026-11-17) turns 1.000 into 0.999, which says nothing about the restart
+                .replaceAll("decay \\d+\\.\\d+ -> q=\\d+\\.\\d+", "decay * -> q=*");
     }
 
     /** Entries that differ, each shown as "key: restarted ≠ reference" (readable failure on large maps). */

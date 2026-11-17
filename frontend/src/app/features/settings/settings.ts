@@ -22,7 +22,7 @@ import { environment } from '../../../environments/environment';
 type Section = 'connection' | 'appearance' | 'keys' | 'users';
 
 // The backend's permissions (Scopes.java): an unknown one is rejected when the key is created.
-const SCOPES = ['wallet:read', 'transaction:read', 'risk:read', 'investigation:read', 'alerts:read', 'alerts:write', 'rules:read',
+const SCOPES = ['wallet:read', 'transaction:read', 'risk:read', 'investigation:read', 'investigation:write', 'alerts:read', 'alerts:write', 'rules:read',
   'rules:write', 'webhooks:read', 'webhooks:write', 'labels:report', 'watchlist:write', 'keys:admin'];
 
 @Component({

@@ -191,6 +191,13 @@ public final class Dto {
     /** Blocks that were not indexed (inclusive). */
     public record IndexingGapDto(long fromBlock, long toBlock, String cause, Instant detectedAt) {}
 
+    /** A relation between wallets: an inference (INFERRED), with a confidence and the transfers it rests on; never identity. */
+    public record WalletRelationDto(String other, String type, String level, double confidence, String via, List<String> eventIds,
+                                    String explanation) {}
+
+    public record WalletRelationsDto(String address, String network, List<WalletRelationDto> relations, List<String> limits,
+                                     CoverageDto coverage) {}
+
     public record ExposureDto(String address, String network, int depth, List<ExposureEntryDto> direct,
                               List<ExposureEntryDto> indirect, List<IgnoredTransferDto> ignored,
                               List<LabelledCounterpartyDto> counterparties, CoverageDto coverage) {}

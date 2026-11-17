@@ -24,6 +24,8 @@ export const NAV: NavGroup[] = [
     { path: '/explorer', label: 'Explorer', key: 'e', icon: 'M7 2.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM10.3 10.3 13.5 13.5', keywords: 'search transaction address lookup' },
     { path: '/risk', label: 'Wallet risk', key: 'r', icon: 'M2 12.5a6 6 0 0 1 12 0M8 12.5 10.8 7', keywords: 'score contributions' },
     { path: '/investigation', label: 'Fund flow graph', key: 'f', icon: 'M4 4.5a1.5 1.5 0 1 0 0-.01M12 4a1.5 1.5 0 1 0 0-.01M8 12.5a1.5 1.5 0 1 0 0-.01M5.3 4.6l5.2-.4M4.8 5.8l2.4 5.2M11.4 5.4 8.9 11', keywords: 'graph trace investigation flows' },
+    { path: '/traces', label: 'Stored traces', key: 't', icon: 'M3 2.5h7l3 3v8H3zM10 2.5v3h3M5.5 8h5M5.5 10.5h5', keywords: 'trace saved investigation versions evidence' },
+    { path: '/investigations', label: 'Investigations', key: 'v', icon: 'M3 2.5h10v11H3zM5.5 5.5h5M5.5 8h5M5.5 10.5h3', keywords: 'report assertions plan evidence' },
     { path: '/community', label: 'Community labels', key: 'l', icon: 'M2.5 3.5h6l5 5-5 5-5-5zM5.5 6.5h.01', keywords: 'labels report tags' },
   ] },
   { title: 'Monitor', items: [

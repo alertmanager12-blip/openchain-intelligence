@@ -82,10 +82,16 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/transactions").hasAuthority(authority(Scopes.TRANSACTION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/risk").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/wallets/*/exposure").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        .requestMatchers(HttpMethod.GET, API + "/wallets/*/relations").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/transactions/**").hasAuthority(authority(Scopes.TRANSACTION_READ))
                         .requestMatchers(HttpMethod.GET, API + "/graph/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         // a read: checks which displayed transfers are still held (Fund Flow Trace P0-C)
                         .requestMatchers(HttpMethod.POST, API + "/graph/verify").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        // stored traces (ADR-0022): reading needs investigation:read, running investigation:write
+                        .requestMatchers(HttpMethod.GET, API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        .requestMatchers(API + "/traces", API + "/traces/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
+                        .requestMatchers(HttpMethod.GET, API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        .requestMatchers(API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))
                         // demo evidence (demo mode only): wallets + alerts

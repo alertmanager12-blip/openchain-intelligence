@@ -333,7 +333,7 @@ public class InvestigationService {
 
     /** Which blocks the answer rests on (Fund Flow Trace P0-B): {@link AddressCoverage}, plus the known blind spots. */
     /** Coverage of one address (Fund Flow Trace P0-B): address history, blocks indexed live, recorded gaps, trim. */
-    AddressCoverage.Result addressCoverage(Address a) {
+    public AddressCoverage.Result addressCoverage(Address a) {
         Network n = a.network();
         Dto.HistoryCoverageDto h = history.coverage(a);
         AddressCoverage.History hist = "NOT_CONFIGURED".equals(h.status()) ? null : new AddressCoverage.History(h.status(),
@@ -486,7 +486,7 @@ public class InvestigationService {
     // ---- directed graph (Fund Flow Trace P0-C) ------------------------------------------------------------------
 
     /** Flows held in memory, labels, and the P0-B coverage of each address; opening balances unknown. */
-    private Trace.Source traceSource() {
+    public Trace.Source traceSource() {
         return new Trace.Source() {
             @Override public List<ValueFlow> outgoing(Address a) { return intelligence.flows().outgoing(a); }
             @Override public List<ValueFlow> incoming(Address a) { return intelligence.flows().incoming(a); }
@@ -588,6 +588,15 @@ public class InvestigationService {
         Long asOf = chains.runtime(root.network()).map(ChainIngestionService.NetworkRuntime::lastIndexedBlock).filter(b -> b >= 0).orElse(null);
         return new Dto.GraphDto(root.value(), root.network().id(), nodes, edgeDtos, truncated, direction, partial ? "PARTIAL" : "COMPLETE",
                 List.copyOf(stops.values()), asOf);
+    }
+
+    /** Relations between this wallet and others (phase 2): inferences with confidence and evidence, never identity. */
+    public Dto.WalletRelationsDto relations(Address a) {
+        var r = io.openchain.intelligence.relations.WalletRelations.find(a, traceSource(),
+                io.openchain.intelligence.relations.WalletRelations.Config.defaults(intelligence.detectionConfig().exposure().dustThresholds()));
+        List<Dto.WalletRelationDto> rel = r.relations().stream().map(x -> new Dto.WalletRelationDto(x.other().value(), x.type().name(),
+                x.level(), x.confidence(), x.via() == null ? null : x.via().value(), x.eventIds(), x.explanation())).toList();
+        return new Dto.WalletRelationsDto(a.value(), a.network().id(), rel, r.limits(), coverage(a, intelligence.flows().involving(a)));
     }
 
     /** A path value could have taken from {@code source} to {@code target} (Fund Flow Trace P0-C, T9). */
