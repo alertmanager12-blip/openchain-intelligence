@@ -63,3 +63,44 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
   and the frozen flows keep it explainable later.
 - Tests required before this amendment is considered implemented: replay on frozen flows gives the same result;
   a new version links its `TraceDiff`; `STALE` after a retraction; N1-N12; budgets refuse a run beyond them.
+
+## Amendment 2 (2026-11-17): a deterministic investigation plan and a report made only of assertions
+
+- Status: proposed (phase 3 of `docs/strategy/FEATURE_ROADMAP.md`: "deterministic investigation plan" and "structured
+  report"; this text awaits review). Builds on amendment 1 (trace artifacts) and ADR-0023 amendment 1 (levels, coverage).
+
+### Decision
+
+1. **An investigation runs a fixed plan on one subject** (an address on a network), versioned as `plan@1`. The steps run in
+   this order, each on evidence frozen at the start of the investigation, each producing typed assertions:
+   1. *Coverage* of the subject (P0-B): which blocks the answers rest on. One assertion, its state, never "complete" unless
+      `AddressCoverage` says so.
+   2. *Labels* of the subject (source, version, date).
+   3. *Direct exposure* (`ExposurePaths`): one assertion per listed counterparty, with the transfers and amounts per token;
+      transfers ignored (dust, unverified token) are stated as ignored.
+   4. *Traces* out and in (two trace artifacts of amendment 1, linked to the investigation): value attributed per wallet,
+      the method stated, intervals kept, stops listed.
+   5. *Patterns* found by the traces (dispersion, consolidation, circulation, peel chain).
+   6. *Relations* with other wallets (`WalletRelations`).
+   7. *Signals* already detected on the subject by the detectors, with their own evidence.
+2. **An assertion** is: a type, a subject, parameters (addresses, amounts as exact strings, counts), a level (`OBSERVED`,
+   `INFERRED`, `CONFIRMED` under the rules of ADR-0023 amendment 1), the evidence (event ids, label source and version),
+   the step and plan version that produced it, and a deterministic id (hash of type, subject, parameters and evidence). It
+   carries **no free text**: wording comes from a fixed template per type.
+3. **The report is generated only from the stored assertions**: every sentence is a template filled with one assertion
+   and cites its id. JSON first; HTML and PDF later. Its first section states the coverage and the limits; a missing step
+   (budget, provider failure) is a stated limit, never silently skipped. Wording rules: no identity ("may be related"),
+   "no exposure found in blocks X to Y" only with `COMPLETE` coverage, a method of attribution always named as a convention.
+4. **Determinism**: the same subject, plan version, engine versions and frozen evidence give the same assertions, the same
+   ids and the same report text (tested). Running it again on newer data is a new version with the assertions added and
+   removed.
+5. **Storage and isolation** as amendment 1: client scope on every row, row-level security, 404 for another scope; the
+   investigation stores its assertions and the ids of its trace artifacts; a STALE trace makes the investigation STALE.
+6. **Not in this amendment**: human validation of assertions, rule proposals, AI summaries (each its own amendment).
+
+### Consequences
+
+- One investigation costs two traces (within the trace budgets) and in-memory reads; it adds nothing to the ingestion
+  working set.
+- Tests required: replay gives identical assertions and report; each assertion type has a template and a level rule
+  test (an inference is never CONFIRMED); "no exposure" without COMPLETE coverage never appears; a STALE trace propagates.
