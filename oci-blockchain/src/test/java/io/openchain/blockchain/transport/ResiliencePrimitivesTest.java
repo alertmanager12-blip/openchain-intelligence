@@ -108,6 +108,27 @@ class ResiliencePrimitivesTest {
         assertThat(cb.state()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 
+    /**
+     * Prod, 2026-11-17: after a restart both chains only logged "circuit open", never the failure that opened it. The open
+     * circuit now names that failure; an exception that is not ours shows its class only (its message could carry a URL).
+     */
+    @Test void anOpenCircuitNamesTheFailureThatOpenedIt() {
+        MutableClock clock = new MutableClock();
+        CircuitBreaker cb = new CircuitBreaker("tron-primary", 2, Duration.ofSeconds(10), clock);
+        assertThatThrownBy(() -> cb.execute(() -> { throw new ProviderException("tron-primary: timeout", true); }));
+        assertThatThrownBy(() -> cb.execute(() -> { throw new RetryPolicy.RetryAfterException("tron-primary: HTTP 403 forbidden", null); }));
+        assertThat(cb.lastOpenCause()).isEqualTo("RetryAfterException: tron-primary: HTTP 403 forbidden");
+        assertThatThrownBy(() -> cb.execute(() -> "x")).isInstanceOf(CircuitOpenException.class)
+                .hasMessageContaining("circuit open for endpoint tron-primary")
+                .hasMessageContaining("after 2 consecutive failure(s), last: RetryAfterException: tron-primary: HTTP 403 forbidden");
+
+        clock.advance(Duration.ofSeconds(10)); // a failed probe re-opens it with its own cause
+        assertThatThrownBy(() -> cb.execute(() -> { throw new IllegalStateException("https://host/secret-key/path"); }));
+        assertThat(cb.lastOpenCause()).isEqualTo("IllegalStateException");
+        assertThatThrownBy(() -> cb.execute(() -> "x")).isInstanceOf(CircuitOpenException.class)
+                .hasMessageContaining("half-open probe failed, last: IllegalStateException").hasMessageNotContaining("secret-key");
+    }
+
     @Test void retryDoesNotSpinOnOpenCircuit() {
         RecordingSleeper rec = new RecordingSleeper();
         RetryPolicy retry = new RetryPolicy(new ResilienceConfig(5, Duration.ofMillis(100), Duration.ofSeconds(1), 0, 0, 1, 5, Duration.ofSeconds(1)), rec);
