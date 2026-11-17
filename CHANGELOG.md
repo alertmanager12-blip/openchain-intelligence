@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — rule proposals from an investigation, ADR-0022 amendment 4, steps 1 and 2)
+
+- **Rule drafts from an investigation**: `GET /investigations/{id}/rule-proposals` turns the assertions into rule drafts by fixed templates (`proposal@1`, no AI): the next hop of a trace (the 5 addresses that received the most value), the common funder, a new dispersion by the subject, a new transfer with a listed counterparty. Every draft is `enabled: false`, cites its assertions and states its limits; it is shown only if valid for the rule loader and passing its own examples and tests, with a dry run on the in-memory event history (no notification possible). An assertion rejected by a review gives no draft. Nothing is stored: adopting a draft is `POST /rules`, which creates it disabled.
+
 ### Added (phase 3 — human review of assertions, ADR-0022 amendment 3, steps 1 to 3)
 
 - **Reviews in the console** (Investigations page): Accept, Reject and Needs evidence on every sentence of the report, with an optional comment; the current decision, its author, date and version (marked when decided on an earlier version) and the human comment are shown beside the sentence, which is never changed; a counter of reviewed assertions, an "Undecided only" filter, the review history of an assertion next to its evidence, and a warning when a STALE investigation has reviews. `investigation:review` in Settings → API keys.

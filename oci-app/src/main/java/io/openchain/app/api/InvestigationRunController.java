@@ -6,6 +6,7 @@ import io.openchain.app.security.ApiKeyService;
 import io.openchain.app.security.ClientScope;
 import io.openchain.app.trace.AssertionReview;
 import io.openchain.app.trace.AssertionReviewService;
+import io.openchain.app.trace.RuleProposalService;
 import io.openchain.app.trace.TraceArtifact;
 import io.openchain.app.trace.TraceArtifactService;
 import io.openchain.app.trace.TraceJson;
@@ -38,11 +39,14 @@ public class InvestigationRunController {
     private final TraceArtifactService runs;
     private final InvestigationService investigation;
     private final AssertionReviewService reviews;
+    private final RuleProposalService proposals;
 
-    public InvestigationRunController(TraceArtifactService runs, InvestigationService investigation, AssertionReviewService reviews) {
+    public InvestigationRunController(TraceArtifactService runs, InvestigationService investigation, AssertionReviewService reviews,
+                                      RuleProposalService proposals) {
         this.runs = runs;
         this.investigation = investigation;
         this.reviews = reviews;
+        this.proposals = proposals;
     }
 
     public record InvestigationRequest(String network, String address) {}
@@ -149,6 +153,21 @@ public class InvestigationRunController {
                 c.review().createdAt(), c.review().investigationVersion(), c.inherited())));
         return new Reviews(v.investigation().id(), v.investigation().version(), v.investigation().stale(),
                 v.history().stream().map(InvestigationRunController::dto).toList(), current, v.decided(), v.total());
+    }
+
+    /**
+     * Rule drafts proposed from this investigation (ADR-0022 amendment 4): checked and dry-run, never stored, always
+     * disabled. Adopting one is {@code POST /rules} (rules:write), which creates it disabled.
+     */
+    @GetMapping("/{id}/rule-proposals")
+    public RuleProposalService.View ruleProposals(@PathVariable String id, Authentication auth) {
+        try {
+            return proposals.propose(ClientScope.of(auth), id);
+        } catch (AssertionReviewService.NotFound e) {
+            throw ApiException.notFound(NOT_FOUND);
+        } catch (AssertionReviewService.NotFinished e) {
+            throw ApiException.conflict(e.getMessage());
+        }
     }
 
     static ReviewDto dto(AssertionReview r) {
