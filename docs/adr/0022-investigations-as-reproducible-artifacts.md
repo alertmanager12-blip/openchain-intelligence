@@ -157,13 +157,17 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
    byte for byte. Templates use existing fields only.
 2. **Templates of `proposal@1`**:
    - `TRACE_ATTRIBUTION` (an address value reached): alert when that address sends funds on (the next hop of the path).
+     Kept for the 5 addresses that received the most value (upper bound of the attribution); the others are listed as
+     not proposed, so that a dispersion to many small recipients does not drown the useful drafts.
    - `RELATION` with `COMMON_FUNDER`: alert when that funder sends to other addresses.
    - `PATTERN` dispersion or peel chain: the dispersion rule (model of `fund-splitting`) limited to the subject as sender.
    - `DIRECT_EXPOSURE`: alert on a new transfer between the subject and that listed counterparty.
 3. **What never becomes a proposal**: an assertion whose current review (amendment 3) is `REJECTED`; coverage and limit
    assertions. Any other assertion can; its current review (accepted, needs evidence, none) is shown with the proposal.
-4. **Every draft is checked before it is shown**: valid for the rule loader; embedded examples generated from its
-   evidence pass (the evidence event `MATCH`, a counter-example `NO_MATCH`); a dry run on the in-memory event history
+4. **Every draft is checked before it is shown**: valid for the rule loader; embedded examples built from its frozen
+   evidence pass: an event the rule must match and one it must not (for the next hop, the evidence transfer brought the
+   value in, so it is the counter-example and the expected match is the same transfer sent on; for a dispersion, tests
+   with the threshold reached and not reached); a dry run on the in-memory event history
    (`RuleTester`, no notification possible) gives events in scope and triggers, with the time window actually covered,
    which may be short and is said so. A draft that fails any check is not proposed and the reason is listed.
 5. **Provenance and limits in the YAML**: `enabled: false`; `author: investigation:<id>@v<version>`; tags `proposed`,
