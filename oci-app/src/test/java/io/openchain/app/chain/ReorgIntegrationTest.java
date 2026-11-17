@@ -42,7 +42,7 @@ class ReorgIntegrationTest {
 
     static final String USDT = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f";
 
-    static ChainEvent transfer(String id, String tx, Address from, Address to, String raw, Instant at, boolean removed) {
+    public static ChainEvent transfer(String id, String tx, Address from, Address to, String raw, Instant at, boolean removed) {
         Map<String, Object> f = new LinkedHashMap<>();
         f.put("transaction.hash", tx);
         f.put("transaction.log_index", 0);

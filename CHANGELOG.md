@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — stale traces after a reorganisation, ADR-0022 amendment 1, third step)
+
+- **A transfer that leaves the canonical chain marks `STALE` every stored trace that froze it**, in every client scope, with the event ids concerned (`GET /traces/{id}`: `stale`, `staleEventIds`). The trace stays readable as it was computed and explainable from its frozen evidence; re-run it for a new version on the current chain. A failure to mark is logged and never stops ingestion.
+
 ### Added (phase 3 — trace API, ADR-0022 amendment 1, second step)
 
 - **`/traces`**: run the trace engine as a stored, queued job (`POST /traces`, 202), poll it (`GET /traces/{id}`), list the client's traces, read the frozen evidence, export (audited), re-run as a new version with its diff, cancel a pending run. One worker and a bounded queue of 50, off the ingestion path; runs left unfinished by a restart resume at start. Budgets per client: 3 traces pending or running, 100 per day (429 beyond). New permission **`investigation:write`** (role ANALYST and above); existing API keys keep their permissions: an administrator adds it to a key that should run traces. Every route is limited to the caller's client scope: another client's trace answers 404 exactly like an unknown id (negative tests N1-N12).

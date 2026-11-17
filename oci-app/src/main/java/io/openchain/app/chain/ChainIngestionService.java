@@ -424,6 +424,14 @@ public class ChainIngestionService {
             evaluate(e); // the rule engine removes the event's contribution; alerts on it are re-checked
             // a reorged freeze/unfreeze also reverts its label state and withdraws the exposure signals citing it
             applyRetraction(e, intelligence.retract(e));
+            if (e.type() == ChainEvent.EventType.TOKEN_TRANSFER || e.type() == ChainEvent.EventType.NATIVE_TRANSFER) {
+                // stored traces that froze this transfer are no longer exact (ADR-0022 amendment 1: STALE)
+                try {
+                    flowRetracted.accept(e.eventId());
+                } catch (RuntimeException ex) {
+                    log.warn("marking stored traces stale for retracted {} failed: {}", e.eventId(), ex.toString());
+                }
+            }
             return;
         }
         List<Signal> fresh = new ArrayList<>();
@@ -859,6 +867,11 @@ public class ChainIngestionService {
                              int remainingProfiles, int remainingScoredAddresses, int trackedWallets, long millis,
                              /** signals removed by this trim, by severity (P0 item 3: no silent removal) */
                              java.util.Map<String, Long> signalsRemovedBySeverity) {}
+
+    /** Told of every value transfer retracted by a chain reorganisation (stored traces become STALE). */
+    private volatile java.util.function.Consumer<String> flowRetracted = id -> { };
+
+    public void onFlowRetracted(java.util.function.Consumer<String> listener) { this.flowRetracted = listener == null ? id -> { } : listener; }
 
     private volatile TrimResult lastTrim;
     /** Flows removed by the working-set trim since start (coverage: a non-exempt address may have lost older flows). */

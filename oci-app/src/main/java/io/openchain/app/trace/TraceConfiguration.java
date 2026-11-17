@@ -32,6 +32,15 @@ public class TraceConfiguration {
         return new TraceArtifactService(store, investigation::traceSource, clock, traceExecutor, TraceArtifactService.Budget.DEFAULTS);
     }
 
+    /** A transfer retracted by a reorganisation makes STALE every stored trace that froze it (all client scopes). */
+    @Bean
+    ApplicationRunner staleOnReorg(io.openchain.app.chain.ChainIngestionService chains, TraceArtifactStore store) {
+        return args -> chains.onFlowRetracted(id -> {
+            var hit = store.markStale(java.util.Set.of(id));
+            if (!hit.isEmpty()) log.info("{} stored trace(s) marked stale: transfer {} left the canonical chain", hit.size(), id);
+        });
+    }
+
     @Bean
     ApplicationRunner resumeTraces(TraceArtifactService traces) {
         return args -> {
