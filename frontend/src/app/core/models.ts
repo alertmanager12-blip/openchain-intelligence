@@ -339,6 +339,34 @@ export interface Graph {
   asOfBlock?: number | null;
 }
 
+export type TraceStatus = 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED';
+
+export interface TraceSummary {
+  id: string; lineageId: string; version: number; previousId: string | null; network: NetworkId; seed: string;
+  direction: 'FORWARD' | 'BACKWARD'; status: TraceStatus; resultStatus: 'COMPLETE' | 'PARTIAL' | null; stale: boolean;
+  createdBy: string | null; createdAt: string; completedAt: string | null;
+}
+
+/** Exact raw amount as a fraction (no rounding until display). */
+export interface Fraction { num: number | string; den: number | string }
+
+export interface TraceResultJson {
+  status: 'COMPLETE' | 'PARTIAL';
+  nodes: { address: { value: string }; depth: number; labels: string[] }[];
+  edges: { eventId: string; aliases: string[]; txHash: string; timestamp: string; from: { value: string }; to: { value: string };
+    tokenKey: string; rawAmount: number | string; token: Token }[];
+  attributions: { address: { value: string }; tokenKey: string; depth: number; low: Fraction; high: Fraction; partial: boolean }[];
+  stops: { address: { value: string }; tokenKey: string | null; reason: string; detail: string }[];
+  findings: { type: string; level: string; addresses: { value: string }[]; eventIds: string[]; detail: string }[];
+}
+
+export interface TraceDetail extends Omit<TraceSummary, never> {
+  staleEventIds: string[] | null; engineVersion: string; error: string | null; frozenFlows: number;
+  request: unknown; result: TraceResultJson | null;
+  diff: { evidence: { kind: 'ADDED' | 'REMOVED' | 'MOVED'; beforeEventId: string | null; afterEventId: string | null; txHash: string }[];
+    attributions: { address: { value: string }; tokenKey: string }[] } | null;
+}
+
 /** A path value could have taken (directed, chronological, one token), computed by the server. */
 export interface GraphPath {
   source: string;

@@ -101,6 +101,7 @@ export function structuralStops(stops: GraphStop[] | null | undefined): GraphSto
             }
           </p>
           <button matButton="outlined" class="sm" type="button" (click)="verify()" [disabled]="!edges().length || verifying()" title="Check whether transfers shown are still held (chain reorganisation)">Check for changes</button>
+          <button matButton="outlined" class="sm" type="button" (click)="saveTrace()" [disabled]="!root() || direction() === 'both' || saving()" title="Keep this trace with the evidence it reads (choose Out or In first)">Save trace</button>
           <button matButton="outlined" class="sm" type="button" (click)="cmd('fit')" [disabled]="!nodes().length">Fit to view</button>
           <button matButton="outlined" class="sm" type="button" (click)="cmd('png')" [disabled]="!nodes().length">Export PNG</button>
         </div>
@@ -317,6 +318,24 @@ export class InvestigationPage {
         this.command.set({ kind: p.outcome === 'FOUND' ? 'path' : 'clear', hops: p.hops.map((h) => ({ source: h.from, target: h.to })), n: ++this.seq });
       },
       error: (e: ApiError) => this.pathInfo.set(`${e.title}: ${e.detail}`),
+    });
+  }
+
+  readonly saving = signal(false);
+
+  /** Stores the trace of the root in the chosen direction (ADR-0022): kept with its evidence, on the Stored traces page. */
+  saveTrace(): void {
+    const root = this.root();
+    const dir = this.direction();
+    if (!root || dir === 'both') return;
+    this.saving.set(true);
+    this.api.createTrace({ network: this.network() ?? this.net(), seed: root, direction: dir, depth: this.depth() }).subscribe({
+      next: (t) => {
+        this.saving.set(false);
+        this.toasts.success('Trace queued', 'Kept with its evidence on the Stored traces page.');
+        this.router.navigate(['/traces'], { queryParams: { id: t.id } });
+      },
+      error: (e: ApiError) => { this.saving.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
     });
   }
 

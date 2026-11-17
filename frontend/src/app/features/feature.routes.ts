@@ -12,6 +12,7 @@ export const FEATURE_ROUTES: Routes = [
   { path: 'risk', title: t('Wallet risk'), loadComponent: () => import('./risk/risk').then((m) => m.RiskPage) },
   { path: 'risk/:network/:address', title: t('Wallet risk'), loadComponent: () => import('./risk/risk').then((m) => m.RiskPage) },
   { path: 'investigation', title: t('Fund flow graph'), loadComponent: () => import('./investigation/investigation').then((m) => m.InvestigationPage) },
+  { path: 'traces', title: t('Stored traces'), loadComponent: () => import('./traces/traces').then((m) => m.TracesPage) },
   { path: 'alerts', title: t('Alerts'), loadComponent: () => import('./alerts/alerts').then((m) => m.AlertsPage) },
   { path: 'rules/builder', title: t('Rule builder'), loadComponent: () => import('./rule-builder/rule-builder').then((m) => m.RuleBuilderPage) },
   { path: 'rules/code', title: t('Rules as code'), loadComponent: () => import('./rule-code/rule-code').then((m) => m.RuleCodePage) },

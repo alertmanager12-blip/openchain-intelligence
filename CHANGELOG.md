@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — stored traces in the console, ADR-0022 amendment 1, fourth step)
+
+- **"Stored traces" page** (menu Investigate, shortcut `t`): the client's traces with status, version and the STALE mark; for one trace, its request, the value attributed per wallet and token (method stated as a convention; an interval when an opening balance is unknown), the patterns found, where it stopped, the changes since the previous version, and actions to run it again (new version), cancel a pending run, export the JSON and open the seed in the graph. **"Save trace"** on the fund flow graph stores the trace of the root in the chosen direction (Out or In) and opens it.
+
 ### Added (phase 3 — stale traces after a reorganisation, ADR-0022 amendment 1, third step)
 
 - **A transfer that leaves the canonical chain marks `STALE` every stored trace that froze it**, in every client scope, with the event ids concerned (`GET /traces/{id}`: `stale`, `staleEventIds`). The trace stays readable as it was computed and explainable from its frozen evidence; re-run it for a new version on the current chain. A failure to mark is logged and never stops ingestion.

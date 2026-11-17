@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -72,6 +72,15 @@ export class ApiService {
   graph(address: string, q: GraphQuery): Observable<Graph> {
     return this.http.get<Graph>(`${this.base}/graph/${this.enc(address)}`, { params: params({ ...q }) });
   }
+  // --- stored traces (ADR-0022)
+  traces(): Observable<TraceSummary[]> { return this.http.get<TraceSummary[]>(`${this.base}/traces`); }
+  trace(id: string): Observable<TraceDetail> { return this.http.get<TraceDetail>(`${this.base}/traces/${this.enc(id)}`); }
+  createTrace(r: { network: NetworkId; seed: string; direction: 'out' | 'in'; depth?: number }): Observable<TraceDetail> {
+    return this.http.post<TraceDetail>(`${this.base}/traces`, r);
+  }
+  rerunTrace(id: string): Observable<TraceDetail> { return this.http.post<TraceDetail>(`${this.base}/traces/${this.enc(id)}/rerun`, {}); }
+  cancelTrace(id: string): Observable<TraceDetail> { return this.http.post<TraceDetail>(`${this.base}/traces/${this.enc(id)}/cancel`, {}); }
+  exportTrace(id: string): Observable<unknown> { return this.http.get<unknown>(`${this.base}/traces/${this.enc(id)}/export`); }
   graphPath(source: string, target: string, network: NetworkId, token?: string): Observable<GraphPath> {
     return this.http.get<GraphPath>(`${this.base}/graph/${this.enc(source)}/path`, { params: params({ network, target, token }) });
   }
