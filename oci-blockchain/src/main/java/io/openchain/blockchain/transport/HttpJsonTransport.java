@@ -169,6 +169,11 @@ public final class HttpJsonTransport {
                 throw new RetryPolicy.RetryAfterException(endpoint.name() + ": HTTP 429 rate limited", retryAfter(resp));
             }
             if (status == 403) {
+                // a JSON-RPC error sent with 403 refuses this request, it is not a block: publicnode answers state at an older
+                // block with 403 "Archive requests require a personal token" (prod 2026-11-17). Classified by JsonRpcClient
+                // (non-retryable), so callers fall back to "latest" and the circuit stays closed.
+                JsonNode rpcError = "POST".equals(method) ? jsonRpcError(text) : null;
+                if (rpcError != null) return rpcError;
                 // TronGrid answers abnormally frequent polling with 403 and a temporary block, to be retried with backoff
                 // (TRON Developer Hub, "Rate limits"). Treated as transient so that the breaker counts it and polling slows
                 // down; a 403 that lasts (key refused) opens the circuit and fails over instead of hammering the endpoint.
