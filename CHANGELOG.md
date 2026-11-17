@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 3 — investigations and their report, ADR-0022 amendment 2, second and third steps)
+
+- **Investigation report** built only from the stored assertions (`report@1`): every sentence is a fixed template filled with one assertion and cites its id; coverage and limits come first; "no direct exposure in blocks X to Y" only with complete coverage, otherwise "none found in the data covered, not proof that none exists"; relations worded "may be related, not proof of common ownership or control"; amounts exact and shown in token units.
+
 ### Added (phase 3 — deterministic investigation plan, ADR-0022 amendment 2, first step)
 
 - **Investigation plan `plan@1`** (`oci-intelligence`, `io.openchain.intelligence.investigation`; not exposed yet): on one address, in a fixed order, coverage, labels, direct exposure (and ignored transfers), traces out and in (attributions, stops), patterns, relations and the detectors' signals, each as a typed assertion with exact parameters, its evidence and a deterministic id; no free text. Levels follow ADR-0023 amendment 1: facts about the flows and the run are OBSERVED, a label is CONFIRMED only when its source confirms it, and exposure, attribution, patterns, relations and signals are INFERRED even when built on a confirmed label. The same inputs give the same assertions, and so does a replay on the frozen evidence.

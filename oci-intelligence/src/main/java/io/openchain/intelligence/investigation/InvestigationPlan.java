@@ -85,11 +85,14 @@ public final class InvestigationPlan {
             for (ValueFlow f : d.ignored()) {
                 out.add(assertion(Type.IGNORED_TRANSFER, "exposure", Level.OBSERVED, subject, Map.of("counterparty", l.address().value(),
                         "category", l.category().name(), "reason", f.token().isUnverified() ? "unverified_token" : "below_dust_threshold",
-                        "tokenKey", Trace.tokenKey(f.token()), "raw", f.rawAmount().toString()), List.of(f.eventId())));
+                        "tokenKey", Trace.tokenKey(f.token()), "raw", f.rawAmount().toString(), "decimals", String.valueOf(f.token().decimals()),
+                        "symbol", f.token().symbol()), List.of(f.eventId())));
             }
             if (!d.exposed()) continue;
             Map<String, BigInteger[]> perToken = new TreeMap<>();
+            Map<String, io.openchain.core.model.Token> tokens = new TreeMap<>();
             for (ValueFlow f : d.flows()) {
+                tokens.putIfAbsent(Trace.tokenKey(f.token()), f.token());
                 BigInteger[] io = perToken.computeIfAbsent(Trace.tokenKey(f.token()), k -> new BigInteger[]{BigInteger.ZERO, BigInteger.ZERO});
                 if (f.to().equals(s)) io[0] = io[0].add(f.rawAmount()); else io[1] = io[1].add(f.rawAmount());
             }
@@ -97,7 +100,12 @@ public final class InvestigationPlan {
             p.put("counterparty", l.address().value());
             p.put("category", l.category().name());
             p.put("labelSource", l.source());
-            perToken.forEach((k, io) -> { p.put("received:" + k, io[0].toString()); p.put("sent:" + k, io[1].toString()); });
+            perToken.forEach((k, io) -> {
+                p.put("received:" + k, io[0].toString());
+                p.put("sent:" + k, io[1].toString());
+                p.put("decimals:" + k, String.valueOf(tokens.get(k).decimals()));
+                p.put("symbol:" + k, tokens.get(k).symbol());
+            });
             out.add(assertion(Type.DIRECT_EXPOSURE, "exposure", Level.INFERRED, subject, p, d.flows().stream().map(ValueFlow::eventId).sorted().toList()));
         }
 
@@ -111,6 +119,10 @@ public final class InvestigationPlan {
                         "method", Trace.Method.PROPORTIONAL.name()));
                 List<String> ev = r.edges().stream().filter(e -> (dir == Trace.Direction.FORWARD ? e.to() : e.from()).equals(a.address())
                         && e.tokenKey().equals(a.tokenKey())).map(Trace.Edge::eventId).sorted().toList();
+                r.edges().stream().filter(e -> e.tokenKey().equals(a.tokenKey())).findFirst().ifPresent(e -> {
+                    p.put("decimals", String.valueOf(e.token().decimals()));
+                    p.put("symbol", e.token().symbol());
+                });
                 out.add(assertion(Type.TRACE_ATTRIBUTION, step, Level.INFERRED, subject, p, ev));
             }
             for (Trace.Stop st : r.stops()) {
