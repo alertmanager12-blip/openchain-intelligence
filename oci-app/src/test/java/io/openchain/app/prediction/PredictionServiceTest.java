@@ -82,6 +82,24 @@ class PredictionServiceTest {
         assertThat(g.rates().getFirst().rate()).as("undetermined is not counted").isNull();
     }
 
+    @Test void creationsAreSampledPerTypeAndHour() {
+        PredictionService s = service();
+        for (int i = 0; i < PredictionService.MAX_NEW_PER_TYPE_PER_HOUR + 25; i++) {
+            Address who = new Address(Network.TRON, "TPredBurst%03dXXXXXXXXXXXXXXXXXXXX".formatted(i));
+            ValueFlow f = flow(who, o, Duration.ofSeconds(i));
+            s.observe(f, List.of(new Signal("burst-" + i, SignalType.FAST_FORWARDING, who, "x", Severity.LOW, 0.8, Signal.EvidenceLevel.ANOMALY,
+                    List.of(), "fast-forwarding@1", T0, null, null)));
+        }
+        assertThat(s.openCount()).isEqualTo(PredictionService.MAX_NEW_PER_TYPE_PER_HOUR);
+        assertThat(s.sampledOut()).isEqualTo(25);
+        // the next hour opens a new sample
+        Address next = new Address(Network.TRON, "TPredNextHour111111111111111111111");
+        ValueFlow f = flow(next, o, Duration.ofMinutes(61));
+        s.observe(f, List.of(new Signal("next-hour", SignalType.FAST_FORWARDING, next, "x", Severity.LOW, 0.8, Signal.EvidenceLevel.ANOMALY,
+                List.of(), "fast-forwarding@1", T0, null, null)));
+        assertThat(s.openCount()).isEqualTo(PredictionService.MAX_NEW_PER_TYPE_PER_HOUR + 1);
+    }
+
     @Test void openPredictionsSurviveARestart() {
         PredictionService s = service();
         s.observe(flow(w, o, Duration.ZERO), List.of(wake()));

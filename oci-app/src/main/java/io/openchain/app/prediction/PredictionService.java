@@ -33,6 +33,12 @@ public final class PredictionService {
 
     /** At most this many open predictions are tracked; beyond, new ones are dropped and counted. */
     public static final int MAX_OPEN = 5_000;
+    /**
+     * New predictions per type and hour of event time, at most: a sample, first come in each hour. FAST_FORWARDING fires
+     * about 1,500 times a minute on live traffic (prod, 2026-11-18): every signal a prediction meant millions of rows a day.
+     * The realisation rate is measured on the sample; the predictions not created are counted.
+     */
+    public static final int MAX_NEW_PER_TYPE_PER_HOUR = 60;
 
     private final PredictionStore store;
     private final Function<Network, List<IndexingCoverage.Gap>> gaps;
@@ -43,6 +49,8 @@ public final class PredictionService {
     private final ConcurrentLinkedQueue<Evaluation> toEvaluate = new ConcurrentLinkedQueue<>();
     private final Map<Prediction.Type, Double> established = new EnumMap<>(Prediction.Type.class);
     private final AtomicLong dropped = new AtomicLong();
+    private final AtomicLong sampledOut = new AtomicLong();
+    private final Map<Prediction.Type, long[]> hourly = new EnumMap<>(Prediction.Type.class); // {hour, count}
     /** Transfers that count towards each open prediction, seen by this process (lost on restart). */
     private final Map<String, List<ValueFlow>> hits = new HashMap<>();
     private final int dispersionThreshold;
@@ -88,8 +96,13 @@ public final class PredictionService {
             Prediction q = p.get();
             Double rate = established.get(q.type());
             if (rate != null) q = Predictions.fromSignal(s, f, rate, dispersionThreshold).orElseThrow();
-            if (openCount >= MAX_OPEN) { dropped.incrementAndGet(); continue; }
             if (isTracked(q.id())) continue;
+            long hour = q.issuedAt().getEpochSecond() / 3600;
+            long[] h = hourly.computeIfAbsent(q.type(), k -> new long[]{hour, 0});
+            if (h[0] != hour) { h[0] = hour; h[1] = 0; }
+            if (h[1] >= MAX_NEW_PER_TYPE_PER_HOUR) { sampledOut.incrementAndGet(); continue; }
+            if (openCount >= MAX_OPEN) { dropped.incrementAndGet(); continue; }
+            h[1]++;
             track(q);
             toInsert.add(q);
         }
@@ -132,6 +145,9 @@ public final class PredictionService {
     public synchronized int openCount() { return openCount; }
 
     public long dropped() { return dropped.get(); }
+
+    /** Predictions not created because their type had reached its hourly sample. */
+    public long sampledOut() { return sampledOut.get(); }
 
     public List<Predictions.Rate> rates() {
         List<Predictions.Rate> out = new ArrayList<>();
