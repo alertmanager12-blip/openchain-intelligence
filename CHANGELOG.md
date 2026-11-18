@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 4 — simulations, ADR-0023 amendment 2, first step)
+
+- **What-if exposure** `GET /simulations/exposure`: which wallets would be exposed if an address were listed in a risky category, by the exposure rules of P0-A. Level `SIMULATED`, the hypothesis in every response, nothing stored: the hypothetical label lives in a read-only overlay for that computation only, and no label, signal, score or alert can come from it. Wallets already exposed to the same address through real labels are marked; the coverage of the address is given and "no wallet" is never stated as "nobody" without complete coverage.
+
 ### Added (phase 3 — optional AI summary, ADR-0022 amendment 5, steps 1 to 3)
 
 - **AI summary in the console** (Investigations page, shown only when the instance offers providers): choose a provider, see before sending where the assertions go, "Write summary"; an accepted summary is labelled "written by AI, checked against the assertions" with its citations; refused and failed ones show only their reasons.

@@ -97,6 +97,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, API + "/investigations/*/rule-proposals").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         // AI summaries (ADR-0022 amendment 5): choosing a provider is a read; asking one falls under investigation:write
                         .requestMatchers(HttpMethod.GET, API + "/ai-summary/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        // simulations (ADR-0023 amendment 2): computed on request, nothing stored
+                        .requestMatchers(HttpMethod.GET, API + "/simulations/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))

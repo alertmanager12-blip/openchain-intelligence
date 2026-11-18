@@ -333,6 +333,19 @@ public class InvestigationService {
 
     /** Which blocks the answer rests on (Fund Flow Trace P0-B): {@link AddressCoverage}, plus the known blind spots. */
     /** Coverage of one address (Fund Flow Trace P0-B): address history, blocks indexed live, recorded gaps, trim. */
+    /**
+     * "Who would be exposed if {@code x} were listed as {@code category}?" (ADR-0023 amendment 2): SIMULATED, computed on
+     * the in-memory flows with a hypothetical label that is never stored. The coverage of {@code x} comes with it, since
+     * "nobody would be exposed" holds only for complete coverage.
+     */
+    public io.openchain.intelligence.simulation.WhatIf.Result whatIf(Address x, io.openchain.intelligence.label.LabelCategory category, int depth) {
+        var cfg = ExposurePaths.withMaxHops(intelligence.detectionConfig().exposure(), depth);
+        return io.openchain.intelligence.simulation.WhatIf.exposedIfListed(x, category, intelligence.flows(), labels, cfg, WHAT_IF_CANDIDATES);
+    }
+
+    /** Wallets examined by one what-if at most; beyond, the result says it is truncated. */
+    static final int WHAT_IF_CANDIDATES = 500;
+
     public AddressCoverage.Result addressCoverage(Address a) {
         Network n = a.network();
         Dto.HistoryCoverageDto h = history.coverage(a);
