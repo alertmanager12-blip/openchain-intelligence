@@ -16,7 +16,7 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ### Changed (deployment)
 
-- **Working-set snapshot on by default** in `docker-compose.yml` (ADR-0024 step 3d, already implemented): written at an orderly stop and every 30 min, reloaded at start, so a restart keeps wallet profiles, signals and scores; container stop grace period 120 s. The intelligence journal (step 2) stays off: the two are exclusive by design.
+- **Working-set snapshot on by default** in `docker-compose.yml` (ADR-0024 step 3d, already implemented): written at an orderly stop and every hour, reloaded at start, so a restart keeps wallet profiles, signals and scores; container stop grace period 240 s. Measured in production: 59 s and 251 MB stored (647 MB before compression) for a full working set, indexing paused 17.5 s. The intelligence journal (step 2) stays off: the two are exclusive by design.
 
 ### Added (measurement)
 
