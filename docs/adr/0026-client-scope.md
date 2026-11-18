@@ -128,3 +128,35 @@ can be explained and audited later without recomputing it.
 - Default retention of W flows (13 months proposed) versus the record-keeping obligations of the target clients.
 - Should C addresses that are themselves high risk be promoted to W automatically (bounded), or only suggested?
 - Multi-scope instance: needed for the first pilots, or one instance per client is enough?
+
+## Amendment 1 (2026-11-18): the persisted journal of watched addresses (decision D5, option d)
+
+- Status: proposed (option d of decision D5 in `docs/FUND_FLOW_TRACE_DECISIONS.md`; implements the "W: watched" depth of
+  this ADR for flows only; this text awaits review).
+
+### Decision
+
+1. **A journal of the transfers of watched addresses.** Every live transfer whose sender or receiver is on the watchlist
+   is written to `flow_journal` (network, event id, transaction, time, sender, receiver, token, exact raw amount). The
+   chain-wide journal (V9) stays off. Address histories loaded on enrolment (ADR-0020) are written to it as well.
+2. **Partitions by month, retention 13 months**, purged by dropping partitions (never a large `DELETE`). Indexes by
+   (network, sender, time) and (network, receiver, time).
+3. **Public data once, interest apart.** Transfers are public chain data, stored once whoever watches them. Which address
+   is watched since when is kept apart (`journal_coverage`); with several client scopes (decision D1) it carries the
+   scope and row-level security, like the watchlist itself will.
+4. **Coverage.** For each watched address the journal records since when it is complete (enrolment time, or the start
+   of a loaded history); indexing gaps (P0-B) apply as everywhere. A reader never says "no transfer" for a period the
+   journal does not cover.
+5. **Write-behind, never blocking indexing**: a bounded queue drained in batches; a full queue drops and counts. Metrics:
+   written, dropped, queue size.
+6. **Read on demand, no reload at startup** (no memory cost): traces, investigations, exposure and coverage read the
+   journal for watched addresses beyond what memory holds (step 2).
+7. **Steps**, each reviewed: (1) tables and writer; (2) readers and coverage; (3) monthly purge; (4) console. Then, as
+   separate steps: wake-up after dormancy and strategy change on watched addresses, long histories.
+
+### Consequences
+
+- Disk proportional to the watchlist (estimated 1.3 to 12 GB over 13 months for the scenarios of this ADR); a 48-hour
+  measurement precedes any longer retention promise. Production watchlist today: one address.
+- Not in this amendment: compact profiles of direct counterparties (depth C), rule simulation on the journal (rules
+  replay events, not only transfers).

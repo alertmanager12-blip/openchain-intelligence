@@ -31,6 +31,14 @@ public class WatchlistService implements io.openchain.app.chain.ChainIngestionSe
         return new Address(io.openchain.core.model.Network.fromId(e.network()), e.address());
     }
 
+    private final List<java.util.function.Consumer<Address>> added = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Told of every address added to the watchlist (the flow journal starts its coverage there). */
+    public void onAdded(java.util.function.Consumer<Address> listener) { added.add(listener); }
+
+    /** The watched addresses. */
+    public java.util.Set<Address> watched() { return java.util.Set.copyOf(index); }
+
     @Override public boolean isWatched(Address a) { return a != null && index.contains(a); }
 
     /** True when at least one wallet is watched: behavioural pack rules then only look at watched wallets. */
@@ -44,6 +52,9 @@ public class WatchlistService implements io.openchain.app.chain.ChainIngestionSe
                 a.network().id(), a.value(), name == null || name.isBlank() ? null : name.strip(), createdBy, clock.instant());
         if (!repository.insert(e)) return Optional.empty();
         index.add(a);
+        for (java.util.function.Consumer<Address> l : added) {
+            try { l.accept(a); } catch (RuntimeException ex) { /* a listener never blocks enrolment */ }
+        }
         // audited: the watchlist decides which wallets the behavioural rules look at (code review I35)
         io.openchain.app.security.ApiKeyService.AUDIT.info("watchlist.add id={} network={} address={} name={} watched={} actor={}",
                 e.id(), e.network(), e.address(), e.name(), index.size(), createdBy);
