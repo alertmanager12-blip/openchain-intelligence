@@ -8,8 +8,9 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
-### Added (phase 3 — optional AI summary, ADR-0022 amendment 5, steps 1 and 2)
+### Added (phase 3 — optional AI summary, ADR-0022 amendment 5, steps 1 to 3)
 
+- **AI summary in the console** (Investigations page, shown only when the instance offers providers): choose a provider, see before sending where the assertions go, "Write summary"; an accepted summary is labelled "written by AI, checked against the assertions" with its citations; refused and failed ones show only their reasons.
 - **AI summaries of investigations, off by default, with the provider of your choice**: Claude through the official SDK, or any OpenAI-compatible endpoint (ChatGPT, Gemini, DeepSeek, Qwen, a local Ollama or vLLM server). Only the investigation's assertions are sent, with on-chain texts filtered against prompt injection. A deterministic server-side check refuses any summary that cites nothing, cites an unknown assertion, or contains an address, amount or number its assertions do not support, "confirmed" without a confirmed assertion, or a statement of identity, ownership, intent or guilt; partial coverage is stated first. Refused summaries are never shown. `POST`/`GET /investigations/{id}/summaries`, `GET /ai-summary/providers`; `V17__investigation_summaries` (append-only, row-level security); daily cap per client (`OCI_AI_SUMMARY_DAILY_CAP`). Configuration in the installation guide.
 
 ### Added (phase 3 — rule proposals from an investigation, ADR-0022 amendment 4, steps 1 to 3)

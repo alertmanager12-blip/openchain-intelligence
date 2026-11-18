@@ -402,6 +402,16 @@ export interface InvestigationReviews {
   decided: number; total: number;
 }
 
+/** An AI provider offered for summaries (ADR-0022 amendment 5); dataLocation says where the assertions go. */
+export interface AiProvider { id: string; label: string; connector: string; model: string; dataLocation: string | null; }
+
+/** An AI summary request: sentences only when ACCEPTED (checked against the assertions); reasons otherwise. */
+export interface InvestigationSummary {
+  id: string; investigationId: string; provider: string; model: string | null; promptVersion: string; inputHash: string;
+  status: 'ACCEPTED' | 'REFUSED' | 'FAILED'; sentences: { text: string; assertionIds: string[] }[] | null; reasons: string[];
+  createdBy: string; createdAt: string;
+}
+
 /** Rule drafts proposed from an investigation (ADR-0022 amendment 4): always disabled, never stored. */
 export type ProposalTemplate = 'NEXT_HOP' | 'COMMON_FUNDER' | 'SUBJECT_DISPERSION' | 'LISTED_COUNTERPARTY';
 
