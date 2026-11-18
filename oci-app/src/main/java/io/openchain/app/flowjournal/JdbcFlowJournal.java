@@ -69,15 +69,18 @@ public final class JdbcFlowJournal implements FlowJournal {
     private static final Pattern NAME = Pattern.compile("flow_journal_\\d{4}_\\d{2}");
 
     @Override public void ensurePartition(Instant at) {
-        YearMonth m = YearMonth.from(at.atZone(ZoneOffset.UTC));
-        String name = "flow_journal_%04d_%02d".formatted(m.getYear(), m.getMonthValue());
+        YearMonth m = YearMonth.from(at.atZone(ZoneOffset.UTC)), next = m.plusMonths(1);
+        int y = m.getYear(), mo = m.getMonthValue(), ny = next.getYear(), nmo = next.getMonthValue();
+        // DDL takes no bind parameters: the statement is built from integers and constants only (CodeQL java/concatenated-sql-query)
+        String name = "flow_journal_" + y + "_" + (mo < 10 ? "0" : "") + mo;
         if (!NAME.matcher(name).matches()) throw new IllegalStateException(name);
-        String from = m.atDay(1) + "T00:00:00Z", to = m.plusMonths(1).atDay(1) + "T00:00:00Z";
+        String from = y + "-" + mo + "-01 00:00:00+00", to = ny + "-" + nmo + "-01 00:00:00+00";
         // a month partition cannot be attached while the default partition holds rows of that month: they stay there
         Integer inDefault = jdbc.queryForObject("select count(*) from flow_journal_default where ts >= cast(:f as timestamptz) and ts < cast(:t as timestamptz)",
                 Map.of("f", from, "t", to), Integer.class);
         if (inDefault != null && inDefault > 0) return;
-        jdbc.getJdbcTemplate().execute("create table if not exists " + name + " partition of flow_journal for values from ('" + from + "') to ('" + to + "')");
+        jdbc.getJdbcTemplate().execute("create table if not exists flow_journal_" + y + "_" + (mo < 10 ? "0" : "") + mo
+                + " partition of flow_journal for values from ('" + y + "-" + mo + "-01 00:00:00+00') to ('" + ny + "-" + nmo + "-01 00:00:00+00')");
     }
 
     /** Rows outside any month partition (a safety net that should stay empty). */

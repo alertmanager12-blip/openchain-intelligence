@@ -51,6 +51,16 @@ class JdbcFlowJournalTest {
         assertThat(journal.involving(o, null, null, 10)).as("a self-transfer appears once").containsExactly(a, b, c);
     }
 
+    @Test void decemberPartitionEndsAtTheFirstOfJanuaryInUtc() {
+        ValueFlow dec = flow(w, o, "2026-12-31T23:59:59Z", 1), jan = flow(o, w, "2027-01-01T00:00:00Z", 2);
+        journal.ensurePartition(dec.timestamp());
+        journal.ensurePartition(jan.timestamp());
+        assertThat(journal.append(List.of(dec, jan), FlowJournal.Source.LIVE)).isEqualTo(2);
+        assertThat(journal.rowsInDefault()).isZero();
+        assertThat(jdbc.queryForList("select tableoid::regclass::text from flow_journal order by ts", Map.of(), String.class))
+                .containsExactly("flow_journal_2026_12", "flow_journal_2027_01");
+    }
+
     @Test void aMonthWithoutPartitionGoesToTheDefaultAndIsNeverLost() {
         ValueFlow a = flow(w, o, "2027-03-05T00:00:00Z", 7);
         assertThat(journal.append(List.of(a), FlowJournal.Source.LIVE)).isEqualTo(1);
