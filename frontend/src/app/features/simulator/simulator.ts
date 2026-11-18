@@ -4,7 +4,9 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { Rule, RuleTestRequest } from '../../core/models';
+import { ApiError } from '../../core/api-error';
+import { Rule, RuleSimulation, RuleTestRequest } from '../../core/models';
+import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
@@ -71,6 +73,30 @@ function readDraft(): string | null {
         }
       </section>
 
+      @if (ruleId() && ruleId() !== draftKey) {
+        <section class="panel-raised run" aria-labelledby="h-cmp">
+          <h2 id="h-cmp" class="small strong">Compare a change <span class="muted">(SIMULATED)</span></h2>
+          <p class="muted small">Run the stored version and your edited copy side by side on the same events. Nothing is alerted, sent or saved.</p>
+          <div class="cmp-actions">
+            <button matButton="outlined" type="button" (click)="editCopy()">Edit a copy of the stored rule</button>
+            <button matButton="filled" type="button" [disabled]="!proposed() || comparing()" (click)="compare()">{{ comparing() ? 'Comparing…' : 'Compare with stored version' }}</button>
+          </div>
+          @if (proposed() !== null) {
+            <textarea class="cmp-yaml mono" aria-label="Proposed rule YAML" [value]="proposed()" (input)="proposed.set($any($event.target).value)"></textarea>
+          }
+          @if (cmp(); as c) {
+            <dl class="well instrument" aria-label="Comparison">
+              <div class="readout"><dt>Matches, stored {{ c.currentVersion }}</dt><dd>{{ n(c.before.conditionMatches) }}</dd></div>
+              <div class="readout"><dt>Matches, proposed {{ c.proposedVersion }}</dt><dd>{{ n(c.after.conditionMatches) }}</dd></div>
+              <div class="readout"><dt>Would stop matching</dt><dd>{{ n(c.onlyBefore) }}</dd></div>
+              <div class="readout"><dt>Would start matching</dt><dd>{{ n(c.onlyAfter) }}</dd></div>
+              <div class="readout"><dt>Alerts per day, stored → proposed</dt><dd>{{ c.before.estimatedAlertsPerDay }} → {{ c.after.estimatedAlertsPerDay }}<span class="unit">estimated</span></dd></div>
+            </dl>
+            <p class="muted small">{{ n(c.evaluatedEvents) }} events{{ c.window.from ? ' from ' + c.window.from + ' to ' + c.window.to : '' }}. {{ c.window.note }}</p>
+          }
+        </section>
+      }
+
       @if (res.value(); as r) {
         <section class="section" aria-labelledby="h-m">
           <div class="section-head"><h2 id="h-m">Matched events</h2><p>A sample of the events the rule matched. Expand a row to see the fields it was evaluated on.</p></div>
@@ -118,6 +144,8 @@ function readDraft(): string | null {
     mat-progress-bar { margin-top: -8px; }
     .empty-run { margin: 0; color: var(--ink-2); padding: 14px 16px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--shadow-inset); }
     dl.fields { padding-left: 40px; font-size: 13px; }
+    .cmp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .cmp-yaml { width: 100%; min-height: 220px; font-size: 12px; }
     @media (max-width: 720px) { dl.fields { padding-left: 0; } }
   `,
 })
@@ -146,6 +174,27 @@ export class SimulatorPage {
   private readonly request = signal<{ req: RuleTestRequest; nonce: number } | undefined>(undefined);
   readonly res = apiResource({ params: () => this.request(), stream: (p) => this.api.testRule(p.req) });
   private nonce = 0;
+
+  readonly proposed = signal<string | null>(null);
+  readonly cmp = signal<RuleSimulation | null>(null);
+  readonly comparing = signal(false);
+  private readonly toasts = inject(Toasts);
+
+  editCopy(): void {
+    const r = this.rules().find((x) => x.id === this.ruleId());
+    this.cmp.set(null);
+    this.proposed.set(r?.yaml ?? '');
+  }
+
+  compare(): void {
+    const src = this.proposed();
+    if (!src) return;
+    this.comparing.set(true);
+    this.api.simulateRule(this.ruleId(), src).subscribe({
+      next: (c) => { this.comparing.set(false); this.cmp.set(c); },
+      error: (e: ApiError) => { this.comparing.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+    });
+  }
 
   readonly open = signal(new Set<string>());
   readonly cols = ['x', 'event', 'network', 'when', 'summary'];

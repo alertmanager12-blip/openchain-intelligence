@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary, PredictionItem, PredictionRate, WhatIfResult } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary, PredictionItem, PredictionRate, WhatIfResult, RuleSimulation } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -165,6 +165,9 @@ export class ApiService {
     return req.ruleId
       ? this.http.post<RuleTestResult>(`${this.base}/rules/${this.enc(req.ruleId)}/test`, req)
       : this.http.post<RuleTestResult>(`${this.base}/rules/test`, req);
+  }
+  simulateRule(id: string, source: string): Observable<RuleSimulation> {
+    return this.http.post<RuleSimulation>(`${this.base}/rules/${this.enc(id)}/simulate`, { source });
   }
   importRules(yaml: string): Observable<Rule[]> {
     return this.http.post<Rule[]>(`${this.base}/rules/import`, yaml, { headers: { 'Content-Type': 'application/yaml' } });
