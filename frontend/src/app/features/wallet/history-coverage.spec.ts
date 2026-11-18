@@ -88,6 +88,7 @@ describe('WalletPage history polling', () => {
       walletRelations: () => of({ address: ADDR, network: 'ethereum', relations: [], limits: [] }),
       walletTransactions: () => of({ items: [], nextCursor: null }),
       watchlist: () => of([]),
+      sanctionsLists: () => of({ items: [] }),
     };
     // Other calls (app shell, header) never answer: only the wallet calls matter here.
     const stub = new Proxy(api as Record<string, unknown>, { get: (t, k) => (k in t ? t[k as string] : () => NEVER) });

@@ -7,6 +7,7 @@ import { ApiService } from '../../core/api.service';
 import { Toasts } from '../../core/toasts';
 import { Counterparty, ExposureEntry, NetworkId, Page, ChainTransaction } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
+import { sanctionsSentence } from '../../shared/sanctions-text';
 import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
 import { Crumb, PageHeader } from '../../shared/page-header';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
@@ -66,6 +67,12 @@ export class WalletPage {
   private readonly key = computed(() => ({ address: this.address(), network: this.network() }));
   /** The verdict at the top of the page (spec 2026-11-18). */
   readonly verdict = computed(() => { const a = this.w.value(); return a ? walletVerdict(a) : null; });
+  /** Official sanctions lists in force (ADR-0027), said in the verdict's coverage. */
+  readonly sanctions = apiResource({ params: () => ({}), stream: () => this.api.sanctionsLists() });
+  /** A known coverage completed by what sanctions screening rests on; an unknown one stays unknown. */
+  withSanctions(coverage: string): string {
+    return coverage ? `${coverage} ${sanctionsSentence(this.sanctions.value()?.items[0])}` : '';
+  }
   readonly w = apiResource({ params: this.key, stream: (k) => this.api.walletAnalysis(k.address, k.network) });
   readonly history = computed(() => this.w.value()?.history ?? null);
   /** The API refused the network (422 on /network): explain it instead of showing the raw validation error. */

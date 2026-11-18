@@ -112,6 +112,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, API + "/watchlist").hasAuthority(authority(Scopes.WALLET_READ))
                         .requestMatchers(API + "/watchlist", API + "/watchlist/**").hasAuthority(authority(Scopes.WATCHLIST_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/labels").hasAuthority(authority(Scopes.WALLET_READ))
+                        .requestMatchers(HttpMethod.GET, API + "/labels/sanctions-lists").hasAuthority(authority(Scopes.WALLET_READ))
                         // rules (validate is a read: compile only, no side effect)
                         .requestMatchers(HttpMethod.POST, API + "/rules/validate").hasAuthority(authority(Scopes.RULES_READ))
                         .requestMatchers(HttpMethod.GET, API + "/rules", API + "/rules/**").hasAuthority(authority(Scopes.RULES_READ))

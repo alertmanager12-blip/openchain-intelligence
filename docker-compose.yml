@@ -95,6 +95,9 @@ services:
       # intelligence journal (OCI_PERSISTENCE_INTELLIGENCE_JOURNAL, step 2), which stays off.
       OCI_PERSISTENCE_WORKING_SET_SNAPSHOT: ${OCI_PERSISTENCE_WORKING_SET_SNAPSHOT:-true}
       OCI_PERSISTENCE_SNAPSHOT_INTERVAL: ${OCI_PERSISTENCE_SNAPSHOT_INTERVAL:-30m}
+      # Official sanctions list (ADR-0027): OFAC's SDN advanced XML fetched at start and every 24 h (one HTTPS call to
+      # sanctionslistservice.ofac.treas.gov), stored, applied as SANCTIONED labels. Off: the last stored publication applies.
+      OCI_SANCTIONS_OFAC_ENABLED: ${OCI_SANCTIONS_OFAC_ENABLED:-true}
       SERVER_PORT: "8080"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"

@@ -215,6 +215,10 @@ on('POST', '/labels/reports', (req) => {
   mockDb().reports.unshift(saved);
   return saved;
 });
+// ADR-0027: the demo has fictional labels only; the mock says so instead of showing an official list
+on('GET', '/labels/sanctions-lists', () => ({
+  items: [{ source: 'OFAC SDN', state: 'NONE', fetchEnabled: false, issued: null, fetchedAt: null, checkedAt: null, tron: 0, ethereum: 0, lastError: null }],
+}));
 on('GET', '/labels', (req) => {
   const a = req.params.get('address');
   const n = req.params.get('network');

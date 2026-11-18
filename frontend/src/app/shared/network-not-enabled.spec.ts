@@ -37,6 +37,7 @@ describe('WalletPage on a network this instance does not index', () => {
       walletRelations: (_: string, n: string) => throwError(() => notEnabled(n)),
       walletTransactions: (_: string, n: string) => throwError(() => notEnabled(n)),
       watchlist: () => of([]),
+      sanctionsLists: () => of({ items: [] }),
     };
     const stub = new Proxy(api, { get: (t, k) => (k in t ? t[k as string] : () => NEVER) });
     TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: ApiService, useValue: stub }] });

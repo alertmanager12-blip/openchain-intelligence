@@ -1,6 +1,6 @@
 # ADR-0027: Official sanctions lists, fetched with their provenance
 
-- Status: **proposed** (2026-11-18)
+- Status: accepted (2026-11-18, maintainer's go)
 - Date: 2026-11-18
 - Related: ADR-0008 (explainable scoring), ADR-0012 (licensing), ADR-0023 (epistemic levels), ADR-0026 (client scope)
 

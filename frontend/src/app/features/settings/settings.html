@@ -34,6 +34,15 @@
           </mat-form-field>
         }
       </section>
+      <section class="card stack" aria-labelledby="h-sanctions">
+        <h2 id="h-sanctions">Sanctions lists</h2>
+        @let sl = sanctions.value()?.items?.[0];
+        <p class="sanctions-state" [class.warn]="!sl || sl.state !== 'CURRENT'">{{ sanctionsSentence(sl) }}</p>
+        @if (sl) {
+          <p class="hint">{{ sl.fetchEnabled ? 'Fetched from the official source every 24 hours; the last accepted publication stays in force if a download fails or looks wrong.' : 'Automatic fetch is off (OCI_SANCTIONS_OFAC_ENABLED): only a stored publication applies.' }}</p>
+          @if (sl.lastError) { <p class="field-error" role="status">Last attempt: {{ sl.lastError }}</p> }
+        }
+      </section>
     </div>
     }
     @case ('appearance') {
