@@ -9,10 +9,10 @@
       <oci-live-strip [networks]="d.networks" [alerts]="d.alerts?.recent ?? []" />
       <section class="needs" aria-labelledby="h-needs">
         <h2 id="h-needs">What needs your attention</h2>
+        <p class="needs-note">The most severe open alerts, with what they rest on. A signal is a reason to look closer, not proof of wrongdoing.</p>
         @for (v of needs(); track v.id) {
           <a class="needs-item" [routerLink]="['/alerts']" [queryParams]="{ id: v.id }">
-            <oci-verdict [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="coverageOf(v.network)"
-              limit="A signal is a reason to look closer, not proof of wrongdoing." />
+            <oci-verdict [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="coverageOf(v.network)" />
           </a>
         } @empty {
           <p class="needs-empty">Add a wallet to the watchlist to see what needs your attention here. <a routerLink="/watchlist">Open the watchlist</a></p>

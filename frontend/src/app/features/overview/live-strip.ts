@@ -49,12 +49,13 @@ export function ticks(head: number, alerts: Alert[], span: number): { pos: numbe
     </section>`,
   styles: `
     .strip { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: var(--fs-12); }
-    .net { display: flex; align-items: center; gap: 8px; flex: 1 1 340px; min-width: 0; }
+    .net { display: flex; align-items: center; gap: 8px; flex: 1 1 420px; min-width: 0; flex-wrap: wrap; }
     .name { color: var(--ink); font-weight: 600; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--risk-unknown); flex: none; }
     .dot.live { background: var(--risk-low); box-shadow: 0 0 0 3px color-mix(in srgb, var(--risk-low) 20%, transparent); }
     .dot.behind { background: var(--risk-medium); }
     .dot.unreachable { background: var(--risk-critical); }
+    .state, .block { white-space: nowrap; }
     .block { font-variant-numeric: tabular-nums; }
     .bar { position: relative; flex: 1 1 120px; height: 12px; background: var(--band); border-radius: 3px; min-width: 80px; }
     .tick { position: absolute; top: 1px; bottom: 1px; width: 3px; margin-left: -1px; border-radius: 1px; background: var(--brand); }

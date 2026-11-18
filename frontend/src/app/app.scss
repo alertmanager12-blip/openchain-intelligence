@@ -55,8 +55,8 @@ button { font: inherit; color: inherit; }
 .nav-link svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
 .nav-link:hover { background: var(--hover); color: var(--ink); text-decoration: none; }
 .nav-link.active { color: var(--ink); background: var(--surface); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
-/* the active page: a 2px accent edge on the sidebar's inner margin, the only accent stroke of the shell */
-.nav-link.active::before { content: ''; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 2px; border-radius: 0 2px 2px 0; background: var(--brand); width: 3px; }
+/* the active page: a 3px brand edge on the sidebar's inner margin, the only accent stroke of the shell */
+.nav-link.active::before { content: ''; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 2px 2px 0; background: var(--brand); }
 :host(.collapsed) .nav-link.active::before { left: -6px; }
 .nav-link.active svg { color: var(--accent); }
 .nav-link:focus-visible { outline-offset: -2px; }

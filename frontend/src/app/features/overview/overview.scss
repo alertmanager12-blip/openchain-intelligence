@@ -48,3 +48,4 @@
 .needs-item:hover { box-shadow: 0 0 0 1px var(--line); }
 .needs-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .needs-empty { margin: 0; padding: 16px 18px; background: var(--band); border-radius: var(--r-panel); color: var(--ink-2); }
+.needs-note { margin: -4px 0 4px; color: var(--ink-2); font-size: var(--fs-12); }
