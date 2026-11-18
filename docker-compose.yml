@@ -38,6 +38,9 @@ services:
     # Without a limit the JVM sizes its heap from the whole Docker VM (75%) and the kernel kills it under memory pressure
     # (observed 2026-11-09 while a test suite ran on the same Docker host). Heap = 75% of this limit.
     mem_limit: ${OCI_APP_MEMORY_LIMIT:-4g}
+    # The working-set snapshot is written at an orderly stop (ADR-0024 step 3d): the default 10 s grace period would cut it
+    # short and the next start would restore nothing.
+    stop_grace_period: 120s
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +90,11 @@ services:
       OCI_INGESTION_WORKING_SET_MAX_PROFILES: ${OCI_INGESTION_WORKING_SET_MAX_PROFILES:-300000}
       OCI_INGESTION_WORKING_SET_MAX_SIGNALS: ${OCI_INGESTION_WORKING_SET_MAX_SIGNALS:-150000}
       OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET: ${OCI_INGESTION_WORKING_SET_MAX_SIGNALS_PER_WALLET:-64}
+      # Working-set snapshot (ADR-0024 step 3d): written at an orderly stop and every 30 min, reloaded at start, so a restart
+      # keeps wallet profiles, signals and scores instead of starting empty. Ignored in demo mode; exclusive with the
+      # intelligence journal (OCI_PERSISTENCE_INTELLIGENCE_JOURNAL, step 2), which stays off.
+      OCI_PERSISTENCE_WORKING_SET_SNAPSHOT: ${OCI_PERSISTENCE_WORKING_SET_SNAPSHOT:-true}
+      OCI_PERSISTENCE_SNAPSHOT_INTERVAL: ${OCI_PERSISTENCE_SNAPSHOT_INTERVAL:-30m}
       SERVER_PORT: "8080"
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
