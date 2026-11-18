@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { GraphCanvas } from '../investigation/graph-canvas';
+import { KeyedEdge } from '../investigation/graph-model';
+import { ThemeService } from '../../core/theme.service';
 import { NETWORKS, NetworkId } from '../../core/models';
 import { EnabledNetworks } from '../../core/enabled-networks';
 import { detectQuery } from '../../core/network-detect';
@@ -19,7 +22,7 @@ const EXAMPLES: { family: string; example: string }[] = [
 
 @Component({
   selector: 'oci-explorer',
-  imports: [RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
+  imports: [RouterLink, PageHeader, GraphCanvas, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
@@ -98,6 +101,20 @@ const EXAMPLES: { family: string; example: string }[] = [
               </div>
             }
           </oci-state>
+          @if (tx.value(); as a) {
+            <div class="mini-graph" aria-labelledby="h-g">
+              <div class="section-head"><h3 id="h-g" class="small strong">Flows of the sender, one hop</h3>
+                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Open the full graph</a></span></div>
+              @if (graph.value(); as g) {
+                @if (g.nodes.length) {
+                  @defer {
+                    <oci-graph-canvas class="mini-canvas" [nodes]="g.nodes" [edges]="keyedEdges()" [root]="g.root" [theme]="theme.effective()" fileName="sender-flows.png" />
+                  }
+                } @else { <p class="small muted">No transfer of the sender in the data held.</p> }
+              } @else if (graph.error()) { <p class="small muted">The graph could not be loaded.</p> }
+              @else { <p class="small muted">Loading the graph…</p> }
+            </div>
+          }
         </section>
       } @else {
         <section class="section" aria-labelledby="h-fmt">
@@ -110,6 +127,8 @@ const EXAMPLES: { family: string; example: string }[] = [
     </div>
   `,
   styles: `
+    .mini-graph { margin-top: 16px; }
+    .mini-canvas { height: 440px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
     .search { padding: 20px 20px 16px; gap: 12px; align-items: center; }
     .search .mat-mdc-form-field { --mat-form-field-container-height: 44px; --mat-form-field-container-vertical-padding: 11px; --mat-form-field-container-text-size: 15px; }
     .search .q { flex: 1 1 420px; }
@@ -172,6 +191,18 @@ export class ExplorerPage {
     },
     stream: (p) => this.api.transactionAnalysis(p.hash, p.network),
   });
+
+  readonly theme = inject(ThemeService);
+  /** One hop around the sender of the transaction shown: the same canvas and controls as the fund flow graph. */
+  readonly graph = apiResource({
+    params: () => {
+      const a = this.tx.value();
+      return a ? { address: a.transaction.from, network: a.transaction.network } : undefined;
+    },
+    stream: (p) => this.api.graph(p.address, { network: p.network, depth: 1, direction: 'both' }),
+  });
+  readonly keyedEdges = computed<KeyedEdge[]>(() => (this.graph.value()?.edges ?? [])
+    .map((edge) => ({ key: `${edge.source}>${edge.target}>${edge.token.network}:${edge.token.contract ?? edge.token.symbol}`, edge })));
 
   constructor() {
     // Mirror the URL into the editable form fields (the form stays editable afterwards).

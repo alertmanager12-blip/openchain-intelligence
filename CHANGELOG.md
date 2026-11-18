@@ -8,6 +8,11 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (console — graph zoom and navigation)
+
+- **Zooming the fund flow graph felt like it did nothing**: measured in Chrome, one wheel notch zoomed about 1.4 % (reduced wheel sensitivity 0.3). It is now about 10 % per notch. Visible **+ / − / fit** buttons on every graph, keys `+`, `-` and `0` when the graph has focus, panning, zooming and node dragging stated explicitly, and the automatic refit no longer runs on resize callbacks that do not change the size (it could reset the user's view).
+- **A graph in the Explorer**: a transaction now shows the flows of its sender, one hop, with the same controls, and a link to the full graph.
+
 ### Added (phase 4 — more precursors, ADR-0023 amendment 2)
 
 - **Three more prediction types**, each measured on its own: `DRAIN_CONTINUES` (after `RAPID_DRAIN`, another outgoing transfer within 24 h), `FORWARDING_CONTINUES` (after `FAST_FORWARDING`, another outgoing transfer within 24 h), `DISPERSION_REPEATS` (after `FLOW_CONCENTRATION`, a new dispersion to at least the detector's number of distinct recipients within 72 h; `V19` adds the distinct-recipients condition). A dispersion count kept in memory makes a restart during the window give `UNDETERMINED`, never `NOT_REALISED`. The wake-up precursor stays, but fires only where 180 days of activity are held (loaded address histories).

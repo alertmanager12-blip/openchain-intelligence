@@ -11,8 +11,23 @@ import { GraphCommand, GraphSelection, KeyedEdge, RISK_VAR, edgeWidths, graphDif
 @Component({
   selector: 'oci-graph-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div #el class="cy" role="img" [attr.aria-label]="'Fund flow graph with ' + nodes().length + ' wallets and ' + edges().length + ' transfers. The selected element is described in the inspector.'"></div>`,
-  styles: `:host { display: block; } .cy { width: 100%; height: 100%; min-height: 420px; }`,
+  template: `
+    <div #el class="cy" role="img" tabindex="0" (keydown)="key($event)"
+      [attr.aria-label]="'Fund flow graph with ' + nodes().length + ' wallets and ' + edges().length + ' transfers. Drag to move, scroll or pinch to zoom, plus and minus keys to zoom, 0 to fit. The selected element is described in the inspector.'"></div>
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button type="button" (click)="zoomBy(1.25)" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <button type="button" (click)="zoomBy(0.8)" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+      <button type="button" (click)="fitAll()" title="Fit to view (0)" aria-label="Fit to view">&#x2922;</button>
+    </div>`,
+  styles: `
+    :host { display: block; position: relative; }
+    .cy { width: 100%; height: 100%; min-height: 420px; touch-action: none; outline: none; }
+    .cy:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+    .zoom { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px; z-index: 3; }
+    .zoom button { width: 30px; height: 30px; font-size: 16px; line-height: 1; cursor: pointer; color: var(--ink); background: var(--surface);
+      border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow-overlay, none); }
+    .zoom button:hover { border-color: var(--line-strong); }
+  `,
 })
 export class GraphCanvas {
   readonly nodes = input.required<GraphNode[]>();
@@ -61,13 +76,42 @@ export class GraphCanvas {
       },
     });
     // Keep the canvas in step with its container (side panel collapsing, window resize).
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { this.cy?.resize(); if (!this.interacted) this.fitCapped(); }) : null;
+    // Refit only when the size really changes and the user has not moved the view: refitting on every observer callback
+    // reset the user's pan and zoom.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver((entries) => {
+      const r = entries[entries.length - 1]?.contentRect;
+      if (!r || (Math.round(r.width) === this.lastSize.w && Math.round(r.height) === this.lastSize.h)) return;
+      this.lastSize = { w: Math.round(r.width), h: Math.round(r.height) };
+      this.cy?.resize();
+      if (!this.interacted) this.fitCapped();
+    }) : null;
     afterNextRender(() => ro?.observe(this.el().nativeElement));
     inject(DestroyRef).onDestroy(() => { ro?.disconnect(); this.cy?.destroy(); });
   }
 
-  /** Set once the user pans or zooms: automatic fitting then stops. */
+  /** Set once the user pans, zooms or moves a node: automatic fitting then stops. */
   private interacted = false;
+  private lastSize = { w: -1, h: -1 };
+
+  /** Zoom around the centre of the view (buttons and keys). */
+  zoomBy(factor: number): void {
+    const cy = this.cy;
+    if (!cy) return;
+    this.interacted = true;
+    const z = Math.min(cy.maxZoom(), Math.max(cy.minZoom(), cy.zoom() * factor));
+    cy.zoom({ level: z, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+  }
+
+  fitAll(): void {
+    this.interacted = false;
+    this.fitCapped();
+  }
+
+  key(e: KeyboardEvent): void {
+    if (e.key === '+' || e.key === '=') { this.zoomBy(1.25); e.preventDefault(); }
+    else if (e.key === '-' || e.key === '_') { this.zoomBy(0.8); e.preventDefault(); }
+    else if (e.key === '0') { this.fitAll(); e.preventDefault(); }
+  }
 
   private css(name: string): string {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
@@ -104,7 +148,10 @@ export class GraphCanvas {
     if (!this.cy || this.builtFor !== root) {
       this.cy?.destroy();
       this.builtFor = root;
-      this.cy = cytoscape({ container: this.el().nativeElement, elements: els, style: this.stylesheet(), wheelSensitivity: 0.3, minZoom: 0.15, maxZoom: 3 });
+      // panning, zooming and node dragging stated explicitly. Wheel: measured in Chrome, the default speed zooms about 5 % per
+      // notch and the former 0.3 about 1.4 %, which reads as "zoom does not work"; 2 gives about 10 % per notch.
+      this.cy = cytoscape({ container: this.el().nativeElement, elements: els, style: this.stylesheet(), minZoom: 0.1, maxZoom: 4, wheelSensitivity: 2,
+        userPanningEnabled: true, userZoomingEnabled: true, autoungrabify: false, autounselectify: false, boxSelectionEnabled: false });
       this.cy.on('tap', 'node', (ev: EventObject) => { this.clearPath(); this.selected.emit({ kind: 'node', id: ev.target.id() }); });
       this.cy.on('tap', 'edge', (ev: EventObject) => { this.clearPath(); this.selected.emit({ kind: 'edge', id: ev.target.id() }); });
       this.cy.on('dbltap', 'node', (ev: EventObject) => this.expandRequested.emit(ev.target.id()));
@@ -112,7 +159,7 @@ export class GraphCanvas {
       this.cy.on('mouseout', 'node, edge', (ev: EventObject) => ev.target.removeClass('hover'));
       this.cy.on('tap', (ev: EventObject) => { if (ev.target === this.cy) { this.clearPath(); this.selected.emit(null); } });
       this.interacted = false;
-      this.cy.on('dragpan scrollzoom pinchzoom', () => (this.interacted = true));
+      this.cy.on('dragpan scrollzoom pinchzoom grab', () => (this.interacted = true));
       this.layout();
       return;
     }
