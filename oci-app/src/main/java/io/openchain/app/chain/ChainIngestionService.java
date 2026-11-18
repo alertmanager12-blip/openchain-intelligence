@@ -464,6 +464,13 @@ public class ChainIngestionService {
                 }
                 IntelligencePipeline.Result r = intelligence.onFlow(f);
                 fresh.addAll(r.newSignals());
+                for (FlowObserver o : flowObservers) {
+                    try {
+                        o.observe(f, r.newSignals());
+                    } catch (RuntimeException ex) {
+                        log.warn("flow observer failed: {}", ex.toString());
+                    }
+                }
                 // a profile just re-created for an address seen earlier does not know when the address really started
                 if (senderSeen && senderBefore.firstActivity() == null) intelligence.profiles().markStartUnknown(f.from());
                 if (receiverSeen && !receiverHadProfile) intelligence.profiles().markStartUnknown(f.to());
@@ -872,6 +879,18 @@ public class ChainIngestionService {
     private volatile java.util.function.Consumer<String> flowRetracted = id -> { };
 
     public void onFlowRetracted(java.util.function.Consumer<String> listener) { this.flowRetracted = listener == null ? id -> { } : listener; }
+
+    /**
+     * Told of every live value transfer once the detectors ran, with the signals it raised (predictions, ADR-0023
+     * amendment 2). Called on the indexing path: an observer must be quick and must not block.
+     */
+    public interface FlowObserver {
+        void observe(ValueFlow flow, List<Signal> newSignals);
+    }
+
+    private final List<FlowObserver> flowObservers = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void addFlowObserver(FlowObserver o) { flowObservers.add(o); }
 
     private volatile TrimResult lastTrim;
     /** Flows removed by the working-set trim since start (coverage: a non-exempt address may have lost older flows). */
