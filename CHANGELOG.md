@@ -16,6 +16,13 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 - **Prediction creation is sampled per type and hour** (60 new predictions per type and hour of event time, first come; those not created are counted). In production, `FAST_FORWARDING` fires about 1,500 times a minute: one prediction per signal meant millions of rows a day. The realisation rate is measured on the sample.
 
+### Changed (console — redesign for prospects, spec `docs/superpowers/specs/2026-11-18-console-redesign-design.md`)
+
+- **Light theme by default** (dark one click away; a stored choice wins), new navy/teal tokens with every text colour checked at WCAG AA in both themes.
+- **Level of proof on every finding**: a shared evidence line shows Observed, Inferred, Confirmed, Predicted or Simulated (ADR-0023 rules: a signal or an exposure derived from a confirmed listing stays Inferred; the original evidence level stays visible).
+- **Overview**: a live strip with what the indexers really report per chain (live, behind by N blocks, unreachable) and recent alerts on the last blocks; "What needs your attention" shows the most severe open alerts as verdicts with their coverage; an empty state invites to add a wallet to the watchlist.
+- **Wallet page**: a verdict first (listing or strongest signal, risk, findings with their level, coverage). **Investigation report** and **alert detail** use the same evidence lines. Graph root drawn in the brand colour.
+
 ### Fixed (console — graph zoom and navigation)
 
 - **Zooming the fund flow graph felt like it did nothing**: measured in Chrome, one wheel notch zoomed about 1.4 % (reduced wheel sensitivity 0.3). It is now about 10 % per notch. Visible **+ / − / fit** buttons on every graph, keys `+`, `-` and `0` when the graph has focus, panning, zooming and node dragging stated explicitly, and the automatic refit no longer runs on resize callbacks that do not change the size (it could reset the user's view).

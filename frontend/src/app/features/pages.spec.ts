@@ -42,7 +42,7 @@ describe('pages (mock mode smoke test)', () => {
 
   const addr = fakeAddress('ethereum', 3);
   const cases: [string, Type<unknown>, Record<string, unknown>, string][] = [
-    ['overview', OverviewPage, {}, 'Recent signals'],
+    ['overview', OverviewPage, {}, 'What needs your attention'],
     ['explorer', ExplorerPage, { q: '0x' + 'fa4ede30'.repeat(8), network: 'ethereum' }, 'Token transfers'],
     ['wallet', WalletPage, { network: 'ethereum', address: addr }, 'Counterparties'],
     ['risk', RiskPage, { network: 'ethereum', address: addr }, 'Contributions'],

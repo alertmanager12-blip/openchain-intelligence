@@ -20,9 +20,11 @@ import { WalletProfile } from './wallet-profile';
 
 const RISK_ORDER = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
 
+import { VerdictPanel } from '../../shared/verdict-panel';
+import { walletVerdict } from './wallet-verdict';
 @Component({
   selector: 'oci-wallet',
-  imports: [RouterLink, PageHeader, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, VerdictPanel, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wallet.html',
   styleUrl: './wallet.scss',
@@ -62,6 +64,8 @@ export class WalletPage {
   readonly address = input.required<string>();
 
   private readonly key = computed(() => ({ address: this.address(), network: this.network() }));
+  /** The verdict at the top of the page (spec 2026-11-18). */
+  readonly verdict = computed(() => { const a = this.w.value(); return a ? walletVerdict(a) : null; });
   readonly w = apiResource({ params: this.key, stream: (k) => this.api.walletAnalysis(k.address, k.network) });
   readonly history = computed(() => this.w.value()?.history ?? null);
   /** The API refused the network (422 on /network): explain it instead of showing the raw validation error. */

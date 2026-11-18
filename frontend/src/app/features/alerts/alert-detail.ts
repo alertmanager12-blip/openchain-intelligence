@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, input, linkedSignal, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -29,9 +29,11 @@ export const ACTIONS: Record<AlertStatus, AlertAction[]> = {
  * The alert pane of the inbox: header with the lifecycle actions, then Overview (why it fired) and Activity
  * (history and comments). A labelled region, not a dialog: the list stays usable next to it.
  */
+import { EvidenceLine } from '../../shared/evidence-line';
+import { alertLines } from './alert-lines';
 @Component({
   selector: 'oci-alert-detail',
-  imports: [DatePipe, FormField, AlertWhy, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],
+  imports: [DatePipe, FormField, AlertWhy, EvidenceLine, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './alert-detail.html',
   styleUrl: './alert-detail.scss',
@@ -41,6 +43,8 @@ export class AlertDetail {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
   readonly alert = input.required<Alert>();
+  /** The finding of the alert with its level of proof (spec 2026-11-18). */
+  readonly lines = computed(() => alertLines(this.alert()));
   readonly updated = output<Alert>();
   readonly closed = output<void>();
   readonly busy = signal(false);
