@@ -16,7 +16,7 @@ const DIST_ORDER: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN']
 const LAG_WARN = 200;
 
 import { LiveStrip } from './live-strip';
-import { attention } from './attention';
+import { attention, emptyState } from './attention';
 import { VerdictPanel } from '../../shared/verdict-panel';
 import { networkCoverageSentence } from '../../shared/coverage-text';
 @Component({
@@ -63,6 +63,7 @@ export class OverviewPage {
 
   /** The most severe open alerts as verdicts (spec 2026-11-18). */
   readonly needs = computed(() => { const d = this.dash.value(); return d ? attention(d) : []; });
+  readonly empty = computed(() => { const d = this.dash.value(); return d ? emptyState(d) : { kind: 'none-open' as const, text: '' }; });
   coverageOf(n: NetworkId): string {
     const s = this.dash.value()?.networks.find((x) => x.network === n);
     return s ? networkCoverageSentence(s) : '';

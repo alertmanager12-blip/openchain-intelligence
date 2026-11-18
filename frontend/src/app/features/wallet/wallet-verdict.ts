@@ -15,8 +15,10 @@ export interface WalletVerdict { sentence: string; risk: RiskLevel | null; lines
 export function walletVerdict(w: WalletAnalysis): WalletVerdict {
   const listed = w.labels.find((l) => l.evidenceLevel === 'CONFIRMED_BY_SOURCE');
   const signals = [...w.signals].sort((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity));
+  const labelled = w.labels[0];
   const sentence = listed ? `This wallet is listed as ${words(listed.category)} by ${listed.source}.`
     : signals.length ? `${signals.length} risk signal${signals.length === 1 ? '' : 's'} on this wallet; the strongest: ${(signals[0].title || words(signals[0].type)).toLowerCase()}.`
+    : labelled ? `This wallet is labelled ${words(labelled.category)} by ${labelled.source} (not confirmed by the source).`
     : 'No risk indicator in the data covered.';
   const lines: VerdictLine[] = [
     ...w.labels.map((l) => ({ level: levelOfSignal(l.evidenceLevel, true), text: `Listed as ${words(l.category)} by ${l.source}`, detail: evidenceDetail(l.evidenceLevel) })),

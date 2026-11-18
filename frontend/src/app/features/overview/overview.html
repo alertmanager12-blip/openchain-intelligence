@@ -9,13 +9,19 @@
       <oci-live-strip [networks]="d.networks" [alerts]="d.alerts?.recent ?? []" />
       <section class="needs" aria-labelledby="h-needs">
         <h2 id="h-needs">What needs your attention</h2>
-        <p class="needs-note">The most severe open alerts, with what they rest on. A signal is a reason to look closer, not proof of wrongdoing.</p>
+        <p class="needs-note">The most severe open alerts among the latest ones, with what they rest on. A signal is a reason to look closer, not proof of wrongdoing.</p>
         @for (v of needs(); track v.id) {
           <a class="needs-item" [routerLink]="['/alerts']" [queryParams]="{ id: v.id }">
             <oci-verdict [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="coverageOf(v.network)" />
           </a>
         } @empty {
-          <p class="needs-empty">Add a wallet to the watchlist to see what needs your attention here. <a routerLink="/watchlist">Open the watchlist</a></p>
+          @let e = empty();
+          <p class="needs-empty" [class.warn]="e.kind === 'hidden-open'">{{ e.text }}
+            @switch (e.kind) {
+              @case ('hidden-open') { <a routerLink="/alerts" [queryParams]="{ status: 'OPEN' }">Review the open alerts</a> }
+              @case ('none-open') { <a routerLink="/watchlist">Add wallets to the watchlist to follow them closely</a> }
+            }
+          </p>
         }
       </section>
       <section aria-labelledby="h-now">

@@ -30,3 +30,21 @@ export function attention(d: Dashboard, max = 3): Attention[] {
         .map((s) => ({ level: levelOfSignal(s.evidenceLevel, false), text: s.summary, detail: evidenceDetail(s.evidenceLevel) })),
     }));
 }
+
+export interface EmptyState { kind: 'hidden-open' | 'no-permission' | 'none-open'; text: string }
+
+/**
+ * What to say when no verdict is shown (final review, 2026-11-18). The dashboard lists only the latest alerts of any status,
+ * so open alerts may exist outside them: they are counted (openBySeverity) and announced, never hidden behind "nothing".
+ */
+export function emptyState(d: Dashboard): EmptyState {
+  if (!d.alerts) return { kind: 'no-permission', text: 'Alerts are not visible with this key: it lacks the alerts:read permission.' };
+  const o = d.alerts.openBySeverity ?? {};
+  const total = Object.values(o).reduce((s: number, n) => s + (n ?? 0), 0);
+  if (total > 0) {
+    const parts = [o['CRITICAL'] ? `${o['CRITICAL']} critical` : '', o['HIGH'] ? `${o['HIGH']} high` : ''].filter(Boolean);
+    const noun = total === 1 ? 'alert' : 'alerts', verb = total === 1 ? 'is' : 'are';
+    return { kind: 'hidden-open', text: `${total} open ${noun}${parts.length ? ` (${parts.join(', ')})` : ''} ${verb} not among the latest alerts shown here.` };
+  }
+  return { kind: 'none-open', text: 'No open alert right now.' };
+}

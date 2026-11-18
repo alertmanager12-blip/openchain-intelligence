@@ -32,4 +32,9 @@ describe('walletVerdict', () => {
       { type: 'RAPID_DRAIN', severity: 'HIGH', evidenceLevel: 'RISK_SIGNAL', summary: 'b', title: 'Rapid drain' }] } as unknown as WalletAnalysis;
     expect(walletVerdict(w).sentence).toBe('2 risk signals on this wallet; the strongest: rapid drain.');
   });
+
+  it('names an unconfirmed label instead of saying there is no indicator', () => {
+    const w = { ...base, labels: [{ category: 'SCAM', source: 'community', evidenceLevel: 'RISK_SIGNAL', name: 'x' }] } as unknown as WalletAnalysis;
+    expect(walletVerdict(w).sentence).toBe('This wallet is labelled scam by community (not confirmed by the source).');
+  });
 });

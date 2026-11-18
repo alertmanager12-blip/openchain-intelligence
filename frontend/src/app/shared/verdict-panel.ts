@@ -28,7 +28,7 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
   styles: `
     .verdict { background: var(--band); border-radius: var(--r-panel); padding: 16px 18px; display: grid; gap: 10px; }
     .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-    .sentence { font-size: 17px; line-height: 24px; font-weight: 600; margin: 0; max-width: 60ch; color: var(--ink); }
+    .sentence { font-size: 17px; line-height: 24px; font-weight: 600; margin: 0; max-width: 60ch; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
     .lines { display: grid; gap: 6px; }
     .coverage { margin: 0; color: var(--ink-2); font-size: var(--fs-12); max-width: 80ch; }
   `,

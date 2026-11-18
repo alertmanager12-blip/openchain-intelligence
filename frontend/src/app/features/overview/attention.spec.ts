@@ -25,3 +25,24 @@ describe('attention', () => {
     expect(attention(dash(null))).toEqual([]);
   });
 });
+
+import { emptyState } from './attention';
+
+describe('emptyState (final review, 2026-11-18)', () => {
+  const d = (o: Partial<{ alerts: unknown; open: Record<string, number> }>): Dashboard =>
+    ({ alerts: 'alerts' in o ? o.alerts : { recent: [], openBySeverity: o.open ?? {} } }) as unknown as Dashboard;
+
+  it('never says nothing needs attention while open alerts exist outside the latest ones', () => {
+    const s = emptyState(d({ open: { CRITICAL: 2, HIGH: 1, MEDIUM: 0 } }));
+    expect(s.kind).toBe('hidden-open');
+    expect(s.text).toBe('3 open alerts (2 critical, 1 high) are not among the latest alerts shown here.');
+  });
+
+  it('says when alerts cannot be read with this key', () => {
+    expect(emptyState(d({ alerts: null })).kind).toBe('no-permission');
+  });
+
+  it('says that no alert is open when none is', () => {
+    expect(emptyState(d({ open: {} }))).toEqual({ kind: 'none-open', text: 'No open alert right now.' });
+  });
+});

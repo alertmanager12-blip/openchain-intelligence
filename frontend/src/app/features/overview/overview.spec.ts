@@ -15,13 +15,13 @@ const empty = {
 } as unknown as Dashboard;
 
 describe('OverviewPage', () => {
-  it('invites to add a wallet to the watchlist when nothing needs attention', async () => {
+  it('says no alert is open and offers the watchlist when nothing needs attention', async () => {
     TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: ApiService, useValue: { dashboard: () => of(empty), walletRisk: () => of(null) } }] });
     const f = TestBed.createComponent(OverviewPage);
     await f.whenStable();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('Add a wallet to the watchlist to see what needs your attention here.');
+    expect(el.textContent).toContain('No open alert right now.');
     expect(el.querySelector('a[href="/watchlist"]')).not.toBeNull();
     expect(el.querySelector('oci-live-strip')).not.toBeNull();
   });
