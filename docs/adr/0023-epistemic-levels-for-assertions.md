@@ -63,3 +63,45 @@ The existing `EvidenceLevel` maps onto it (ANOMALY/RISK_SIGNAL → INFERRED, CON
 - Tests required before the amendment is considered implemented: the mapping of rule 4; rule 3 refuses a heuristic or a
   score as `CONFIRMED`; "no result" without `COMPLETE` coverage is never produced; `PREDICTED`/`SIMULATED` never appear
   in an API response.
+
+## Amendment 2 (2026-11-18): SIMULATED and PREDICTED, with their own rules
+
+- Status: proposed (phase 4 of `docs/strategy/FEATURE_ROADMAP.md`: "what-if graph" marked `SIMULATED`, "precursor
+  signals" as `PREDICTED` with expiry and a measured realisation rate; acceptance criteria of phase 4 in
+  `docs/strategy/ACCEPTANCE_CRITERIA.md`). Lifts the reservation of rule 1 of amendment 1 for these two levels only, under
+  the rules below; everything else in amendment 1 is unchanged.
+
+### Decision
+
+1. **`SIMULATED` is the result of an explicit hypothesis** ("if address X were listed as category C"). It is computed on
+   request and **never stored** as a fact: no signal, alert, label, score, assertion of an investigation or rule input is
+   created from it, and no detector, rule or score reads it. Every simulated item carries the level `SIMULATED` and the
+   hypothesis it depends on, in the same response; simulated results come from their own endpoints, never mixed into a
+   response that holds observed or inferred facts. Coverage applies as for any result (amendment 1, rule 2): "nobody would
+   be exposed" is said only with `COMPLETE` coverage.
+2. **`PREDICTED` is a hypothesis about a future observable event** of a subject: a type, the subject, a confidence, the
+   signals it rests on (ids), its limits, an issue date and a **mandatory expiry**, and the **observable condition** that
+   would realise it, written so that a machine can evaluate it (for example "an outgoing transfer of the subject to more
+   than N new counterparties before the expiry"). It is never `CONFIRMED`, never raises a risk score or opens an alert by
+   itself, and is shown as a hypothesis with its expiry.
+3. **Every prediction is evaluated.** It stays `OPEN` until its condition is observed (`REALISED`, with the evidence that
+   realised it) or its expiry passes (`NOT_REALISED`); a prediction whose subject lost coverage before the expiry is
+   `UNDETERMINED`, never counted as not realised. The evaluation is deterministic, uses observed events only, and is stored.
+   The **realisation rate per type** (realised over realised plus not realised, with the counts and the period) is
+   published; a type is not described as predictive before enough evaluated predictions exist (threshold stated with the
+   rate).
+4. **Storage.** Predictions and their evaluations are stored append-only (an evaluation is a new row), client-scoped where
+   they concern a client's watched wallets, with row-level security, as the artifacts of ADR-0022. Simulated results are
+   not stored; an export of one carries its hypothesis and level.
+5. **Order of work** (each step reviewed on its own): the what-if (no storage); then predictions, their storage and
+   evaluation; then the precursor detectors one by one (dispersion, wake-up after dormancy, burst of new counterparties,
+   change of strategy, coordinated movements); rule simulation on history last, limited to the history actually held
+   (in memory until decision D5 provides a persisted journal) and saying so.
+
+### Consequences
+
+- New levels in the API and the console, each with its own wording; additive for the v1 API.
+- Tests required: a simulated result never reaches a signal, alert, label, score or investigation; a simulated response
+  always carries its hypothesis and level; a prediction without expiry or observable condition is refused; a prediction
+  never changes a risk score; evaluation is deterministic (same events, same outcome); loss of coverage gives
+  `UNDETERMINED`; the realisation rate counts only evaluated predictions.
