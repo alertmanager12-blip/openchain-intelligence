@@ -11,16 +11,23 @@ import java.util.List;
  * ("uncalibrated"): a confidence is never invented.
  *
  * @param minOutgoing   the condition: at least this many outgoing transfers of the subject after {@code issuedAt} and up
- *                      to {@code expiresAt}, the transfer that triggered the prediction excluded
+ *                      to {@code expiresAt}, the transfer that triggered the prediction excluded; with
+ *                      {@code distinctRecipients}, at least this many distinct recipients of such transfers
  * @param excludedEvent event id of the triggering transfer
  */
 public record Prediction(String id, Type type, Address subject, Double confidence, List<String> signalIds, List<String> limits, Instant issuedAt,
-                         Instant expiresAt, int minOutgoing, String excludedEvent, String model) {
+                         Instant expiresAt, int minOutgoing, boolean distinctRecipients, String excludedEvent, String model) {
     public static final String LEVEL = "PREDICTED";
 
     public enum Type {
         /** A wallet that woke up after a long dormancy keeps sending value within the horizon. */
-        WAKE_CONTINUED_OUTFLOW
+        WAKE_CONTINUED_OUTFLOW,
+        /** A wallet that sent most of its balance (RAPID_DRAIN) sends again within the horizon. */
+        DRAIN_CONTINUES,
+        /** A wallet that forwarded what it received (FAST_FORWARDING) sends again within the horizon. */
+        FORWARDING_CONTINUES,
+        /** A wallet that dispersed value to many recipients (FLOW_CONCENTRATION) disperses again within the horizon. */
+        DISPERSION_REPEATS
     }
 
     public Prediction {
@@ -31,6 +38,7 @@ public record Prediction(String id, Type type, Address subject, Double confidenc
     }
 
     public String condition() {
-        return "at least " + minOutgoing + " outgoing transfer(s) of " + subject.value() + " after " + issuedAt + " and until " + expiresAt;
+        return "at least " + minOutgoing + (distinctRecipients ? " distinct recipient(s) of outgoing transfers of " : " outgoing transfer(s) of ")
+                + subject.value() + " after " + issuedAt + " and until " + expiresAt;
     }
 }

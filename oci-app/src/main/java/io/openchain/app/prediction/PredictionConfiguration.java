@@ -17,8 +17,10 @@ public class PredictionConfiguration {
     private static final Logger log = LoggerFactory.getLogger(PredictionConfiguration.class);
 
     @Bean
-    PredictionService predictionService(PredictionStore store, ChainIngestionService chains, Clock clock) {
-        return new PredictionService(store, n -> chains.indexingCoverage().gaps(n), clock);
+    PredictionService predictionService(PredictionStore store, ChainIngestionService chains, Clock clock,
+                                        io.openchain.intelligence.IntelligencePipeline intelligence) {
+        return new PredictionService(store, n -> chains.indexingCoverage().gaps(n), clock,
+                intelligence.detectionConfig().fanOut().minDistinctRecipients());
     }
 
     @Bean(destroyMethod = "shutdownNow")

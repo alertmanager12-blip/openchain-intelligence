@@ -20,7 +20,7 @@ public final class JdbcPredictionStore implements PredictionStore {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() {};
     private static final String P = "p.id, p.type, p.network, p.subject, p.confidence, p.signal_ids::text, p.limits::text, p.issued_at, p.expires_at, "
-            + "p.min_outgoing, p.excluded_event, p.model";
+            + "p.min_outgoing, p.excluded_event, p.model, p.distinct_recipients";
     private static final String E = "e.outcome, e.evidence::text, e.reason, e.evaluated_at";
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -29,13 +29,13 @@ public final class JdbcPredictionStore implements PredictionStore {
 
     @Override public void insert(Prediction p) {
         jdbc.update("insert into predictions (id, type, network, subject, confidence, signal_ids, limits, issued_at, expires_at, min_outgoing, "
-                + "excluded_event, model) values (:id, :type, :net, :subject, :conf, cast(:signals as jsonb), cast(:limits as jsonb), :issued, "
-                + ":expires, :min, :excluded, :model) on conflict (id) do nothing", new MapSqlParameterSource().addValue("id", p.id())
+                + "excluded_event, model, distinct_recipients) values (:id, :type, :net, :subject, :conf, cast(:signals as jsonb), cast(:limits as jsonb), "
+                + ":issued, :expires, :min, :excluded, :model, :distinct) on conflict (id) do nothing", new MapSqlParameterSource().addValue("id", p.id())
                 .addValue("type", p.type().name()).addValue("net", p.subject().network().id()).addValue("subject", p.subject().value())
                 .addValue("conf", p.confidence()).addValue("signals", JSON.writeValueAsString(p.signalIds()))
                 .addValue("limits", JSON.writeValueAsString(p.limits())).addValue("issued", Sql.ts(p.issuedAt()))
                 .addValue("expires", Sql.ts(p.expiresAt())).addValue("min", p.minOutgoing()).addValue("excluded", p.excludedEvent())
-                .addValue("model", p.model()));
+                .addValue("model", p.model()).addValue("distinct", p.distinctRecipients()));
     }
 
     @Override public void evaluate(Evaluation e) {
@@ -53,9 +53,9 @@ public final class JdbcPredictionStore implements PredictionStore {
         String where = outcome == null ? "" : "OPEN".equals(outcome) ? " where e.prediction_id is null" : " where e.outcome = :o";
         return jdbc.query("select " + P + ", " + E + " from predictions p left join prediction_evaluations e on e.prediction_id = p.id" + where
                 + " order by p.issued_at desc, p.id limit :l", new MapSqlParameterSource().addValue("o", outcome).addValue("l", limit),
-                (rs, n) -> new Entry(prediction(rs), rs.getString(13) == null ? null : new Evaluation(rs.getString(1),
-                        Evaluation.Outcome.valueOf(rs.getString(13)), JSON.readValue(rs.getString(14), STRINGS), rs.getString(15),
-                        rs.getTimestamp(16).toInstant())));
+                (rs, n) -> new Entry(prediction(rs), rs.getString(14) == null ? null : new Evaluation(rs.getString(1),
+                        Evaluation.Outcome.valueOf(rs.getString(14)), JSON.readValue(rs.getString(15), STRINGS), rs.getString(16),
+                        rs.getTimestamp(17).toInstant())));
     }
 
     @Override public Map<Evaluation.Outcome, Long> counts(Prediction.Type type) {
@@ -70,6 +70,6 @@ public final class JdbcPredictionStore implements PredictionStore {
         Double conf = rs.wasNull() ? null : c;
         return new Prediction(rs.getString(1), Prediction.Type.valueOf(rs.getString(2)), new Address(Network.fromId(rs.getString(3)), rs.getString(4)),
                 conf, JSON.readValue(rs.getString(6), STRINGS), JSON.readValue(rs.getString(7), STRINGS), rs.getTimestamp(8).toInstant(),
-                rs.getTimestamp(9).toInstant(), rs.getInt(10), rs.getString(11), rs.getString(12));
+                rs.getTimestamp(9).toInstant(), rs.getInt(10), rs.getBoolean(13), rs.getString(11), rs.getString(12));
     }
 }

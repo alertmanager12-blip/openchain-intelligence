@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 4 — more precursors, ADR-0023 amendment 2)
+
+- **Three more prediction types**, each measured on its own: `DRAIN_CONTINUES` (after `RAPID_DRAIN`, another outgoing transfer within 24 h), `FORWARDING_CONTINUES` (after `FAST_FORWARDING`, another outgoing transfer within 24 h), `DISPERSION_REPEATS` (after `FLOW_CONCENTRATION`, a new dispersion to at least the detector's number of distinct recipients within 72 h; `V19` adds the distinct-recipients condition). A dispersion count kept in memory makes a restart during the window give `UNDETERMINED`, never `NOT_REALISED`. The wake-up precursor stays, but fires only where 180 days of activity are held (loaded address histories).
+
 ### Added (phase 4 — rule simulation, ADR-0023 amendment 2)
 
 - **Impact of a rule change** `POST /rules/{id}/simulate` and "Compare a change" in the rule simulator: the stored version and an edited copy run side by side on the same events, with the matches that would stop or start and the alerts per day before and after. Level `SIMULATED`, no alert, no notification, the stored rule unchanged. Limited to the events held in memory until the persisted journal (decision D5) exists, and said so in every result.

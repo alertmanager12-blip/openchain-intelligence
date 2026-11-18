@@ -43,12 +43,23 @@ public final class PredictionService {
     private final ConcurrentLinkedQueue<Evaluation> toEvaluate = new ConcurrentLinkedQueue<>();
     private final Map<Prediction.Type, Double> established = new EnumMap<>(Prediction.Type.class);
     private final AtomicLong dropped = new AtomicLong();
+    /** Transfers that count towards each open prediction, seen by this process (lost on restart). */
+    private final Map<String, List<ValueFlow>> hits = new HashMap<>();
+    private final int dispersionThreshold;
+    private final Instant startedAt;
     private int openCount;
 
     public PredictionService(PredictionStore store, Function<Network, List<IndexingCoverage.Gap>> gaps, Clock clock) {
+        this(store, gaps, clock, 20);
+    }
+
+    /** @param dispersionThreshold distinct recipients that make a dispersion (the fan-out detector's threshold) */
+    public PredictionService(PredictionStore store, Function<Network, List<IndexingCoverage.Gap>> gaps, Clock clock, int dispersionThreshold) {
         this.store = store;
         this.gaps = gaps;
         this.clock = clock;
+        this.dispersionThreshold = dispersionThreshold;
+        this.startedAt = clock.instant();
     }
 
     /** Loads the open predictions (after a restart) and the established rates. */
@@ -64,17 +75,19 @@ public final class PredictionService {
         List<Prediction> mine = open.get(f.from());
         if (mine != null) {
             for (Prediction p : List.copyOf(mine)) {
-                if (Predictions.realisedBy(p, f)) settle(p, new Evaluation(p.id(), Evaluation.Outcome.REALISED, List.of(f.eventId()),
-                        "condition observed", clock.instant()));
+                if (!Predictions.realisedBy(p, f)) continue;
+                List<ValueFlow> h = hits.computeIfAbsent(p.id(), k -> new ArrayList<>());
+                h.add(f);
+                if (Predictions.satisfied(p, h)) settle(p, new Evaluation(p.id(), Evaluation.Outcome.REALISED,
+                        h.stream().map(ValueFlow::eventId).sorted().toList(), "condition observed", clock.instant()));
             }
         }
         for (Signal s : newSignals) {
-            Optional<Prediction> p = Predictions.fromSignal(s, f, null);
+            Optional<Prediction> p = Predictions.fromSignal(s, f, null, dispersionThreshold);
             if (p.isEmpty()) continue;
             Prediction q = p.get();
             Double rate = established.get(q.type());
-            if (rate != null) q = new Prediction(q.id(), q.type(), q.subject(), rate, q.signalIds(), Predictions.fromSignal(s, f, rate).orElseThrow().limits(),
-                    q.issuedAt(), q.expiresAt(), q.minOutgoing(), q.excludedEvent(), q.model());
+            if (rate != null) q = Predictions.fromSignal(s, f, rate, dispersionThreshold).orElseThrow();
             if (openCount >= MAX_OPEN) { dropped.incrementAndGet(); continue; }
             if (isTracked(q.id())) continue;
             track(q);
@@ -94,7 +107,12 @@ public final class PredictionService {
         for (Prediction p : due) {
             Network n = p.subject().network();
             boolean gap = gaps.apply(n).stream().anyMatch(g -> !g.detectedAt().isBefore(p.issuedAt()));
-            Predictions.evaluate(p, List.of(), until.get(n), gap, clock.instant()).ifPresent(e -> {
+            // a single transfer realises the others as soon as it is indexed and is stored at once; a count of distinct
+            // recipients is kept in memory, so a restart during the window leaves it unknown
+            boolean whole = p.minOutgoing() <= 1 || !p.issuedAt().isBefore(startedAt);
+            List<ValueFlow> seen;
+            synchronized (this) { seen = List.copyOf(hits.getOrDefault(p.id(), List.of())); }
+            Predictions.evaluate(p, seen, until.get(n), gap, whole, clock.instant()).ifPresent(e -> {
                 synchronized (this) { settle(p, e); }
             });
         }
@@ -143,6 +161,7 @@ public final class PredictionService {
         List<Prediction> l = open.get(p.subject());
         if (l == null || !l.remove(p)) return;
         if (l.isEmpty()) open.remove(p.subject());
+        hits.remove(p.id());
         openCount--;
         toEvaluate.add(e);
     }

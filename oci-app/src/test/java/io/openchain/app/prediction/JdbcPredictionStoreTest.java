@@ -32,7 +32,7 @@ class JdbcPredictionStoreTest {
 
     Prediction p(String id, Double conf, int hour) {
         return new Prediction(id, Prediction.Type.WAKE_CONTINUED_OUTFLOW, new Address(Network.TRON, "TPredWallet1111111111111111111111"), conf,
-                List.of("sig-1"), List.of("a limit"), T0.plus(Duration.ofHours(hour)), T0.plus(Duration.ofHours(hour + 72)), 1, "tron:x:0", "prediction@1");
+                List.of("sig-1"), List.of("a limit"), T0.plus(Duration.ofHours(hour)), T0.plus(Duration.ofHours(hour + 72)), 1, false, "tron:x:0", "prediction@1");
     }
 
     @Test void roundTripOpenListAndCounts() {

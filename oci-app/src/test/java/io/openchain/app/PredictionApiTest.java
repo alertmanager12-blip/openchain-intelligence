@@ -41,7 +41,7 @@ class PredictionApiTest extends ApiTestSupport {
         assertThat((List<String>) JsonPath.read(r, "$[?(@.subject == '" + w.value() + "')].condition")).allMatch(c -> c.startsWith("at least 1 outgoing"));
         String rates = mvc.perform(get("/api/v1/predictions/rates").header("X-API-Key", ANALYST)).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        assertThat((List<Boolean>) JsonPath.read(rates, "$[*].established")).containsExactly(false);
+        assertThat((List<Boolean>) JsonPath.read(rates, "$[*].established")).hasSize(4).containsOnly(false);
         mvc.perform(get("/api/v1/predictions").param("outcome", "maybe").header("X-API-Key", ANALYST)).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/predictions").header("X-API-Key", READER)).andExpect(status().isForbidden());
     }

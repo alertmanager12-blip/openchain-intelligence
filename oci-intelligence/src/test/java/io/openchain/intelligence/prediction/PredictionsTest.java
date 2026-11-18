@@ -42,9 +42,42 @@ class PredictionsTest {
         assertThat(p.limits()).anyMatch(l -> l.startsWith("Uncalibrated"));
         assertThat(p.signalIds()).containsExactly("sig-1");
         assertThat(Predictions.fromSignal(signal(SignalType.DORMANT_REACTIVATION), trigger, null).orElseThrow().id()).isEqualTo(p.id());
-        assertThat(Predictions.fromSignal(signal(SignalType.RAPID_DRAIN), trigger, null)).isEmpty();
-        assertThatThrownBy(() -> new Prediction("x", Prediction.Type.WAKE_CONTINUED_OUTFLOW, w, null, List.of(), List.of(), T0, T0, 1, "e", "m"))
+        assertThat(Predictions.fromSignal(signal(SignalType.UNUSUAL_AMOUNT), trigger, null)).isEmpty();
+        assertThatThrownBy(() -> new Prediction("x", Prediction.Type.WAKE_CONTINUED_OUTFLOW, w, null, List.of(), List.of(), T0, T0, 1, false, "e", "m"))
                 .hasMessageContaining("expiry");
+    }
+
+    @Test void eachPrecursorHasItsTypeHorizonAndCondition() {
+        ValueFlow trigger = flow(w, o, Duration.ZERO);
+        assertThat(Predictions.fromSignal(signal(SignalType.RAPID_DRAIN), trigger, null, 20).orElseThrow())
+                .satisfies(p -> { assertThat(p.type()).isEqualTo(Prediction.Type.DRAIN_CONTINUES); assertThat(p.expiresAt()).isEqualTo(T0.plus(Duration.ofHours(24))); });
+        assertThat(Predictions.fromSignal(signal(SignalType.FAST_FORWARDING), trigger, null, 20).orElseThrow().type())
+                .isEqualTo(Prediction.Type.FORWARDING_CONTINUES);
+        Prediction d = Predictions.fromSignal(signal(SignalType.FLOW_CONCENTRATION), trigger, null, 3).orElseThrow();
+        assertThat(d.type()).isEqualTo(Prediction.Type.DISPERSION_REPEATS);
+        assertThat(d.minOutgoing()).isEqualTo(3);
+        assertThat(d.distinctRecipients()).isTrue();
+        assertThat(d.condition()).contains("3 distinct recipient(s)");
+        // a signal raised on someone else's transfer gives nothing
+        assertThat(Predictions.fromSignal(signal(SignalType.RAPID_DRAIN), flow(o, w, Duration.ZERO), null, 20)).isEmpty();
+        assertThat(Predictions.fromSignal(signal(SignalType.UNUSUAL_AMOUNT), trigger, null, 20)).isEmpty();
+    }
+
+    @Test void aDispersionCountsDistinctRecipientsAndARestartMakesItUndetermined() {
+        ValueFlow trigger = flow(w, o, Duration.ZERO);
+        Prediction d = Predictions.fromSignal(signal(SignalType.FLOW_CONCENTRATION), trigger, null, 3).orElseThrow();
+        Address r1 = new Address(Network.ETHEREUM, "0x" + "1".repeat(40)), r2 = new Address(Network.ETHEREUM, "0x" + "2".repeat(40)),
+                r3 = new Address(Network.ETHEREUM, "0x" + "3".repeat(40));
+        List<ValueFlow> twoTo1 = List.of(flow(w, r1, Duration.ofHours(1)), flow(w, r1, Duration.ofHours(2)), flow(w, r2, Duration.ofHours(3)));
+        assertThat(Predictions.satisfied(d, twoTo1)).as("two distinct recipients only").isFalse();
+        assertThat(Predictions.satisfied(d, List.of(twoTo1.get(0), twoTo1.get(2), flow(w, r3, Duration.ofHours(4))))).isTrue();
+        Instant past = T0.plus(Duration.ofHours(73));
+        assertThat(Predictions.evaluate(d, twoTo1, past, false, false, past)).hasValueSatisfying(e -> {
+            assertThat(e.outcome()).isEqualTo(Evaluation.Outcome.UNDETERMINED);
+            assertThat(e.reason()).contains("restart");
+        });
+        assertThat(Predictions.evaluate(d, twoTo1, past, false, true, past))
+                .hasValueSatisfying(e -> assertThat(e.outcome()).isEqualTo(Evaluation.Outcome.NOT_REALISED));
     }
 
     @Test void evaluationIsDeterministicAndAGapIsNeverNotRealised() {

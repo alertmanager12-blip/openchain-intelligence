@@ -78,8 +78,8 @@ class JdbcRepositoriesPersistenceTest {
         DataSource fresh = PostgresSupport.newDatabase().dataSource();
         MigrateResult first = PostgresSupport.migrate(fresh);
         assertThat(first.success).isTrue();
-        assertThat(first.migrationsExecuted).isEqualTo(18); // V1..V18 (V18: predictions)
-        assertThat(first.targetSchemaVersion).isEqualTo("18");
+        assertThat(first.migrationsExecuted).isEqualTo(19); // V1..V19 (V19: distinct recipients of predictions)
+        assertThat(first.targetSchemaVersion).isEqualTo("19");
         List<String> tables = new NamedParameterJdbcTemplate(fresh).queryForList(
                 "select table_name from information_schema.tables where table_schema = 'public' order by table_name", Map.of(), String.class);
         assertThat(tables).contains("api_keys", "users", "connectors", "rules", "rule_versions", "alerts", "alert_history",
