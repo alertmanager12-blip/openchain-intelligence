@@ -65,3 +65,18 @@ describe('AI summaries (ADR-0022 amendment 5)', () => {
     expect(summaryHeader({ ...base, status: 'REFUSED' as const })).toContain('not shown');
   });
 });
+
+import { sentenceLine } from './investigations';
+
+describe('report sentences as evidence lines (spec 2026-11-18)', () => {
+  it('keeps the assertion level and cites the assertion', () => {
+    expect(sentenceLine({ text: 'Value sent may have reached TX.', assertionId: 'as_1', level: 'INFERRED' }))
+      .toEqual({ level: 'INFERRED', text: 'Value sent may have reached TX.', cite: 'as_1' });
+    expect(sentenceLine({ text: 'Data covered: partial.', assertionId: 'as_c', level: 'OBSERVED' }).level).toBe('OBSERVED');
+    expect(sentenceLine({ text: 'Listed.', assertionId: 'as_l', level: 'CONFIRMED' }).level).toBe('CONFIRMED');
+  });
+
+  it('never shows an unknown level as confirmed', () => {
+    expect(sentenceLine({ text: 'x', assertionId: 'as_x', level: 'SOMETHING' }).level).toBe('INFERRED');
+  });
+});

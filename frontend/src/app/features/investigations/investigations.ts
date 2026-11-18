@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal } fro
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { RouterLink } from '@angular/router';
+import { EvidenceLine } from '../../shared/evidence-line';
+import { Level } from '../../shared/levels';
 import { AiProvider, AssertionReview, CurrentReview, InvestigationSummary, InvestigationAssertion, InvestigationDetail, InvestigationReviews, ProposalDryRun, ProposalTemplate, ReviewDecision, RuleProposal, RuleProposals, TraceSummary } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
@@ -17,7 +19,7 @@ import { UI } from '../../shared/ui';
  */
 @Component({
   selector: 'oci-investigations',
-  imports: [DatePipe, LowerCasePipe, RouterLink, PageHeader, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
+  imports: [DatePipe, LowerCasePipe, RouterLink, PageHeader, EvidenceLine, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     .grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr); gap: 16px; align-items: start; }
@@ -98,7 +100,7 @@ import { UI } from '../../shared/ui';
                 @if (sec.sentences.length === 0) { <p class="small muted">Nothing.</p> }
                 @for (t of sec.sentences; track t.assertionId + $index) {
                   @if (visible(t.assertionId, reviews(), undecidedOnly())) {
-                    <p class="small sentence"><span class="lvl {{ t.level }}">{{ t.level }}</span>{{ t.text }}<button type="button" class="cite" (click)="cite(d, t.assertionId)" [attr.aria-label]="'Show assertion ' + t.assertionId">{{ t.assertionId }}</button>
+                    <div class="small sentence">@if (sentenceLine(t); as ln) {<oci-evidence-line [level]="ln.level" [text]="ln.text" [cite]="ln.cite" (citeClick)="cite(d, $event)" />}
                       <span class="review">
                         <button type="button" (click)="edit(t.assertionId, 'ACCEPTED')" [attr.aria-label]="'Accept assertion ' + t.assertionId">Accept</button>
                         <button type="button" (click)="edit(t.assertionId, 'REJECTED')" [attr.aria-label]="'Reject assertion ' + t.assertionId">Reject</button>
@@ -108,7 +110,7 @@ import { UI } from '../../shared/ui';
                         <span class="decision {{ c.decision }}">{{ reviewNote(c) }}</span>
                         @if (c.comment) { <span class="human">Comment (human): {{ c.comment }}</span> }
                       }
-                    </p>
+                    </div>
                     @if (editing()?.assertionId === t.assertionId) {
                       <div class="editor">
                         <label class="small" [attr.for]="'c-' + t.assertionId">{{ decisionLabel(editing()!.decision) }}: comment (optional, at most 2,000 characters)</label>
@@ -216,6 +218,7 @@ export class InvestigationsPage {
   readonly reviewLine = reviewLine;
   readonly historyOf = historyOf;
   readonly decisionLabel = decisionLabel;
+  readonly sentenceLine = sentenceLine;
   readonly proposals = signal<RuleProposals | null>(null);
   readonly providers = signal<AiProvider[]>([]);
   readonly provider = signal('');
@@ -379,4 +382,10 @@ export function summaryHeader(s: InvestigationSummary): string {
   return s.status === 'ACCEPTED' ? `Written by AI (${by}) on ${when}, checked against the assertions`
     : s.status === 'REFUSED' ? `Refused (${by}) on ${when}: it said something the assertions do not support, so it is not shown`
     : `Failed (${by}) on ${when}`;
+}
+
+/** A report sentence as an evidence line (spec 2026-11-18): its assertion's level, never upgraded; it cites the assertion. */
+export function sentenceLine(t: { text: string; assertionId: string; level: string }): { level: Level; text: string; cite: string } {
+  const level: Level = t.level === 'OBSERVED' || t.level === 'CONFIRMED' || t.level === 'INFERRED' ? t.level : 'INFERRED';
+  return { level, text: t.text, cite: t.assertionId };
 }

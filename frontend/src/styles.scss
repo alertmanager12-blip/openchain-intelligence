@@ -18,20 +18,20 @@
  */
 :root {
   color-scheme: light;
-  --bg: #f4f6f8;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #edf0f3;
-  --well: #f3f5f7;
+  --surface-2: #f2f6f7;
+  --well: #f2f6f7;
   --sunken: var(--well);
-  --line: #dfe4e9;
+  --line: #dce5ea;
   --line-soft: #e9edf1;
   /* outlines of text fields: 3:1 against the surface (WCAG 1.4.11) */
   --line-strong: #808b96;
   /* outline of buttons and chips: decorative, their label identifies them */
   --line-control: #d2d9e0;
-  --ink: #0e1620;
-  --ink-2: #3c4855;
-  --muted: #5b6774;
+  --ink: #0b2545;
+  --ink-2: #4d6177;
+  --muted: #4d6177;
   --accent: #0a7381;
   --accent-hover: #085f6b;
   --accent-ink: #ffffff;
@@ -67,7 +67,7 @@
   --r-panel: 10px;
   --r-overlay: 12px;
   /* sidebar: a half step between the canvas and the panels */
-  --rail: color-mix(in srgb, var(--surface) 50%, var(--bg));
+  --rail: var(--band);
   --rail-w: 240px;
   --rail-w-collapsed: 56px;
   --topbar-h: 52px;
@@ -81,21 +81,31 @@
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --t-fast: 120ms;
   --t-med: 180ms;
+  /* console redesign (spec 2026-11-18): band, brand and the five levels of proof; mirrored in shared/contrast.ts */
+  --canvas: var(--bg);
+  --band: #f2f6f7;
+  --brand: var(--accent);
+  --lvl-observed: #4d6177;
+  --lvl-inferred: #8a5d00;
+  --lvl-inferred-rule: #b7791f;
+  --lvl-confirmed: #1e7457;
+  --lvl-predicted: #6b3fa0;
+  --lvl-simulated: #4d6177;
 }
 
 @mixin dark-tokens {
   color-scheme: dark;
-  --bg: #080d12;
-  --surface: #0d141b;
-  --surface-2: #142029;
-  --well: #0a1117;
-  --line: #1c2833;
-  --line-soft: #15202a;
+  --bg: #0b1626;
+  --surface: #0f1c31;
+  --surface-2: #11203a;
+  --well: #11203a;
+  --line: #22344f;
+  --line-soft: #1a2a42;
   --line-strong: #607080;
   --line-control: #263440;
-  --ink: #e6edf3;
-  --ink-2: #aab7c4;
-  --muted: #8392a1;
+  --ink: #e6edf5;
+  --ink-2: #a9b8ca;
+  --muted: #a9b8ca;
   --accent: #3cc6d4;
   --accent-hover: #66d4df;
   --accent-ink: #04131a;
@@ -113,6 +123,13 @@
   --shadow-panel: inset 0 1px 0 rgb(200 225 250 / 3%);
   --shadow-overlay: 0 0 0 1px rgb(150 185 220 / 9%), 0 8px 16px -4px rgb(0 0 0 / 55%), 0 24px 48px -12px rgb(0 0 0 / 70%);
   --scrim: rgb(2 6 10 / 64%);
+  --band: #11203a;
+  --lvl-observed: #a9b8ca;
+  --lvl-inferred: #e0b04a;
+  --lvl-inferred-rule: #c99a3a;
+  --lvl-confirmed: #5bc79a;
+  --lvl-predicted: #b9a0f2;
+  --lvl-simulated: #a9b8ca;
 }
 :root[data-theme='dark'] { @include dark-tokens; }
 

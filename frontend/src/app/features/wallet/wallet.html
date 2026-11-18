@@ -38,6 +38,10 @@
   } @else {
   <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" loadingText="Analysing the wallet">
     @if (w.value(); as a) {
+      @if (verdict(); as v) {
+        <oci-verdict class="wallet-verdict" [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="v.coverage"
+          limit="A listing or a signal is a reason to look closer, not proof of wrongdoing." />
+      }
       <dl class="stats" style="--stats: 5">
         <div class="stat"><dt>Transactions</dt><dd><span class="stat-v">{{ a.txCount.toLocaleString('en-US') }}</span></dd></div>
         <div class="stat"><dt>First seen</dt><dd><span class="stat-v">{{ ago(a.firstSeen) }}</span></dd></div>
