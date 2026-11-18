@@ -57,6 +57,46 @@ public class TraceConfiguration {
         return new RuleProposalService(reviews, registry, tester, history, clock, props.getRules().getMaxDryRunEvents());
     }
 
+    /**
+     * AI summary providers from the settings (ADR-0022 amendment 5). A provider with a missing key, model or URL is left out
+     * with an error in the log: a misconfiguration never sends data to an unintended place.
+     */
+    @Bean
+    InvestigationSummaryService investigationSummaryService(TraceArtifactStore store, InvestigationSummaryStore summaries, Clock clock,
+                                                            io.openchain.app.config.OciProperties props) {
+        var cfg = props.getAiSummary();
+        java.util.List<InvestigationSummaryService.Provider> providers = new java.util.ArrayList<>();
+        if (cfg.isEnabled()) {
+            for (var p : cfg.getProviders()) {
+                try {
+                    providers.add(provider(p, cfg.getTimeout()));
+                } catch (IllegalArgumentException e) {
+                    log.error("AI summary provider '{}' left out: {}", p.getId(), e.getMessage());
+                }
+            }
+            log.info("AI summaries enabled with {} provider(s): {}", providers.size(), providers.stream().map(InvestigationSummaryService.Provider::id).toList());
+        }
+        return new InvestigationSummaryService(store, summaries, providers, cfg.isEnabled(), cfg.getDailyCap(), clock);
+    }
+
+    static InvestigationSummaryService.Provider provider(io.openchain.app.config.OciProperties.AiSummary.Provider p, java.time.Duration timeout) {
+        if (p.getId() == null || !p.getId().matches("[a-z0-9][a-z0-9-]{0,31}")) throw new IllegalArgumentException("id must be a short lowercase slug");
+        if (p.getModel() == null || p.getModel().isBlank()) throw new IllegalArgumentException("model is required");
+        String connector = p.getConnector() == null ? "" : p.getConnector().trim().toLowerCase(java.util.Locale.ROOT);
+        io.openchain.app.summary.SummaryWriter w = switch (connector) {
+            case "claude" -> {
+                if (p.getApiKey() == null || p.getApiKey().isBlank()) throw new IllegalArgumentException("api key is required");
+                yield new io.openchain.app.summary.AnthropicSummaryWriter(p.getApiKey(), p.getBaseUrl(), p.getModel(), timeout);
+            }
+            case "openai-compatible" -> new io.openchain.app.summary.OpenAiCompatibleSummaryWriter(p.getBaseUrl(), p.getApiKey(), p.getModel(),
+                    "json_object".equalsIgnoreCase(p.getResponseFormat()) ? io.openchain.app.summary.OpenAiCompatibleSummaryWriter.ResponseFormat.JSON_OBJECT
+                            : io.openchain.app.summary.OpenAiCompatibleSummaryWriter.ResponseFormat.JSON_SCHEMA, timeout);
+            default -> throw new IllegalArgumentException("connector must be claude or openai-compatible");
+        };
+        String label = p.getLabel() == null || p.getLabel().isBlank() ? p.getId() : p.getLabel();
+        return new InvestigationSummaryService.Provider(p.getId(), label, connector, p.getModel(), p.getDataLocation(), w);
+    }
+
     /** A transfer retracted by a reorganisation makes STALE every stored trace that froze it (all client scopes). */
     @Bean
     ApplicationRunner staleOnReorg(io.openchain.app.chain.ChainIngestionService chains, TraceArtifactStore store) {

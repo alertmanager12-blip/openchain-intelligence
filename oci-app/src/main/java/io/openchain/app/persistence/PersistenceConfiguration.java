@@ -67,6 +67,9 @@ public class PersistenceConfiguration {
         @Bean io.openchain.app.trace.AssertionReviewStore assertionReviewStore(io.openchain.app.trace.TraceArtifactStore artifacts) {
             return new io.openchain.app.trace.InMemoryAssertionReviewStore(artifacts);
         }
+        @Bean io.openchain.app.trace.InvestigationSummaryStore investigationSummaryStore() {
+            return new io.openchain.app.trace.InMemoryInvestigationSummaryStore();
+        }
         @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory() { return io.openchain.app.security.ClientScopeDirectory.inMemory(); }
         @Bean UserRepository userRepository() { return new InMemoryUserRepository(); }
         @Bean ConnectorRepository connectorRepository() { return new InMemoryConnectorRepository(); }
@@ -117,6 +120,9 @@ public class PersistenceConfiguration {
         }
         @Bean io.openchain.app.trace.AssertionReviewStore assertionReviewStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
             return new io.openchain.app.trace.JdbcAssertionReviewStore(jdbc, tx);
+        }
+        @Bean io.openchain.app.trace.InvestigationSummaryStore investigationSummaryStore(NamedParameterJdbcTemplate jdbc, TransactionRunner tx) {
+            return new io.openchain.app.trace.JdbcInvestigationSummaryStore(jdbc, tx);
         }
         @Bean io.openchain.app.security.ClientScopeDirectory clientScopeDirectory(NamedParameterJdbcTemplate jdbc) {
             return io.openchain.app.security.ClientScopeDirectory.jdbc(jdbc);

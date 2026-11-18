@@ -95,6 +95,8 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, API + "/investigations/*/assertions/*/reviews").hasAuthority(authority(Scopes.INVESTIGATION_REVIEW))
                         // rule proposals (ADR-0022 amendment 4): a dry run computed on request, stores nothing, a read permission
                         .requestMatchers(HttpMethod.POST, API + "/investigations/*/rule-proposals").hasAuthority(authority(Scopes.INVESTIGATION_READ))
+                        // AI summaries (ADR-0022 amendment 5): choosing a provider is a read; asking one falls under investigation:write
+                        .requestMatchers(HttpMethod.GET, API + "/ai-summary/**").hasAuthority(authority(Scopes.INVESTIGATION_READ))
                         .requestMatchers(API + "/investigations", API + "/investigations/**").hasAuthority(authority(Scopes.INVESTIGATION_WRITE))
                         .requestMatchers(HttpMethod.GET, API + "/signals").hasAuthority(authority(Scopes.RISK_READ))
                         .requestMatchers(HttpMethod.GET, API + "/networks", API + "/dashboard").hasAuthority(authority(Scopes.WALLET_READ))
