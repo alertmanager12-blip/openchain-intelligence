@@ -7,3 +7,6 @@ dist/
 .DS_Store
 .env
 .remember/
+
+# visual companion mockups (brainstorming)
+.superpowers/
