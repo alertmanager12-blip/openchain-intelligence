@@ -291,6 +291,69 @@ public class RuleController {
         return dryRun(registry.compile(src, Format.YAML), req);
     }
 
+    public record SimulateRequest(String source, String from, String to, String network) {}
+
+    /**
+     * The impact of a change of this rule (phase 4, ADR-0023 amendment 2): the stored version and the proposed source run
+     * side by side on the same events held in memory, both as dry runs (isolated engine, no alert, no notification); the
+     * stored rule is not changed. Level SIMULATED. The window is what the in-memory history holds, which may be short.
+     */
+    @PostMapping("/{id}/simulate")
+    public Map<String, Object> simulate(@PathVariable String id, @RequestBody(required = false) SimulateRequest req) {
+        RuleRegistry.StoredRule stored = registry.get(id);
+        if (req == null || req.source() == null || req.source().isBlank()) throw ApiException.badRequest("'source' (the proposed rule) is required");
+        CompiledRule current = stored.current().compiled();
+        CompiledRule proposed = registry.compile(req.source(), Format.YAML);
+        if (!proposed.id().equals(current.id())) throw ApiException.badRequest("the proposed source must keep the rule id '" + current.id() + "'");
+        Instant to = InvestigationController.instant(req.to(), "to");
+        Instant from = InvestigationController.instant(req.from(), "from");
+        if (to == null) to = clock.instant();
+        if (from != null && from.isAfter(to)) throw ApiException.badRequest("'from' must be before 'to'");
+        Network n = req.network() == null || req.network().isBlank() ? null : InvestigationController.parseNetwork(req.network());
+        List<ChainEvent> events = history.range(from, to, n, props.getRules().getMaxDryRunEvents());
+
+        DryRunReport before = tester.dryRun(registry.executable(current), events, DryRunOptions.defaults());
+        DryRunReport after = tester.dryRun(registry.executable(proposed), events, DryRunOptions.defaults());
+        java.util.Set<String> b = new java.util.LinkedHashSet<>(), a = new java.util.LinkedHashSet<>();
+        for (ChainEvent e : events) {
+            if (e == null || e.removed()) continue;
+            if (current.inScope(e) && current.matchesFilter(e, io.openchain.alerting.rule.compile.CompiledCondition.EvalStats.NOOP)) b.add(e.eventId());
+            if (proposed.inScope(e) && proposed.matchesFilter(e, io.openchain.alerting.rule.compile.CompiledCondition.EvalStats.NOOP)) a.add(e.eventId());
+        }
+        List<String> onlyBefore = b.stream().filter(x -> !a.contains(x)).toList(), onlyAfter = a.stream().filter(x -> !b.contains(x)).toList();
+
+        Map<String, Object> window = new LinkedHashMap<>();
+        window.put("from", events.isEmpty() ? null : events.getFirst().eventTime().toString());
+        window.put("to", events.isEmpty() ? null : events.getLast().eventTime().toString());
+        window.put("note", "Events held in memory only (at most " + props.getRules().getMaxDryRunEvents() + "; the persisted journal of decision D5 "
+                + "does not exist yet): the window may be short and is not a forecast.");
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("level", "SIMULATED");
+        out.put("ruleId", current.id());
+        out.put("currentVersion", current.version());
+        out.put("proposedVersion", proposed.version());
+        out.put("evaluatedEvents", events.size());
+        out.put("window", window);
+        out.put("before", side(before));
+        out.put("after", side(after));
+        out.put("onlyBefore", onlyBefore.size());
+        out.put("onlyAfter", onlyAfter.size());
+        out.put("onlyBeforeSample", onlyBefore.stream().limit(20).toList());
+        out.put("onlyAfterSample", onlyAfter.stream().limit(20).toList());
+        return out;
+    }
+
+    private static Map<String, Object> side(DryRunReport r) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("eventsInScope", r.eventsInScope());
+        m.put("conditionMatches", r.conditionMatches());
+        m.put("triggers", r.triggers());
+        m.put("estimatedAlerts", r.estimatedAlerts());
+        m.put("estimatedAlertsPerDay", r.estimatedAlertsPerDay());
+        m.put("warnings", r.warnings().stream().map(DryRunReport.Warning::message).toList());
+        return m;
+    }
+
     private Map<String, Object> dryRun(CompiledRule rule, TestRequest req) {
         if (req != null && req.mode() != null && !req.mode().equalsIgnoreCase("DRY_RUN"))
             throw ApiException.badRequest("only mode DRY_RUN is supported");

@@ -402,6 +402,14 @@ export interface InvestigationReviews {
   decided: number; total: number;
 }
 
+/** The impact of a rule change on the events held in memory (level SIMULATED, nothing alerted or stored). */
+export interface RuleSimulationSide { eventsInScope: number; conditionMatches: number; triggers: number; estimatedAlerts: number; estimatedAlertsPerDay: number; warnings: string[]; }
+export interface RuleSimulation {
+  level: 'SIMULATED'; ruleId: string; currentVersion: string; proposedVersion: string; evaluatedEvents: number;
+  window: { from: string | null; to: string | null; note: string }; before: RuleSimulationSide; after: RuleSimulationSide;
+  onlyBefore: number; onlyAfter: number; onlyBeforeSample: string[]; onlyAfterSample: string[];
+}
+
 /** A hypothesis about a wallet's future activity (ADR-0023 amendment 2); confidence null = uncalibrated. */
 export interface PredictionItem {
   id: string; level: 'PREDICTED'; type: string; network: NetworkId; subject: string; confidence: number | null; condition: string;

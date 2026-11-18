@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 4 — rule simulation, ADR-0023 amendment 2)
+
+- **Impact of a rule change** `POST /rules/{id}/simulate` and "Compare a change" in the rule simulator: the stored version and an edited copy run side by side on the same events, with the matches that would stop or start and the alerts per day before and after. Level `SIMULATED`, no alert, no notification, the stored rule unchanged. Limited to the events held in memory until the persisted journal (decision D5) exists, and said so in every result.
+
 ### Added (phase 4 — console, ADR-0023 amendment 2, third step)
 
 - **"Predictions & what-if" page** (shortcut `p`): the realisation rate per type with its counts (never shown as established below 30 evaluated), predictions by outcome with condition, expiry, confidence ("uncalibrated" until measured) and limits; and the what-if exposure form, its statement, the coverage of the address and the wallets that would be exposed, each marked SIMULATED. The two kinds of hypothesis sit in separate sections, apart from facts.
