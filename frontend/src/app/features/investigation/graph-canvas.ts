@@ -247,7 +247,7 @@ export class GraphCanvas {
       },
       { selector: 'node[?labelled]', style: { shape: 'diamond', width: 28, height: 28 } },
       { selector: 'node[?contract]', style: { shape: 'round-rectangle' } },
-      { selector: 'node[?root]', style: { 'border-color': this.css('--ink'), 'border-width': 3, width: 34, height: 34, 'font-weight': 600 } },
+      { selector: 'node[?root]', style: { 'border-color': this.css('--brand'), 'border-width': 3, width: 34, height: 34, 'font-weight': 600 } },
       { selector: 'node[?root]', style: { color: this.css('--ink') } },
       { selector: 'node.hover, node:selected', style: { label: 'data(full)', color: this.css('--ink'), 'z-index': 20, 'text-background-opacity': 1, 'min-zoomed-font-size': 0 } },
       { selector: 'node:selected', style: { 'border-color': this.css('--focus'), 'border-width': 4, 'overlay-opacity': 0 } },
