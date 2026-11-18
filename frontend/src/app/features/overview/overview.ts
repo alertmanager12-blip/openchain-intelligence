@@ -4,6 +4,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { ALERT_STATUSES, NetworkId, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
+import { sanctionsSentence } from '../../shared/sanctions-text';
 import { indexerLag, shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
@@ -31,6 +32,8 @@ export class OverviewPage {
   private readonly router = inject(Router);
   /** One call: GET /dashboard. */
   readonly dash = apiResource({ params: () => ({}), stream: () => this.api.dashboard() });
+  /** Official sanctions lists in force (ADR-0027), said in every verdict's coverage. */
+  readonly sanctions = apiResource({ params: () => ({}), stream: () => this.api.sanctionsLists() });
   /** Recent alerts also show their subject wallet's score (GET /wallets/{a}/risk each); null = could not be scored. */
   readonly scores = apiResource({
     params: () => {
@@ -66,7 +69,8 @@ export class OverviewPage {
   readonly empty = computed(() => { const d = this.dash.value(); return d ? emptyState(d) : { kind: 'none-open' as const, text: '' }; });
   coverageOf(n: NetworkId): string {
     const s = this.dash.value()?.networks.find((x) => x.network === n);
-    return s ? networkCoverageSentence(s) : '';
+    // an unknown network coverage stays unknown ('' shows "Coverage unknown"): the sanctions sentence completes a known one
+    return s ? `${networkCoverageSentence(s)} ${sanctionsSentence(this.sanctions.value()?.items[0])}` : '';
   }
 
   readonly openAlerts = computed(() => this.dash.value()?.totals.openAlerts ?? null);

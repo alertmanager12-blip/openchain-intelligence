@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- Reduced extract with the structure of OFAC SDN_ADVANCED.XML (publication of 2026-11-18); addresses are fictitious. -->
+<Sanctions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Version="3" xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/ADVANCED_XML">
+  <DateOfIssue CalendarTypeID="1">
+    <Year>2026</Year>
+    <Month>11</Month>
+    <Day>18</Day>
+  </DateOfIssue>
+  <ReferenceValueSets>
+    <FeatureTypeValues>
+      <FeatureType ID="8" FeatureTypeGroupID="1">Website</FeatureType>
+      <FeatureType ID="344" FeatureTypeGroupID="1">Digital Currency Address - XBT</FeatureType>
+      <FeatureType ID="345" FeatureTypeGroupID="1">Digital Currency Address - ETH</FeatureType>
+      <FeatureType ID="887" FeatureTypeGroupID="1">Digital Currency Address - USDT</FeatureType>
+      <FeatureType ID="992" FeatureTypeGroupID="1">Digital Currency Address - TRX</FeatureType>
+      <FeatureType ID="1008" FeatureTypeGroupID="1">Digital Currency Address - BSC</FeatureType>
+    </FeatureTypeValues>
+    <SanctionsTypeValues>
+      <SanctionsType ID="1">Program</SanctionsType>
+      <SanctionsType ID="1705">Block</SanctionsType>
+    </SanctionsTypeValues>
+  </ReferenceValueSets>
+  <DistinctParties>
+    <DistinctParty FixedRef="4632">
+      <Comment />
+      <Profile ID="4632" PartySubTypeID="3">
+        <Identity ID="751" FixedRef="4632" Primary="true" False="false">
+          <Alias FixedRef="4632" AliasTypeID="1400" Primary="false" LowQuality="false">
+            <DocumentedName ID="11873" FixedRef="4632" DocNameStatusID="2">
+              <DocumentedNamePart>
+                <NamePartValue NamePartGroupID="17556" ScriptID="215" ScriptStatusID="1" Acronym="false">AKA NAME NOT PRIMARY</NamePartValue>
+              </DocumentedNamePart>
+            </DocumentedName>
+          </Alias>
+          <Alias FixedRef="4632" AliasTypeID="1403" Primary="true" LowQuality="false">
+            <DocumentedName ID="11870" FixedRef="4632" DocNameStatusID="1">
+              <DocumentedNamePart>
+                <NamePartValue NamePartGroupID="17550" ScriptID="215" ScriptStatusID="1" Acronym="false">EXAMPLE EXCHANGE LTD</NamePartValue>
+              </DocumentedNamePart>
+            </DocumentedName>
+          </Alias>
+        </Identity>
+        <Feature ID="1" FeatureTypeID="8">
+          <FeatureVersion ID="11" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">www.example.test</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="751" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="2" FeatureTypeID="992">
+          <FeatureVersion ID="12" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">TNiq9AXBp9EjUqhDhrwrfvAA8U3GUQZH81</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="751" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="3" FeatureTypeID="887">
+          <FeatureVersion ID="13" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">TNiq9AXBp9EjUqhDhrwrfvAA8U3GUQZH81</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="751" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="4" FeatureTypeID="345">
+          <FeatureVersion ID="14" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">0xAbCdEf0123456789aBcDeF0123456789AbCdEf01</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="751" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+      </Profile>
+    </DistinctParty>
+    <DistinctParty FixedRef="5001">
+      <Comment />
+      <Profile ID="5001" PartySubTypeID="4">
+        <Identity ID="900" FixedRef="5001" Primary="true" False="false">
+          <Alias FixedRef="5001" AliasTypeID="1403" Primary="true" LowQuality="false">
+            <DocumentedName ID="20001" FixedRef="5001" DocNameStatusID="1">
+              <DocumentedNamePart>
+                <NamePartValue NamePartGroupID="1" ScriptID="215" ScriptStatusID="1" Acronym="false">Ivan</NamePartValue>
+              </DocumentedNamePart>
+              <DocumentedNamePart>
+                <NamePartValue NamePartGroupID="2" ScriptID="215" ScriptStatusID="1" Acronym="false">PETROV</NamePartValue>
+              </DocumentedNamePart>
+            </DocumentedName>
+          </Alias>
+        </Identity>
+        <Feature ID="5" FeatureTypeID="1008">
+          <FeatureVersion ID="15" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">0x1111111111111111111111111111111111111111</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="900" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="6" FeatureTypeID="344">
+          <FeatureVersion ID="16" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">1BoatSLRHtKNngkdXEeobR76b53LETtpyT</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="900" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="7" FeatureTypeID="887">
+          <FeatureVersion ID="17" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">0x2222222222222222222222222222222222222222</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="900" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+        <Feature ID="8" FeatureTypeID="992">
+          <FeatureVersion ID="18" ReliabilityID="1"><Comment /><VersionDetail DetailTypeID="1432">not-a-tron-address</VersionDetail></FeatureVersion>
+          <IdentityReference IdentityID="900" IdentityFeatureLinkTypeID="1" />
+        </Feature>
+      </Profile>
+    </DistinctParty>
+  </DistinctParties>
+  <SanctionsEntries>
+    <SanctionsEntry ID="4632" ProfileID="4632" ListID="1550">
+      <SanctionsMeasure ID="1" SanctionsTypeID="1705"><DatePeriod CalendarTypeID="1" /></SanctionsMeasure>
+      <SanctionsMeasure ID="2" SanctionsTypeID="1"><Comment>IRAN</Comment><DatePeriod CalendarTypeID="1" /></SanctionsMeasure>
+      <SanctionsMeasure ID="3" SanctionsTypeID="1"><Comment>SDGT</Comment><DatePeriod CalendarTypeID="1" /></SanctionsMeasure>
+    </SanctionsEntry>
+    <SanctionsEntry ID="5001" ProfileID="5001" ListID="1550">
+      <SanctionsMeasure ID="4" SanctionsTypeID="1"><Comment>CYBER2</Comment><DatePeriod CalendarTypeID="1" /></SanctionsMeasure>
+    </SanctionsEntry>
+  </SanctionsEntries>
+</Sanctions>

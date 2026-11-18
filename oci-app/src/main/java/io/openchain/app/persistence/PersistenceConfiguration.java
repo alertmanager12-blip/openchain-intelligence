@@ -69,6 +69,7 @@ public class PersistenceConfiguration {
         }
         @Bean io.openchain.app.prediction.PredictionStore predictionStore() { return new io.openchain.app.prediction.InMemoryPredictionStore(); }
         @Bean io.openchain.app.flowjournal.FlowJournal flowJournal() { return new io.openchain.app.flowjournal.InMemoryFlowJournal(); }
+        @Bean io.openchain.app.sanctions.SanctionsListStore sanctionsListStore() { return new io.openchain.app.sanctions.InMemorySanctionsListStore(); }
         @Bean io.openchain.app.trace.InvestigationSummaryStore investigationSummaryStore() {
             return new io.openchain.app.trace.InMemoryInvestigationSummaryStore();
         }
@@ -124,6 +125,9 @@ public class PersistenceConfiguration {
             return new io.openchain.app.trace.JdbcAssertionReviewStore(jdbc, tx);
         }
         @Bean io.openchain.app.flowjournal.FlowJournal flowJournal(NamedParameterJdbcTemplate jdbc) { return new io.openchain.app.flowjournal.JdbcFlowJournal(jdbc); }
+        @Bean io.openchain.app.sanctions.SanctionsListStore sanctionsListStore(NamedParameterJdbcTemplate jdbc, OciProperties props) {
+            return new io.openchain.app.sanctions.JdbcSanctionsListStore(jdbc, props.getSanctions().getKeepPublications());
+        }
         @Bean io.openchain.app.prediction.PredictionStore predictionStore(NamedParameterJdbcTemplate jdbc) {
             return new io.openchain.app.prediction.JdbcPredictionStore(jdbc);
         }

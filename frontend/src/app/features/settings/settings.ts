@@ -12,6 +12,7 @@ import { AuthMode, SettingsService } from '../../core/settings.service';
 import { ThemePref, ThemeService } from '../../core/theme.service';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
+import { sanctionsSentence } from '../../shared/sanctions-text';
 import { timeAgo } from '../../shared/format';
 import { confirmAction } from '../../shared/confirm-dialog';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
@@ -60,6 +61,9 @@ export class SettingsPage {
 
   /** Bumped when the data source changes (mock toggle) so both lists reload. */
   private readonly source = signal(0);
+  /** Official sanctions lists in force (ADR-0027). */
+  readonly sanctions = apiResource({ params: () => ({ s: this.source() }), stream: () => this.api.sanctionsLists() });
+  readonly sanctionsSentence = sanctionsSentence;
   readonly users = apiResource({ params: () => ({ s: this.source() }), stream: () => this.api.users() });
   readonly keys = apiResource({ params: () => ({ s: this.source() }), stream: () => this.api.apiKeys() });
 

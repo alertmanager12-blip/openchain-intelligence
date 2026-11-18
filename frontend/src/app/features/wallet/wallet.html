@@ -39,7 +39,7 @@
   <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" loadingText="Analysing the wallet">
     @if (w.value(); as a) {
       @if (verdict(); as v) {
-        <oci-verdict class="wallet-verdict" [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="v.coverage"
+        <oci-verdict class="wallet-verdict" [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="withSanctions(v.coverage)"
           limit="A listing or a signal is a reason to look closer, not proof of wrongdoing." />
       }
       <dl class="stats" style="--stats: 5">

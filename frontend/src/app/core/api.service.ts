@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary, PredictionItem, PredictionRate, WhatIfResult, RuleSimulation } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary, PredictionItem, PredictionRate, WhatIfResult, RuleSimulation, SanctionsList } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -217,6 +217,11 @@ export class ApiService {
   }
 
   // --- community intelligence
+  /** Official sanctions lists in force (ADR-0027). */
+  sanctionsLists(): Observable<{ items: SanctionsList[] }> {
+    return this.http.get<{ items: SanctionsList[] }>(`${this.base}/labels/sanctions-lists`);
+  }
+
   labels(q: { address?: string; network?: NetworkId | ''; cursor?: string | null } = {}): Observable<Page<Label>> {
     return this.http.get<Page<Label>>(`${this.base}/labels`, { params: params({ ...q }) });
   }

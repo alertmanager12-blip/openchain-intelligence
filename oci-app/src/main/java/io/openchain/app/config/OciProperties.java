@@ -20,6 +20,7 @@ public class OciProperties {
     private final Persistence persistence = new Persistence();
     private final Investigation investigation = new Investigation();
     private final AiSummary aiSummary = new AiSummary();
+    private final Sanctions sanctions = new Sanctions();
     /** Real chain providers, keyed by network id (tron, ethereum, bsc, polygon). Off unless enabled. */
     private Map<String, Chain> chains = new LinkedHashMap<>();
 
@@ -32,6 +33,7 @@ public class OciProperties {
     public Persistence getPersistence() { return persistence; }
     public Investigation getInvestigation() { return investigation; }
     public AiSummary getAiSummary() { return aiSummary; }
+    public Sanctions getSanctions() { return sanctions; }
     public Map<String, Chain> getChains() { return chains; }
     public void setChains(Map<String, Chain> chains) { this.chains = chains; }
 
@@ -39,6 +41,35 @@ public class OciProperties {
      * Optional AI summaries of investigations (ADR-0022 amendment 5). Off by default, and nothing is sent until a provider
      * is configured: OCI_AI_SUMMARY_ENABLED=true and OCI_AI_SUMMARY_PROVIDERS_0_ID, _CONNECTOR, _MODEL, _API_KEY, _BASE_URL...
      */
+    /**
+     * Official sanctions lists (ADR-0027). {@code ofacEnabled}: fetch OFAC's SDN advanced XML at start and every
+     * {@code refreshInterval} (one HTTPS call to a US government site). Off: the last stored publication still applies.
+     */
+    public static class Sanctions {
+        private boolean ofacEnabled = false;
+        private String ofacUrl = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_ADVANCED.XML";
+        private Duration refreshInterval = Duration.ofHours(24);
+        /** A new publication losing more than this share of addresses at once is refused (the previous one stays). */
+        private double maxDrop = 0.20;
+        /** The list in force is said stale when not confirmed for longer than this. */
+        private Duration staleAfter = Duration.ofHours(72);
+        /** Accepted publications whose addresses are kept in the database (the record of every download is always kept). */
+        private int keepPublications = 10;
+
+        public boolean isOfacEnabled() { return ofacEnabled; }
+        public void setOfacEnabled(boolean v) { this.ofacEnabled = v; }
+        public String getOfacUrl() { return ofacUrl; }
+        public void setOfacUrl(String v) { this.ofacUrl = v; }
+        public Duration getRefreshInterval() { return refreshInterval; }
+        public void setRefreshInterval(Duration v) { this.refreshInterval = v; }
+        public double getMaxDrop() { return maxDrop; }
+        public void setMaxDrop(double v) { this.maxDrop = v; }
+        public Duration getStaleAfter() { return staleAfter; }
+        public void setStaleAfter(Duration v) { this.staleAfter = v; }
+        public int getKeepPublications() { return keepPublications; }
+        public void setKeepPublications(int v) { this.keepPublications = v; }
+    }
+
     public static class AiSummary {
         private boolean enabled = false;
         /** Requests per client scope and UTC day. */

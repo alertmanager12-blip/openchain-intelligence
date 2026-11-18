@@ -32,3 +32,5 @@
   .subnav { position: static; display: flex; overflow-x: auto; gap: 2px; scrollbar-width: none; }
   .subnav button { flex: none; }
 }
+.sanctions-state { margin: 0; }
+.sanctions-state.warn { color: var(--ink); box-shadow: inset 3px 0 0 var(--risk-high); padding-left: 10px; }

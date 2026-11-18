@@ -728,3 +728,17 @@ export interface Dashboard {
   recentSignals: Signal[] | null;
   omittedSections: string[];
 }
+
+/** An official sanctions list in force (ADR-0027): GET /labels/sanctions-lists. */
+export interface SanctionsList {
+  source: string;
+  /** NONE: no list ever accepted; STALE: the list in force was not confirmed for longer than the allowed age. */
+  state: 'NONE' | 'CURRENT' | 'STALE';
+  fetchEnabled: boolean;
+  issued: string | null;
+  fetchedAt: string | null;
+  checkedAt: string | null;
+  tron: number;
+  ethereum: number;
+  lastError: string | null;
+}

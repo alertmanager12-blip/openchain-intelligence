@@ -94,4 +94,14 @@ class InvestigationApiTest extends ApiTestSupport {
         mvc.perform(get("/api/v1/signals?limit=5").header("X-API-Key", ANALYST)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isArray());
     }
+
+    @Test void sanctionsListStatusSaysWhenNoOfficialListIsInForce() throws Exception {
+        // ADR-0027: fetching is off in tests and nothing is stored: screening must say it has no official list
+        mvc.perform(get("/api/v1/labels/sanctions-lists").header("X-API-Key", READER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].source").value("OFAC SDN"))
+                .andExpect(jsonPath("$.items[0].state").value("NONE"))
+                .andExpect(jsonPath("$.items[0].fetchEnabled").value(false))
+                .andExpect(jsonPath("$.items[0].tron").value(0));
+    }
 }

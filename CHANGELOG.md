@@ -8,6 +8,20 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (official sanctions lists, ADR-0027)
+
+- **OFAC SDN list in real mode**: until now production loaded **no label at all**, so sanctions screening was blind without saying so. The application now fetches OFAC's `SDN_ADVANCED.XML` at start and every 24 h (`OCI_SANCTIONS_OFAC_ENABLED`, on in `docker-compose.yml`), streamed into a StAX parser (about 1 s and 40 MB for the 129 MB document, no temporary file), and keeps the "Digital Currency Address" features of the indexed networks: TRON addresses listed under TRX/USDT/USDC, Ethereum addresses listed under ETH/USDT/USDC (an address listed only under BSC or ARB is not applied to Ethereum). On the publication of 2026-11-18: 351 TRON and 127 Ethereum addresses; the SDN **CSV** export would have given 132 and 100 (its remarks column is cut at 1,000 characters).
+- Labels `SANCTIONED`, source `OFAC SDN`, evidence `CONFIRMED_BY_SOURCE`, dated by the publication, with the SDN uid, programmes and listed currencies as reference. Each accepted publication is stored (`V21__sanctions_lists`) and re-applied at start, so an outage of the source never empties screening; a publication that does not parse, is older, or loses more than 20 % of its addresses at once is refused and recorded, the previous one stays. A delisted address loses its label from that publication on; past alerts are not rewritten.
+- `GET /api/v1/labels/sanctions-lists` (state NONE / CURRENT / STALE after 72 h, publication date, counts, last error), metrics `oci_sanctions_addresses` and `oci_sanctions_unconfirmed_hours`; the console says it in Settings and in the coverage of every verdict ("Sanctions screening: OFAC SDN of 18 Nov 2026 …", or plainly that no list is loaded).
+
+### Changed (deployment)
+
+- **Working-set snapshot on by default** in `docker-compose.yml` (ADR-0024 step 3d, already implemented): written at an orderly stop and every hour, reloaded at start, so a restart keeps wallet profiles, signals and scores; container stop grace period 240 s. Measured in production: 59 s and 251 MB stored (647 MB before compression) for a full working set, indexing paused 17.5 s. The intelligence journal (step 2) stays off: the two are exclusive by design.
+
+### Added (measurement)
+
+- `docs/bench/real-alerts/`: a reproducible sample of 63 production alerts to label by hand (TP / FP / ?) and `precision.py` (precision per rule with a 95 % Wilson interval). The existing bench is synthetic (12 scenarios).
+
 ### Added (decision D5 — journal of watched addresses, ADR-0026 amendment 1, step 1)
 
 - **Persisted journal of the transfers of watched addresses** (`V20__flow_journal`): every live transfer whose sender or receiver is on the watchlist is written to `flow_journal`, partitioned by month (partitions created by the application, a default partition as a safety net), indexed by sender and receiver with time; public chain data stored once. `journal_coverage` records since when the journal is complete for each watched address (enrolment, or a loaded history). Write-behind: a bounded queue drained every 5 s, never blocking indexing; metrics `oci_flow_journal_written`, `_dropped`, `_failed`, `_backlog`. Read on demand only (no reload at startup). Readers, monthly purge and console come in the next steps.
