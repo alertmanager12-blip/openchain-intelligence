@@ -62,7 +62,7 @@ describe('CommandPalette', () => {
     expect(text()).toContain('Recent alerts');
     await type('simul');
     const options = [...doc.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
-    expect(options).toEqual(['Rule simulator']);
+    expect(options).toEqual(['Predictions & what-if', 'Rule simulator']);
   });
 
   it('detects an EVM address, offers each network and opens the wallet on Enter', async () => {

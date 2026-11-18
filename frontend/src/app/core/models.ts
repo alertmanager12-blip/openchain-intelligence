@@ -402,6 +402,24 @@ export interface InvestigationReviews {
   decided: number; total: number;
 }
 
+/** A hypothesis about a wallet's future activity (ADR-0023 amendment 2); confidence null = uncalibrated. */
+export interface PredictionItem {
+  id: string; level: 'PREDICTED'; type: string; network: NetworkId; subject: string; confidence: number | null; condition: string;
+  limits: string[]; signalIds: string[]; issuedAt: string; expiresAt: string; model: string;
+  outcome: 'OPEN' | 'REALISED' | 'NOT_REALISED' | 'UNDETERMINED'; outcomeEvidence: string[]; outcomeReason: string | null; evaluatedAt: string | null;
+}
+
+export interface PredictionRate {
+  type: string; realised: number; notRealised: number; undetermined: number; rate: number | null; established: boolean; minEvaluated: number;
+}
+
+/** "Who would be exposed if this address were listed?" Level SIMULATED, never stored. */
+export interface WhatIfResult {
+  level: 'SIMULATED'; hypothesis: { network: NetworkId; address: string; category: string }; statement: string; coverage: string;
+  coverageReasons: string[]; candidates: number; truncated: boolean;
+  exposed: { address: string; hops: number; level: 'SIMULATED'; txHashes: string[]; confidence: number; alreadyExposedTo: string[] }[];
+}
+
 /** An AI provider offered for summaries (ADR-0022 amendment 5); dataLocation says where the assertions go. */
 export interface AiProvider { id: string; label: string; connector: string; model: string; dataLocation: string | null; }
 

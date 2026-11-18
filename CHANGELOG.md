@@ -8,6 +8,18 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 4 — console, ADR-0023 amendment 2, third step)
+
+- **"Predictions & what-if" page** (shortcut `p`): the realisation rate per type with its counts (never shown as established below 30 evaluated), predictions by outcome with condition, expiry, confidence ("uncalibrated" until measured) and limits; and the what-if exposure form, its statement, the coverage of the address and the wallets that would be exposed, each marked SIMULATED. The two kinds of hypothesis sit in separate sections, apart from facts.
+
+### Added (phase 4 — predictions, ADR-0023 amendment 2, second step)
+
+- **Predictions** (`V18__predictions`, `GET /predictions`, `GET /predictions/rates`): a wake-up after dormancy (signal `DORMANT_REACTIVATION`) predicts further outgoing transfers of the wallet within 72 h, level `PREDICTED`, with its signals, condition, limits and expiry. Realised as soon as such a transfer is indexed (independent of the flows kept in memory); at expiry, not realised only when the indexer has passed the expiry with no indexing gap since the issue, otherwise undetermined and never counted against the rate. The confidence is the measured realisation rate of the type once 30 predictions are evaluated, and null (uncalibrated) before: it is never invented. Append-only storage; a prediction never changes a score or opens an alert.
+
+### Added (phase 4 — simulations, ADR-0023 amendment 2, first step)
+
+- **What-if exposure** `GET /simulations/exposure`: which wallets would be exposed if an address were listed in a risky category, by the exposure rules of P0-A. Level `SIMULATED`, the hypothesis in every response, nothing stored: the hypothetical label lives in a read-only overlay for that computation only, and no label, signal, score or alert can come from it. Wallets already exposed to the same address through real labels are marked; the coverage of the address is given and "no wallet" is never stated as "nobody" without complete coverage.
+
 ### Added (phase 3 — optional AI summary, ADR-0022 amendment 5, steps 1 to 3)
 
 - **AI summary in the console** (Investigations page, shown only when the instance offers providers): choose a provider, see before sending where the assertions go, "Write summary"; an accepted summary is labelled "written by AI, checked against the assertions" with its citations; refused and failed ones show only their reasons.
