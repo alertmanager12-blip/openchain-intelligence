@@ -8,6 +8,14 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (decision D5 — journal of watched addresses, ADR-0026 amendment 1, step 1)
+
+- **Persisted journal of the transfers of watched addresses** (`V20__flow_journal`): every live transfer whose sender or receiver is on the watchlist is written to `flow_journal`, partitioned by month (partitions created by the application, a default partition as a safety net), indexed by sender and receiver with time; public chain data stored once. `journal_coverage` records since when the journal is complete for each watched address (enrolment, or a loaded history). Write-behind: a bounded queue drained every 5 s, never blocking indexing; metrics `oci_flow_journal_written`, `_dropped`, `_failed`, `_backlog`. Read on demand only (no reload at startup). Readers, monthly purge and console come in the next steps.
+
+### Fixed (predictions — volume)
+
+- **Prediction creation is sampled per type and hour** (60 new predictions per type and hour of event time, first come; those not created are counted). In production, `FAST_FORWARDING` fires about 1,500 times a minute: one prediction per signal meant millions of rows a day. The realisation rate is measured on the sample.
+
 ### Fixed (console — graph zoom and navigation)
 
 - **Zooming the fund flow graph felt like it did nothing**: measured in Chrome, one wheel notch zoomed about 1.4 % (reduced wheel sensitivity 0.3). It is now about 10 % per notch. Visible **+ / − / fit** buttons on every graph, keys `+`, `-` and `0` when the graph has focus, panning, zooming and node dragging stated explicitly, and the automatic refit no longer runs on resize callbacks that do not change the size (it could reset the user's view).
