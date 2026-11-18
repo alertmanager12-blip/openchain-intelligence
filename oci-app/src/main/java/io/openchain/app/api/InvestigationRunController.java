@@ -6,6 +6,8 @@ import io.openchain.app.security.ApiKeyService;
 import io.openchain.app.security.ClientScope;
 import io.openchain.app.trace.AssertionReview;
 import io.openchain.app.trace.AssertionReviewService;
+import io.openchain.app.trace.InvestigationSummary;
+import io.openchain.app.trace.InvestigationSummaryService;
 import io.openchain.app.trace.RuleProposalService;
 import io.openchain.app.trace.TraceArtifact;
 import io.openchain.app.trace.TraceArtifactService;
@@ -40,13 +42,15 @@ public class InvestigationRunController {
     private final InvestigationService investigation;
     private final AssertionReviewService reviews;
     private final RuleProposalService proposals;
+    private final InvestigationSummaryService summaries;
 
     public InvestigationRunController(TraceArtifactService runs, InvestigationService investigation, AssertionReviewService reviews,
-                                      RuleProposalService proposals) {
+                                      RuleProposalService proposals, InvestigationSummaryService summaries) {
         this.runs = runs;
         this.investigation = investigation;
         this.reviews = reviews;
         this.proposals = proposals;
+        this.summaries = summaries;
     }
 
     public record InvestigationRequest(String network, String address) {}
@@ -169,6 +173,50 @@ public class InvestigationRunController {
         } catch (AssertionReviewService.NotFinished e) {
             throw ApiException.conflict(e.getMessage());
         }
+    }
+
+    public record SummaryRequest(String provider) {}
+
+    /**
+     * An AI summary request and its outcome. {@code sentences} only when ACCEPTED (checked against the assertions); for
+     * REFUSED and FAILED, {@code reasons} say why and nothing written by the model is returned.
+     */
+    public record SummaryDto(String id, String investigationId, String provider, String model, String promptVersion, String inputHash,
+                             String status, List<io.openchain.intelligence.investigation.SummaryCheck.Sentence> sentences, List<String> reasons,
+                             String createdBy, Instant createdAt) {}
+
+    /** Asks the chosen provider for a summary (ADR-0022 amendment 5): a paid call, investigation:write, daily cap per client. */
+    @PostMapping("/{id}/summaries")
+    @ResponseStatus(HttpStatus.CREATED)
+    public SummaryDto summarize(@PathVariable String id, @RequestBody(required = false) SummaryRequest r, Authentication auth) {
+        if (r == null || r.provider() == null || r.provider().isBlank()) throw ApiException.badRequest("provider is required");
+        try {
+            return summary(summaries.request(ClientScope.of(auth), id, r.provider().trim(), auth.getName()));
+        } catch (AssertionReviewService.NotFound e) {
+            throw ApiException.notFound(NOT_FOUND);
+        } catch (AssertionReviewService.NotFinished e) {
+            throw ApiException.conflict(e.getMessage());
+        } catch (InvestigationSummaryService.Disabled e) {
+            throw ApiException.conflict(e.getMessage());
+        } catch (InvestigationSummaryService.UnknownProvider e) {
+            throw ApiException.badRequest(e.getMessage());
+        } catch (InvestigationSummaryService.DailyCapReached e) {
+            throw new ApiException(429, "too-many-requests", "Too many requests", e.getMessage(), null);
+        }
+    }
+
+    @GetMapping("/{id}/summaries")
+    public List<SummaryDto> summaries(@PathVariable String id, Authentication auth) {
+        try {
+            return summaries.list(ClientScope.of(auth), id).stream().map(InvestigationRunController::summary).toList();
+        } catch (AssertionReviewService.NotFound e) {
+            throw ApiException.notFound(NOT_FOUND);
+        }
+    }
+
+    static SummaryDto summary(InvestigationSummary s) {
+        return new SummaryDto(s.id(), s.investigationId(), s.provider(), s.model(), s.promptVersion(), s.inputHash(), s.status().name(),
+                s.status() == InvestigationSummary.Status.ACCEPTED ? s.sentences() : null, s.reasons(), s.createdBy(), s.createdAt());
     }
 
     static ReviewDto dto(AssertionReview r) {

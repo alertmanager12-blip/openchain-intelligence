@@ -1,6 +1,6 @@
 import { CurrentReview, InvestigationReviews } from '../../core/models';
 import { ProposalDryRun } from '../../core/models';
-import { dryRunLine, historyOf, reviewNote, visibleSentence } from './investigations';
+import { dryRunLine, historyOf, providerNote, reviewNote, summaryHeader, visibleSentence } from './investigations';
 
 const current = (over: Partial<CurrentReview> = {}): CurrentReview => ({
   decision: 'ACCEPTED', comment: null, actor: 'apikey:analyst:oci_x', createdAt: '2026-11-17T10:00:00.123Z', version: 1, inherited: false, ...over,
@@ -48,5 +48,20 @@ describe('rule proposals (ADR-0022 amendment 4)', () => {
 
   it('says when nothing could be tested', () => {
     expect(dryRunLine(dry({ totalEvents: 0, from: null, to: null }))).toContain('nothing could be tested');
+  });
+});
+
+describe('AI summaries (ADR-0022 amendment 5)', () => {
+  it('says where the assertions go before anything is sent', () => {
+    expect(providerNote({ id: 'local', label: 'Local Ollama', connector: 'openai-compatible', model: 'm', dataLocation: 'this machine' }))
+      .toContain('to Local Ollama (this machine)');
+    expect(providerNote(null)).toBe('');
+  });
+
+  it('labels what the AI wrote and what was refused', () => {
+    const base = { id: 's', investigationId: 'i', provider: 'claude', model: 'claude-opus-5-5', promptVersion: 'summary@1', inputHash: 'h',
+      sentences: null, reasons: [] as string[], createdBy: 'a', createdAt: '2026-11-18T08:00:00Z' };
+    expect(summaryHeader({ ...base, status: 'ACCEPTED' as const })).toBe('Written by AI (claude, claude-opus-5-5) on 2026-11-18 08:00:00 UTC, checked against the assertions');
+    expect(summaryHeader({ ...base, status: 'REFUSED' as const })).toContain('not shown');
   });
 });

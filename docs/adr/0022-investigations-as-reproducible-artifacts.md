@@ -187,3 +187,59 @@ AI assistance may summarise assertions, citing their ids; it never adds facts.
 - Tests required: same assertions give the same YAML; every template gives a draft valid for the loader whose examples
   pass; a rejected assertion gives no proposal; a proposal adopted through `POST /rules` is disabled; the dry run never
   notifies; another client's investigation answers 404.
+
+## Amendment 5 (2026-11-17): an optional AI summary, checked against the assertions
+
+- Status: proposed (phase 3 of `docs/strategy/FEATURE_ROADMAP.md`: "optional AI assistance: summary written from the
+  assertions only, citing their identifiers", acceptance "no claim outside the assertions (test)"; this text awaits
+  review). Builds on amendments 2 (assertions, report) and 3 (reviews). Principle 4 of `CHAINSENTINEL_VISION.md`: AI
+  drafts, it never concludes on risk.
+
+### Decision
+
+1. **Optional and off by default.** `OCI_AI_SUMMARY_ENABLED=false`, and no provider is configured by default. Off, or with
+   no provider configured, nothing is sent and the console shows no summary action. The deterministic report stays the
+   reference and is never replaced or rewritten.
+2. **Several providers, chosen on request.** The operator declares one or more providers (an id, a connector, a model, a
+   key; for the generic connector a base URL), each off until configured. The analyst picks one of them in the console
+   when asking for a summary; every stored summary records the provider and the model that wrote it. Two connectors:
+   - **Claude**, through the official Java SDK (`com.anthropic:anthropic-java`), with strict structured output; default
+     model `claude-opus-5-5` at low effort, server-side refusal fallbacks enabled.
+   - **OpenAI-compatible**, a generic chat-completions client configured by base URL, model and key. It covers ChatGPT and
+     the providers that expose a compatible endpoint (Gemini, DeepSeek, Qwen, Mistral) and local servers (Ollama, vLLM), in
+     which case nothing leaves the operator's machines. Each provider's endpoint is checked against its documentation when
+     the connector is written. Structured output is requested where the provider supports it (JSON schema), else JSON mode.
+   The guarantee does not rest on the model: whatever the provider, the response is parsed and validated on the server
+   (point 5). A malformed response, a refusal or an API error is a failed summary, stored with its reason; a weaker model
+   gives more refused summaries, never a wrong summary shown.
+3. **What is sent, and only that.** The assertions of the one investigation (type, level, parameters, ids), as JSON data.
+   No raw transfers, no frozen evidence, nothing from another investigation or client scope. The documentation states,
+   provider by provider, that this data leaves the instance and where it goes (jurisdiction and retention differ: some
+   providers are hosted in the United States, some in China; a local server keeps it on site).
+4. **On-chain data is untrusted (prompt injection).** Token symbols and label texts are filtered (allowed characters,
+   bounded length; otherwise replaced by a neutral placeholder such as "token 0x…"); assertions are sent as delimited JSON
+   data, never as instructions; the system prompt says so. The output can only take effect through the checks of point 5.
+5. **Structured output, then a deterministic check** (the test "no claim outside the assertions"). The response follows
+   a JSON schema (`output_config.format`): a list of sentences, each with the assertion ids it relies on. The server
+   refuses the summary when a sentence cites no id or an id not in the investigation; when an address, amount or hash in
+   a sentence does not appear in the parameters of the assertions it cites; when it says "confirmed" while none of its
+   assertions is `CONFIRMED`; when it states identity, ownership, intent or guilt (a fixed list of terms). When coverage
+   is not `COMPLETE`, the coverage sentence of the report (amendment 2) is put first. A refused summary is never shown.
+6. **Stored, never regenerated silently.** A language model is not deterministic: each summary is stored once, append-only
+   (`investigation_summaries`, V17, client scope, forced row-level security), with the provider id, the model id, the prompt version
+   `summary@1`, a hash of the assertions sent, the check result and its reasons. Asking again creates a new record. The
+   console labels it "written by AI, checked against the assertions" and shows it apart from the report, each sentence
+   with its citations.
+7. **Permission and budget.** Requesting a summary needs `investigation:write` (a paid call); a daily cap per client scope
+   (default 20). Reading summaries needs `investigation:read`.
+
+### Consequences
+
+- One dependency (the Claude SDK, under the licence policy), two connectors, one table (V17), one setting group; nothing
+  changes in the plan, the assertions, the reviews or the report.
+- Tests required (no network and no paid call: each connector is tested against a local stub server): each connector sends
+  the filtered assertions and parses a valid response; a malformed or refused response is a failed summary; an unknown or
+  unconfigured provider is refused; the summary records its provider and model; the checker refuses each kind of invented
+  claim (unknown id, unsupported address or amount, "confirmed" without a confirmed assertion, identity or intent terms);
+  the coverage sentence is imposed when coverage is partial; a filtered symbol never reaches the request; nothing is sent
+  when the feature is off; another client's summary answers 404; the daily cap answers 429.

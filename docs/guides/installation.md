@@ -66,6 +66,8 @@ Settings are `oci.*` properties (see `oci-app/src/main/resources/application.yml
 | `OCI_SECURITY_OIDC_ISSUER_URI` / `OCI_SECURITY_OIDC_AUDIENCE` | — | OIDC issuer (enables JWT bearer authentication) and optional audience |
 | `OCI_SECURITY_MULTI_CLIENT` | `false` | Several client scopes on one instance. Off (one instance per client): every key and token is in the `default` scope. On: an OIDC token must carry exactly one known, active client scope in `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` (else 401) |
 | `OCI_SECURITY_OIDC_CLIENT_SCOPE_CLAIM` | `oci_client_scope` | Token claim naming the caller's client scope (multi-client mode) |
+| `OCI_AI_SUMMARY_ENABLED` | `false` | Optional AI summaries of investigations (ADR-0022 amendment 5); nothing is sent until it is on **and** a provider is configured. See "AI summaries" below |
+| `OCI_AI_SUMMARY_DAILY_CAP` | `20` | AI summary requests per client scope and UTC day (429 beyond) |
 | `OCI_INVESTIGATION_FOUR_EYES` | `false` | Four-eyes rule on investigation reviews (ADR-0022 amendment 3): the actor who created an investigation may not review its assertions (403). Useful with several analysts |
 | `OCI_CORS_ALLOWED_ORIGINS` | `http://localhost:4200` | Allowed browser origins |
 | `OCI_RULES_DIRS` | `rules,../rules` | Rule pack directories (first existing wins); the image ships `/app/rules` |
@@ -251,3 +253,52 @@ cd frontend && npm run start:api                     # console on http://localho
 ## Production checklist
 
 See [security-hardening.md](security-hardening.md). Minimum: `OCI_DEMO_MODE=false`, TLS reverse proxy, OIDC configured, `OCI_SECURITY_API_KEY_PEPPER` and `OCI_CRYPTO_MASTER_KEY` from a secret store, a strong `POSTGRES_PASSWORD`, regular database backups, port 8080 bound to a private interface only.
+
+## AI summaries (optional)
+
+An investigation can be summarised by an AI model of your choice (ADR-0022 amendment 5). The deterministic report stays the
+reference: the summary is written from the investigation's **assertions only**, every sentence cites them, and a server-side
+check refuses any summary that states something the assertions do not support (an address, an amount or a number they do
+not contain, "confirmed" without a confirmed assertion, identity, ownership, intent or guilt). A refused summary is never
+shown. Each request is stored with its provider, model and outcome.
+
+**What leaves the instance.** When you ask for a summary, the assertions of that one investigation (addresses, amounts,
+labels, levels) are sent to the provider you choose. Nothing else is sent: no raw transfers, no other investigation, no other
+client. Where they go depends on the provider (jurisdiction and retention differ; a local server keeps them on site). Token
+symbols and label texts are filtered before sending, because anyone can write them on-chain.
+
+Turn the feature on and declare one or more providers (indexed from 0) in `.env`; the analyst chooses among them:
+
+```bash
+OCI_AI_SUMMARY_ENABLED=true
+
+# Claude (Anthropic), official SDK, strict structured output
+OCI_AI_SUMMARY_PROVIDERS_0_ID=claude
+OCI_AI_SUMMARY_PROVIDERS_0_LABEL=Claude (Anthropic)
+OCI_AI_SUMMARY_PROVIDERS_0_CONNECTOR=claude
+OCI_AI_SUMMARY_PROVIDERS_0_MODEL=claude-opus-5-5
+OCI_AI_SUMMARY_PROVIDERS_0_API_KEY=<your Anthropic key>
+OCI_AI_SUMMARY_PROVIDERS_0_DATA_LOCATION=Anthropic (United States)
+
+# Any OpenAI-compatible chat-completions endpoint
+OCI_AI_SUMMARY_PROVIDERS_1_ID=openai
+OCI_AI_SUMMARY_PROVIDERS_1_CONNECTOR=openai-compatible
+OCI_AI_SUMMARY_PROVIDERS_1_BASE_URL=https://api.openai.com/v1
+OCI_AI_SUMMARY_PROVIDERS_1_MODEL=<model name>
+OCI_AI_SUMMARY_PROVIDERS_1_API_KEY=<your key>
+OCI_AI_SUMMARY_PROVIDERS_1_DATA_LOCATION=OpenAI (United States)
+```
+
+Base URLs of OpenAI-compatible endpoints, as documented by each provider (checked 2026-11-18):
+
+| Provider | `BASE_URL` | `RESPONSE_FORMAT` |
+|---|---|---|
+| OpenAI (ChatGPT) | `https://api.openai.com/v1` | `json_schema` (default) |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `json_schema` |
+| DeepSeek | `https://api.deepseek.com` | `json_object` (DeepSeek documents JSON mode only) |
+| Alibaba Qwen (Model Studio) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (Singapore; `https://dashscope-us.aliyuncs.com/compatible-mode/v1` US, `https://dashscope.aliyuncs.com/compatible-mode/v1` Beijing) | `json_object` |
+| Local server (Ollama, vLLM) | e.g. `http://host.docker.internal:11434/v1` (http is accepted only for a local host) | `json_object` unless the server supports schemas |
+
+A remote base URL must use https. A provider with a missing id, model, key (Claude) or URL is left out at startup with an
+error in the log. Keys are never returned by the API. A weaker model gives more refused summaries, never a wrong one shown.
+

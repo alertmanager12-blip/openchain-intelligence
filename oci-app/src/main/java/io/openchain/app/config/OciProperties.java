@@ -19,6 +19,7 @@ public class OciProperties {
     private final Notifications notifications = new Notifications();
     private final Persistence persistence = new Persistence();
     private final Investigation investigation = new Investigation();
+    private final AiSummary aiSummary = new AiSummary();
     /** Real chain providers, keyed by network id (tron, ethereum, bsc, polygon). Off unless enabled. */
     private Map<String, Chain> chains = new LinkedHashMap<>();
 
@@ -30,8 +31,65 @@ public class OciProperties {
     public Notifications getNotifications() { return notifications; }
     public Persistence getPersistence() { return persistence; }
     public Investigation getInvestigation() { return investigation; }
+    public AiSummary getAiSummary() { return aiSummary; }
     public Map<String, Chain> getChains() { return chains; }
     public void setChains(Map<String, Chain> chains) { this.chains = chains; }
+
+    /**
+     * Optional AI summaries of investigations (ADR-0022 amendment 5). Off by default, and nothing is sent until a provider
+     * is configured: OCI_AI_SUMMARY_ENABLED=true and OCI_AI_SUMMARY_PROVIDERS_0_ID, _CONNECTOR, _MODEL, _API_KEY, _BASE_URL...
+     */
+    public static class AiSummary {
+        private boolean enabled = false;
+        /** Requests per client scope and UTC day. */
+        private int dailyCap = 20;
+        private java.time.Duration timeout = java.time.Duration.ofSeconds(90);
+        private List<Provider> providers = new ArrayList<>();
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public int getDailyCap() { return dailyCap; }
+        public void setDailyCap(int dailyCap) { this.dailyCap = dailyCap; }
+        public java.time.Duration getTimeout() { return timeout; }
+        public void setTimeout(java.time.Duration timeout) { this.timeout = timeout; }
+        public List<Provider> getProviders() { return providers; }
+        public void setProviders(List<Provider> providers) { this.providers = providers; }
+
+        /** One provider the analyst may choose. Its key is never returned by the API. */
+        public static class Provider {
+            /** Short id shown in the console, e.g. "claude", "openai", "local". */
+            private String id;
+            /** Display name, e.g. "Claude (Anthropic)". */
+            private String label;
+            /** claude or openai-compatible. */
+            private String connector = "claude";
+            private String model = "claude-opus-5-5";
+            private String apiKey;
+            /** Required for openai-compatible (https, or http for a local server); optional for claude. */
+            private String baseUrl;
+            /** openai-compatible only: json_schema (default) or json_object for providers without schema support. */
+            private String responseFormat = "json_schema";
+            /** Where the data goes, stated in the console (e.g. "Anthropic, United States", "this machine"). */
+            private String dataLocation;
+
+            public String getId() { return id; }
+            public void setId(String id) { this.id = id; }
+            public String getLabel() { return label; }
+            public void setLabel(String label) { this.label = label; }
+            public String getConnector() { return connector; }
+            public void setConnector(String connector) { this.connector = connector; }
+            public String getModel() { return model; }
+            public void setModel(String model) { this.model = model; }
+            public String getApiKey() { return apiKey; }
+            public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+            public String getBaseUrl() { return baseUrl; }
+            public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
+            public String getResponseFormat() { return responseFormat; }
+            public void setResponseFormat(String responseFormat) { this.responseFormat = responseFormat; }
+            public String getDataLocation() { return dataLocation; }
+            public void setDataLocation(String dataLocation) { this.dataLocation = dataLocation; }
+        }
+    }
 
     /** Investigations (ADR-0022). */
     public static class Investigation {

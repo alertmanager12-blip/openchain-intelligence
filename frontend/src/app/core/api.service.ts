@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -83,6 +83,13 @@ export class ApiService {
   }
   investigationReviews(id: string): Observable<InvestigationReviews> {
     return this.http.get<InvestigationReviews>(`${this.base}/investigations/${this.enc(id)}/reviews`);
+  }
+  aiProviders(): Observable<AiProvider[]> { return this.http.get<AiProvider[]>(`${this.base}/ai-summary/providers`); }
+  investigationSummaries(id: string): Observable<InvestigationSummary[]> {
+    return this.http.get<InvestigationSummary[]>(`${this.base}/investigations/${this.enc(id)}/summaries`);
+  }
+  summarize(id: string, provider: string): Observable<InvestigationSummary> {
+    return this.http.post<InvestigationSummary>(`${this.base}/investigations/${this.enc(id)}/summaries`, { provider });
   }
   ruleProposals(id: string): Observable<RuleProposals> {
     return this.http.post<RuleProposals>(`${this.base}/investigations/${this.enc(id)}/rule-proposals`, {});

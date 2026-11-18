@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal } fro
 import { ApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { RouterLink } from '@angular/router';
-import { AssertionReview, CurrentReview, InvestigationAssertion, InvestigationDetail, InvestigationReviews, ProposalDryRun, ProposalTemplate, ReviewDecision, RuleProposal, RuleProposals, TraceSummary } from '../../core/models';
+import { AiProvider, AssertionReview, CurrentReview, InvestigationSummary, InvestigationAssertion, InvestigationDetail, InvestigationReviews, ProposalDryRun, ProposalTemplate, ReviewDecision, RuleProposal, RuleProposals, TraceSummary } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
@@ -40,6 +40,8 @@ import { UI } from '../../shared/ui';
     .editor { margin: 4px 0 8px 72px; display: grid; gap: 4px; max-width: 520px; }
     .editor textarea { font: inherit; font-size: 12px; min-height: 48px; }
     .proposal { border-top: 1px solid var(--line, #ddd); padding: 8px 0; }
+    .ai { border: 1px dashed var(--line, #ccc); border-radius: 6px; padding: 8px 10px; margin: 10px 0; }
+    .ai select { font: inherit; font-size: 12px; }
     .proposal pre { max-height: 320px; overflow: auto; }
   `,
   template: `
@@ -122,6 +124,31 @@ import { UI } from '../../shared/ui';
               }
               <p class="small muted">Report {{ r.templates }}: every sentence comes from one assertion; nothing else is said. Reviews are human decisions shown beside it: they change no sentence and no level.</p>
             }
+            @if (d.status === 'DONE' && providers().length > 0) {
+              <div class="ai" aria-labelledby="h-ai">
+                <h3 id="h-ai" class="small strong">AI summary (optional)</h3>
+                <div class="actions">
+                  <label class="small" for="ai-provider">Provider</label>
+                  <select id="ai-provider" [value]="provider()" (change)="provider.set($any($event.target).value)">
+                    @for (p of providers(); track p.id) { <option [value]="p.id">{{ p.label }} ({{ p.model }})</option> }
+                  </select>
+                  <button matButton="outlined" class="sm" type="button" (click)="summarize(d)" [disabled]="summarizing()">{{ summarizing() ? 'Writing…' : 'Write summary' }}</button>
+                </div>
+                <p class="small muted">{{ providerNote(chosen()) }}</p>
+                @for (s of summaries(); track s.id) {
+                  <div class="proposal">
+                    <p class="small"><strong>{{ summaryHeader(s) }}</strong></p>
+                    @if (s.status === 'ACCEPTED') {
+                      @for (t of s.sentences; track $index) {
+                        <p class="small sentence">{{ t.text }}@for (a of t.assertionIds; track a) {<button type="button" class="cite" (click)="cite(d, a)">{{ a }}</button>}</p>
+                      }
+                    } @else {
+                      @for (r of s.reasons; track $index) { <p class="small muted">{{ r }}</p> }
+                    }
+                  </div>
+                }
+              </div>
+            }
             @if (proposals(); as pr) {
               <h3 class="small strong">Proposed rules ({{ pr.proposalVersion }})</h3>
               <p class="small muted">Drafts built from the assertions by fixed templates. They are disabled and stored nowhere: creating one adds a disabled rule, which you review and enable yourself in Rules. An alert from such a rule is a lead to check, not a finding.</p>
@@ -190,6 +217,13 @@ export class InvestigationsPage {
   readonly historyOf = historyOf;
   readonly decisionLabel = decisionLabel;
   readonly proposals = signal<RuleProposals | null>(null);
+  readonly providers = signal<AiProvider[]>([]);
+  readonly provider = signal('');
+  readonly summaries = signal<InvestigationSummary[]>([]);
+  readonly summarizing = signal(false);
+  readonly providerNote = providerNote;
+  readonly summaryHeader = summaryHeader;
+  chosen(): AiProvider | null { return this.providers().find((p) => p.id === this.provider()) ?? this.providers()[0] ?? null; }
   readonly proposing = signal(false);
   readonly adopted = signal<ReadonlySet<string>>(new Set());
   readonly templateLabel = templateLabel;
@@ -202,6 +236,8 @@ export class InvestigationsPage {
 
   constructor() {
     effect(() => { const id = this.id(); if (id) this.load(id); });
+    // the AI section appears only when the instance offers providers (off by default)
+    this.api.aiProviders().subscribe({ next: (p) => { this.providers.set(p); if (p.length > 0) this.provider.set(p[0].id); }, error: () => this.providers.set([]) });
   }
 
   open(t: TraceSummary): void { this.load(t.id); }
@@ -210,14 +246,14 @@ export class InvestigationsPage {
     this.selected.set(id);
     this.shown.set(null);
     this.editing.set(null);
-    if (this.detail()?.id !== id) { this.reviews.set(null); this.proposals.set(null); this.adopted.set(new Set()); }
+    if (this.detail()?.id !== id) { this.reviews.set(null); this.proposals.set(null); this.adopted.set(new Set()); this.summaries.set([]); }
     clearTimeout(this.timer);
     this.api.investigation(id).subscribe({
       next: (d) => {
         if (this.selected() !== id) return;
         this.detail.set(d);
         if (d.status === 'PENDING' || d.status === 'RUNNING') this.timer = setTimeout(() => this.load(id), 2000);
-        else { this.list.reload(); if (d.status === 'DONE') this.loadReviews(id); }
+        else { this.list.reload(); if (d.status === 'DONE') { this.loadReviews(id); this.loadSummaries(id); } }
       },
       error: (e: ApiError) => { this.detail.set(null); this.toasts.error(e.title, e.detail ?? undefined); },
     });
@@ -243,6 +279,26 @@ export class InvestigationsPage {
     this.api.reviewAssertion(d.id, e.assertionId, e.decision, c === '' ? null : c).subscribe({
       next: () => { this.saving.set(false); this.editing.set(null); this.loadReviews(d.id); this.toasts.success('Decision recorded', decisionLabel(e.decision)); },
       error: (err: ApiError) => { this.saving.set(false); this.toasts.error(err.title, err.detail ?? undefined); },
+    });
+  }
+
+  loadSummaries(id: string): void {
+    if (this.providers().length === 0) return;
+    this.api.investigationSummaries(id).subscribe({ next: (s) => { if (this.selected() === id) this.summaries.set(s); }, error: () => undefined });
+  }
+
+  summarize(d: InvestigationDetail): void {
+    const p = this.chosen();
+    if (!p) return;
+    this.summarizing.set(true);
+    this.api.summarize(d.id, p.id).subscribe({
+      next: (s) => {
+        this.summarizing.set(false);
+        this.loadSummaries(d.id);
+        if (s.status === 'ACCEPTED') this.toasts.success('Summary written', 'Checked against the assertions');
+        else this.toasts.error(s.status === 'REFUSED' ? 'Summary refused' : 'Summary failed', s.reasons[0]);
+      },
+      error: (e: ApiError) => { this.summarizing.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
     });
   }
 
@@ -308,4 +364,19 @@ export function dryRunLine(d: ProposalDryRun): string {
   const day = (s: string) => s.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
   return `Dry run on ${d.totalEvents} event(s) from ${day(d.from)} to ${day(d.to)}: ${d.eventsInScope} in scope, ${d.triggers} trigger(s), `
     + `about ${d.estimatedAlertsPerDay.toFixed(1)} alert(s) per day.`;
+}
+
+/** Says, before anything is sent, where the assertions go. */
+export function providerNote(p: AiProvider | null): string {
+  if (!p) return '';
+  return `Only this investigation's assertions are sent, to ${p.label}` + (p.dataLocation ? ` (${p.dataLocation})` : '')
+    + '. The summary is shown only if every sentence is supported by the assertions it cites; the report above stays the reference.';
+}
+
+export function summaryHeader(s: InvestigationSummary): string {
+  const by = `${s.provider}${s.model ? ', ' + s.model : ''}`;
+  const when = s.createdAt.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
+  return s.status === 'ACCEPTED' ? `Written by AI (${by}) on ${when}, checked against the assertions`
+    : s.status === 'REFUSED' ? `Refused (${by}) on ${when}: it said something the assertions do not support, so it is not shown`
+    : `Failed (${by}) on ${when}`;
 }
