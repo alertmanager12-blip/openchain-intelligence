@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary } from './models';
+import { Alert, AlertStatus, ApiKey, ChainTransaction, Dashboard, EventTypeDef, Exposure, FieldDef, Graph, GraphDirection, GraphPath, Label, LabelReport, NetworkId, NetworkStatus, Page, RiskScore, Rule, RuleNoise, RuleTestRequest, RuleTestResult, RuleValidationResult, Severity, Signal, TransactionAnalysis, User, WalletAnalysis, WatchlistEntry, Webhook, WalletRelations, TraceDetail, TraceSummary, InvestigationDetail, InvestigationReviews, AssertionReview, ReviewDecision, RuleProposals, AiProvider, InvestigationSummary, PredictionItem, PredictionRate, WhatIfResult } from './models';
 
 type Params = Record<string, string | number | boolean | null | undefined>;
 
@@ -83,6 +83,15 @@ export class ApiService {
   }
   investigationReviews(id: string): Observable<InvestigationReviews> {
     return this.http.get<InvestigationReviews>(`${this.base}/investigations/${this.enc(id)}/reviews`);
+  }
+  predictions(outcome: string | null): Observable<PredictionItem[]> {
+    const params = outcome ? new HttpParams().set('outcome', outcome) : new HttpParams();
+    return this.http.get<PredictionItem[]>(`${this.base}/predictions`, { params });
+  }
+  predictionRates(): Observable<PredictionRate[]> { return this.http.get<PredictionRate[]>(`${this.base}/predictions/rates`); }
+  whatIf(network: NetworkId, address: string, category: string, depth: number): Observable<WhatIfResult> {
+    const params = new HttpParams().set('network', network).set('address', address).set('category', category).set('depth', depth);
+    return this.http.get<WhatIfResult>(`${this.base}/simulations/exposure`, { params });
   }
   aiProviders(): Observable<AiProvider[]> { return this.http.get<AiProvider[]>(`${this.base}/ai-summary/providers`); }
   investigationSummaries(id: string): Observable<InvestigationSummary[]> {

@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (phase 4 — console, ADR-0023 amendment 2, third step)
+
+- **"Predictions & what-if" page** (shortcut `p`): the realisation rate per type with its counts (never shown as established below 30 evaluated), predictions by outcome with condition, expiry, confidence ("uncalibrated" until measured) and limits; and the what-if exposure form, its statement, the coverage of the address and the wallets that would be exposed, each marked SIMULATED. The two kinds of hypothesis sit in separate sections, apart from facts.
+
 ### Added (phase 4 — predictions, ADR-0023 amendment 2, second step)
 
 - **Predictions** (`V18__predictions`, `GET /predictions`, `GET /predictions/rates`): a wake-up after dormancy (signal `DORMANT_REACTIVATION`) predicts further outgoing transfers of the wallet within 72 h, level `PREDICTED`, with its signals, condition, limits and expiry. Realised as soon as such a transfer is indexed (independent of the flows kept in memory); at expiry, not realised only when the indexer has passed the expiry with no indexing gap since the issue, otherwise undetermined and never counted against the rate. The confidence is the measured realisation rate of the type once 30 predictions are evaluated, and null (uncalibrated) before: it is never invented. Append-only storage; a prediction never changes a score or opens an alert.
