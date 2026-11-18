@@ -6,15 +6,18 @@
 
   <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="6" loadingText="Loading the dashboard" (retry)="dash.reload()">
     @if (dash.value(); as d) {
-      @if (openUrgent(); as u) {
-        @if (u.critical > 0) {
-          <div class="attention" role="status">
-            <span class="sev-dot CRITICAL" aria-hidden="true"></span>
-            <p><strong>{{ u.critical }} critical {{ u.critical === 1 ? 'alert is' : 'alerts are' }} open.</strong> Each one needs a conclusion: confirm, dismiss as a false positive or investigate.</p>
-            <a matButton="outlined" [routerLink]="['/alerts']" [queryParams]="{ severity: 'CRITICAL', status: 'OPEN' }">Review critical alerts</a>
-          </div>
+      <oci-live-strip [networks]="d.networks" [alerts]="d.alerts?.recent ?? []" />
+      <section class="needs" aria-labelledby="h-needs">
+        <h2 id="h-needs">What needs your attention</h2>
+        @for (v of needs(); track v.id) {
+          <a class="needs-item" [routerLink]="['/alerts']" [queryParams]="{ id: v.id }">
+            <oci-verdict [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="coverageOf(v.network)"
+              limit="A signal is a reason to look closer, not proof of wrongdoing." />
+          </a>
+        } @empty {
+          <p class="needs-empty">Add a wallet to the watchlist to see what needs your attention here. <a routerLink="/watchlist">Open the watchlist</a></p>
         }
-      }
+      </section>
       <section aria-labelledby="h-now">
         <h2 id="h-now" class="sr-only">Right now</h2>
         <dl class="stats">

@@ -15,9 +15,13 @@ import { ActivityChart } from './activity-chart';
 const DIST_ORDER: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN'];
 const LAG_WARN = 200;
 
+import { LiveStrip } from './live-strip';
+import { attention } from './attention';
+import { VerdictPanel } from '../../shared/verdict-panel';
+import { networkCoverageSentence } from '../../shared/coverage-text';
 @Component({
   selector: 'oci-overview',
-  imports: [RouterLink, PageHeader, ActivityChart, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, ActivityChart, LiveStrip, VerdictPanel, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './overview.html',
   styleUrl: './overview.scss',
@@ -56,6 +60,13 @@ export class OverviewPage {
   readonly signalCols = ['signal', 'evidence', 'address', 'detected'];
   readonly byId = (_: number, r: { id: string }) => r.id;
   readonly byNetwork = (_: number, r: NetworkStatus) => r.network;
+
+  /** The most severe open alerts as verdicts (spec 2026-11-18). */
+  readonly needs = computed(() => { const d = this.dash.value(); return d ? attention(d) : []; });
+  coverageOf(n: NetworkId): string {
+    const s = this.dash.value()?.networks.find((x) => x.network === n);
+    return s ? networkCoverageSentence(s) : '';
+  }
 
   readonly openAlerts = computed(() => this.dash.value()?.totals.openAlerts ?? null);
   readonly openUrgent = computed(() => {
