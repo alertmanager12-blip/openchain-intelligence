@@ -83,6 +83,7 @@ public class ChainIngestionService {
         private final Duration blockTime;
         private volatile NetworkStatus lastStatus;
         private volatile long lastIndexedBlock = -1;
+        private volatile Instant lastIndexedBlockTime;
         private volatile String lastError;
         private volatile Instant lastPollAt;
         private IndexerConfig indexerConfig;
@@ -106,6 +107,8 @@ public class ChainIngestionService {
         public Duration blockTime() { return blockTime; }
         public NetworkStatus lastStatus() { return lastStatus; }
         public long lastIndexedBlock() { return lastIndexedBlock; }
+        /** Timestamp of the last indexed block; null until the indexer has one (dashboard delay as time). */
+        public Instant lastIndexedBlockTime() { return lastIndexedBlockTime; }
         public String lastError() { return lastError; }
         public Instant lastPollAt() { return lastPollAt; }
     }
@@ -332,6 +335,7 @@ public class ChainIngestionService {
             for (int i = 0; i < MAX_POLLS_PER_TICK; i++) {
                 BlockIndexer.PollResult r = rt.indexer.poll();
                 rt.lastIndexedBlock = r.lastBlock();
+                if (r.lastBlockTime() != null) rt.lastIndexedBlockTime = r.lastBlockTime();
                 if (r.reorgs() > 0) reorgCount.merge(rt.network(), (long) r.reorgs(), Long::sum);
                 if (r.blocksIndexed() == 0) break;
                 if (real && System.nanoTime() > deadline) {

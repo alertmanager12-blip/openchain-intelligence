@@ -183,7 +183,7 @@ public class InvestigationController {
             var rt = chains.runtime(n);
             if (rt.isEmpty()) {
                 if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0L, false,
-                        List.of()));
+                        List.of(), null));
                 continue;
             }
             NetworkStatus s = chains.status(rt.get());
@@ -192,7 +192,7 @@ public class InvestigationController {
             out.add(new Dto.NetworkDto(n.id(), true, s.headBlock(), s.finalizedBlock(), s.healthy() && rt.get().lastError() == null,
                     s.providerId(), s.latencyMillis(), s.checkedAt(), detail, indexed,
                     io.openchain.app.chain.ChainIngestionService.indexerLag(s, indexed).stream().boxed().findFirst().orElse(null),
-                    rt.get().simulator().isPresent(), investigation.limitations(n)));
+                    rt.get().simulator().isPresent(), investigation.limitations(n), rt.get().lastIndexedBlockTime()));
         }
         return out;
     }

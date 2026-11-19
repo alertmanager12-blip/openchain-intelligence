@@ -110,6 +110,16 @@ class BlockIndexerTest {
         assertThat(e.eventTime()).isEqualTo(t.timestamp());
     }
 
+    @Test void pollReportsTheTimestampOfTheLastIndexedBlock() {
+        assertThat(indexer(0, 10).poll().lastBlockTime()).as("nothing indexed yet").isNull();
+        chain.mine(3);
+        BlockIndexer.PollResult r = indexer(0, 10).poll();
+        assertThat(r.lastBlock()).isEqualTo(3);
+        assertThat(r.lastBlockTime()).isEqualTo(chain.getBlock(3).orElseThrow().timestamp());
+        // after a restart with nothing new, the restored window still knows the last block's time
+        assertThat(indexer(0, 10).poll().lastBlockTime()).isEqualTo(chain.getBlock(3).orElseThrow().timestamp());
+    }
+
     @Test void respectsConfirmationsAndResumesFromCheckpoint() {
         chain.mine(10);
         assertThat(indexer(3, 10).poll().lastBlock()).isEqualTo(7);

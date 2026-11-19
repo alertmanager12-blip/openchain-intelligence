@@ -40,7 +40,13 @@ public final class BlockIndexer {
     private final Clock clock;
     private final TokenRegistry tokens;
 
-    public record PollResult(long head, long lastBlock, int blocksIndexed, int eventsEmitted, int eventsRetracted, int reorgs) {}
+    /** @param lastBlockTime timestamp of the last indexed block (from the window, also after a restart); null when none yet */
+    public record PollResult(long head, long lastBlock, int blocksIndexed, int eventsEmitted, int eventsRetracted, int reorgs,
+                             java.time.Instant lastBlockTime) {
+        public PollResult(long head, long lastBlock, int blocksIndexed, int eventsEmitted, int eventsRetracted, int reorgs) {
+            this(head, lastBlock, blocksIndexed, eventsEmitted, eventsRetracted, reorgs, null);
+        }
+    }
 
     public BlockIndexer(BlockchainProvider provider, CheckpointStore store, ChainEventSink sink, IndexerConfig config) {
         this(provider, store, sink, config, new DefaultTokenRegistry(), Clock.systemUTC());
@@ -142,7 +148,8 @@ public final class BlockIndexer {
             blocks++;
             save(last, window);
         }
-        return new PollResult(status.headBlock(), last, blocks, emitted, retracted, reorgs);
+        return new PollResult(status.headBlock(), last, blocks, emitted, retracted, reorgs,
+                window.isEmpty() ? null : window.peekLast().block().timestamp());
     }
 
     /**

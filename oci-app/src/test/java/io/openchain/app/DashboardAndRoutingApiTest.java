@@ -57,6 +57,14 @@ class DashboardAndRoutingApiTest extends ApiTestSupport {
     }
 
     @Test
+    void networksCarryTheLastIndexedBlockTime() throws Exception {
+        String body = mvc.perform(get("/api/v1/dashboard").header("X-API-Key", READER))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String t = com.jayway.jsonpath.JsonPath.read(body, "$.networks[0].lastIndexedBlockTime");
+        org.assertj.core.api.Assertions.assertThat(java.time.Instant.parse(t)).isNotNull();
+    }
+
+    @Test
     void demoScenariosProduceEvidenceThroughTheRealPipeline() throws Exception {
         var r = mvc.perform(get("/api/v1/demo/scenarios").header("X-API-Key", READER))
                 .andExpect(status().isOk())
