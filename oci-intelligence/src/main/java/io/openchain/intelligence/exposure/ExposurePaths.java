@@ -93,7 +93,9 @@ public final class ExposurePaths {
         int budget = cfg.maxVisitedFlows();
         // Newest first: one flow is kept per sender, and the latest one admits every upstream flow that is not later
         // than it. Keeping the oldest missed value that reached the sender between two of its payments (review I7).
-        for (ValueFlow f : store.incoming(s).reversed()) {
+        // the subject's newest inbound flows, at most the budget (a hub holds tens of thousands); reading them does not
+        // consume the walk's budget, as before: only the upstream exploration does
+        for (ValueFlow f : store.recentIncoming(s, cfg.maxVisitedFlows())) {
             if (f.from().equals(s) || !traceable(f, cfg) || !visited.add(f.from())) continue;
             queue.add(new Node(f.from(), List.of(f)));
         }
@@ -115,7 +117,7 @@ public final class ExposurePaths {
             boolean stop = risky || nodeLabels.stream().anyMatch(l -> cfg.stopAt().contains(l.category()));
             if (stop || n.path().size() >= cfg.maxHops()) continue;
             ValueFlow downstream = n.path().getFirst();
-            for (ValueFlow g : store.incoming(n.address()).reversed()) { // newest eligible flow per sender, as above
+            for (ValueFlow g : store.recentIncoming(n.address(), budget)) { // newest eligible flow per sender, as above
                 if (--budget <= 0) break;
                 if (g.timestamp().isAfter(downstream.timestamp()) || g.from().equals(n.address()) || !traceable(g, cfg)
                         || !visited.add(g.from())) continue;

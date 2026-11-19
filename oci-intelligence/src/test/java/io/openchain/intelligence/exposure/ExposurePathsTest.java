@@ -12,6 +12,7 @@ import io.openchain.intelligence.detection.DetectionConfig;
 import io.openchain.intelligence.flow.ValueFlow;
 import io.openchain.intelligence.label.LabelCategory;
 import java.math.BigDecimal;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -132,5 +133,37 @@ class ExposurePathsTest {
         assertThat(ExposurePaths.indirect(me, fx.flows, fx.labels, ExposurePaths.withMaxHops(cfg, 2))).isEmpty();
         assertThat(ExposurePaths.indirect(me, fx.flows, fx.labels, ExposurePaths.withMaxHops(cfg, 3))).singleElement()
                 .satisfies(i -> assertThat(i.hops()).isEqualTo(3));
+    }
+
+    /** Counts the inbound flows the walk actually reads (a hub can hold tens of thousands in the working set). */
+    static final class CountingStore implements io.openchain.intelligence.flow.FlowStore {
+        final io.openchain.intelligence.flow.FlowStore d; long read;
+        CountingStore(io.openchain.intelligence.flow.FlowStore d) { this.d = d; }
+        @Override public boolean add(ValueFlow f) { return d.add(f); }
+        @Override public boolean contains(String id) { return d.contains(id); }
+        @Override public java.util.List<ValueFlow> outgoing(Address a) { var l = d.outgoing(a); read += l.size(); return l; }
+        @Override public java.util.List<ValueFlow> incoming(Address a) { var l = d.incoming(a); read += l.size(); return l; }
+        @Override public java.util.List<ValueFlow> recentIncoming(Address a, int max) { var l = d.recentIncoming(a, max); read += l.size(); return l; }
+    }
+
+    @Test void theWalkReadsNoMoreInboundFlowsThanItsBudgetEvenOnAHub() {
+        // production 2026-11-19: hubs with thousands of inbound flows made each transfer copy and scan them all
+        for (int i = 0; i < 2_000; i++) fx.flow(a("f" + Integer.toHexString(0x1000 + i)), me, "50", min(i));
+        ValueFlow up = fx.flow(s, b, "300", min(2_000));
+        ValueFlow down = fx.flow(b, me, "100", min(2_010)); // the newest inbound flow: within any budget
+        var budgeted = new DetectionConfig.Exposure(cfg.maxHops(), cfg.hopDecay(), cfg.minConfidence(), cfg.maxPaths(), 100,
+                cfg.stopAt(), Map.of());
+        var store = new CountingStore(fx.flows);
+        assertThat(ExposurePaths.indirect(me, store, fx.labels, budgeted)).singleElement()
+                .satisfies(x -> assertThat(x.path()).containsExactly(up, down));
+        assertThat(store.read).as("inbound flows read").isLessThanOrEqualTo(2L * 100);
+    }
+
+    @Test void recentIncomingIsNewestFirstAndBounded() {
+        ValueFlow f1 = fx.flow(b, me, "10", min(1)), f2 = fx.flow(c, me, "10", min(2)), f3 = fx.flow(x, me, "10", min(3));
+        assertThat(fx.flows.recentIncoming(me, 2)).containsExactly(f3, f2);
+        assertThat(fx.flows.recentIncoming(me, 10)).containsExactly(f3, f2, f1);
+        assertThat(fx.flows.recentIncoming(me, 0)).isEmpty();
+        assertThat(fx.flows.recentIncoming(a("0ne"), 5)).isEmpty();
     }
 }

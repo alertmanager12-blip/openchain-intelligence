@@ -23,6 +23,7 @@ final class VerifiedFlows implements FlowStore {
 
     @Override public List<ValueFlow> outgoing(Address address) { return verified(delegate.outgoing(address)); }
     @Override public List<ValueFlow> incoming(Address address) { return verified(delegate.incoming(address)); }
+    @Override public List<ValueFlow> recentIncoming(Address address, int max) { return verified(delegate.recentIncoming(address, max)); }
     @Override public List<ValueFlow> involving(Address address) { return verified(delegate.involving(address)); }
     @Override public boolean contains(String eventId) { return delegate.contains(eventId); }
     @Override public int size() { return delegate.size(); }

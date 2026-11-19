@@ -21,6 +21,16 @@ public interface FlowStore {
     List<ValueFlow> incoming(Address address);
 
     /**
+     * The {@code max} most recent flows received by the address, newest first. Graph walks use it to read no more than their
+     * budget: on a hub, {@link #incoming} copies tens of thousands of flows (production, 2026-11-19).
+     */
+    default List<ValueFlow> recentIncoming(Address address, int max) {
+        if (max <= 0) return List.of();
+        List<ValueFlow> all = incoming(address);
+        return List.copyOf(all.subList(Math.max(0, all.size() - max), all.size()).reversed());
+    }
+
+    /**
      * Removes the flows older than the cutoff of their network ({@code null}: none removed on that network) that involve no
      * kept address; returns how many were removed. Bounds the in-memory working set (default: nothing removed).
      */

@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (indexing throughput — exposure walk)
+
+- **Block processing slowed down once real sanctions labels existed**: the exposure detector skips its graph walk while no risky label is loaded, so the OFAC list (478 addresses) switched it on for every transfer. Sampled in production (25 thread dumps, 2026-11-19): 56 % of block processing time in `ExposurePaths.indirect`, which copied the **whole** inbound list of each address it visited (`FlowStore.incoming`), tens of thousands of flows on an exchange hub, before reading only a few. New `FlowStore.recentIncoming(address, max)` copies only the newest `max`; the walk reads at most its budget (`maxVisitedFlows`, 5,000) on the subject and the remaining budget upstream. Same paths found (the 12 regression cases unchanged); a test counts the flows read on a 2,000-flow hub. Measured on a hub with 30,000 inbound flows: 4.70 ms → 0.74 ms per walk.
+
 ### Fixed (sanctions list download)
 
 - **The first OFAC download in production failed with "closed"**: the XML parser closes its input at the end of the document, and the SHA-256 digest then read the HTTP body again, which refuses reads once closed (the tests used an in-memory stream that tolerates it). The parser now gets a view whose close leaves the source open; a test reproduces an HTTP-like body. Verified end to end against OFAC: publication of 2026-11-18 accepted in 51 s, 478 labels.
