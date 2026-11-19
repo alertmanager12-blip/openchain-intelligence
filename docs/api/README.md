@@ -274,7 +274,7 @@ triggering event is re-indexed, otherwise these fields stay null.
 | DELETE | `/webhooks/{id}` | webhooks:write | Delete a connector |
 | POST | `/webhooks/{id}/test` | webhooks:write | Signed test delivery → `{ delivered, statusCode, message }` |
 | GET | `/labels/reports` | labels:report | Submitted label reports |
-| GET | `/dashboard` | wallet:read | Totals, risk distribution, networks, 24 h activity; `alerts` (needs alerts:read) and `recentSignals` (needs risk:read) are `null` otherwise, listed in `omittedSections` |
+| GET | `/dashboard` | wallet:read | Totals, risk distribution, networks (with `lastIndexedBlockTime`), 24 h activity, `coverage.gaps` (blocks never analysed); `alerts` (needs alerts:read, with `attention`: the 5 most severe open alerts, and `last24h`: alerts of the last 24 h by rule), `recentSignals` (needs risk:read) and `notifications` (`unroutedRules`, `openAlertsUnrouted`; needs rules:read and webhooks:read) are `null` otherwise, listed in `omittedSections` |
 | GET | `/rules/event-types` | rules:read | Event types with `available` (produced by the current pipeline) |
 | GET | `/demo/scenarios`, `/demo/notifications` | wallet:read + alerts:read | **Demo mode only.** Fictitious scenarios A-E and the evidence produced by the real pipeline |
 
