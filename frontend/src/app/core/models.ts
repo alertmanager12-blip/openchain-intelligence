@@ -49,6 +49,8 @@ export interface NetworkStatus {
   simulated?: boolean;
   /** What this instance cannot see or detect on this network (data-source limits). */
   limitations?: string[];
+  /** Timestamp of the last indexed block; null until known (just after a start). Delay as time = now - this. */
+  lastIndexedBlockTime?: string | null;
 }
 
 export interface ChainTransaction {
@@ -724,9 +726,26 @@ export interface Dashboard {
     bySeverity: Record<Severity, number>;
     openBySeverity: Record<Severity, number>;
     recent: Alert[];
+    /** The 5 most severe open alerts, newest first within a severity (spec 2026-11-19 §3). */
+    attention?: Alert[];
+    /** Alerts created in the last 24 hours, split by rule, largest first. */
+    last24h?: { total: number; byRule: { ruleId: string; ruleName: string; count: number }[] };
   } | null;
   recentSignals: Signal[] | null;
   omittedSections: string[];
+  /** Blocks never analysed (indexer_gaps), newest detection first. Absent from older servers. */
+  coverage?: { gaps: IndexingGap[] };
+  /** Enabled rules whose alerts reach nobody; null when the role cannot read rules and connectors. */
+  notifications?: { unroutedRules: string[]; openAlertsUnrouted: number } | null;
+}
+
+export interface IndexingGap {
+  network: NetworkId;
+  fromBlock: number;
+  toBlock: number;
+  blocks: number;
+  cause: string;
+  detectedAt: string | null;
 }
 
 /** An official sanctions list in force (ADR-0027): GET /labels/sanctions-lists. */
