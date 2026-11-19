@@ -1,4 +1,4 @@
-import { formatIcu } from './icu';
+import { formatIcu, isWellFormedIcu } from './icu';
 
 describe('formatIcu', () => {
   const P = '{n, plural, one {# alerte} other {# alertes}}';
@@ -45,5 +45,12 @@ describe('formatIcu', () => {
   it('never throws on malformed input', () => {
     expect(formatIcu('{n, plural, one {x', { n: 1 }, 'fr')).toBe('{n, plural, one {x');
     expect(formatIcu('a } b', {}, 'fr')).toBe('a } b');
+  });
+
+  it('isWellFormedIcu tells valid from malformed messages', () => {
+    expect(isWellFormedIcu('{a')).toBe(false);
+    expect(isWellFormedIcu('a } b')).toBe(false);
+    expect(isWellFormedIcu('{n, plural, one {#} other {#}}')).toBe(true);
+    expect(isWellFormedIcu('plain {name}')).toBe(true);
   });
 });

@@ -84,3 +84,13 @@ export function formatIcu(message: string, params: Params, lang: Lang): string {
     return message;
   }
 }
+
+/** True when {@link formatIcu} can parse the message (balanced braces, known types, an "other" branch). */
+export function isWellFormedIcu(message: string): boolean {
+  try {
+    render(message, {}, 'en', null);
+    return true;
+  } catch {
+    return false;
+  }
+}

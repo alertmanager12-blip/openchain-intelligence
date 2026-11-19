@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { en } from './en';
 import { fr } from './fr';
+import { isWellFormedIcu } from './icu';
 import { I18nService, Key, Lang } from './i18n.service';
 
 /** Spec 2026-11-19 §1: language from the stored choice, else the browser; switched live; every key in both languages. */
@@ -75,6 +76,15 @@ describe('dictionaries', () => {
         const raw = render(d[k], lang);
         const filled = raw.replace(/\{(\w+)\}/g, (_, p: string) => (p in sample ? 'ok' : `{${p}}`));
         expect(filled, `${lang} ${k}`).not.toMatch(/\{\w+\}/);
+      }
+    }
+  });
+
+  it('every entry is a well-formed message', () => {
+    for (const [lang, d] of [['en', en], ['fr', fr]] as const) {
+      for (const k of keys) {
+        const e = d[k];
+        if (typeof e === 'string') expect(isWellFormedIcu(e), `${lang} ${k}`).toBe(true);
       }
     }
   });
