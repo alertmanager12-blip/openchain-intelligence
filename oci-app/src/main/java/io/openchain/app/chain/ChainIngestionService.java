@@ -1111,6 +1111,7 @@ public class ChainIngestionService {
         if (s.txHash() != null) f.put("transaction.hash", s.txHash());
         if (s.title() != null) f.put("signal.title", s.title());
         if (s.summary() != null) f.put("signal.summary", s.summary());
+        if (s.listedCategory() != null) f.put("signal.listed_category", categoryId(LabelCategory.valueOf(s.listedCategory())));
         return new ChainEvent("signal:" + s.id(), ChainEvent.EventType.DETECTION_SIGNAL, cause.network(), cause.blockNumber(),
                 cause.blockHash(), cause.eventTime(), clock.instant(), false, f);
     }

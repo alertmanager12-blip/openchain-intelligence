@@ -20,7 +20,9 @@ public record Signal(
         String detectorId,       // rule/detector that produced it, with version, e.g. "fast-forward@1"
         Instant detectedAt,
         String title,            // short plain-language name, e.g. "Rapid drain"
-        String summary) {        // one plain-language sentence built from the evidence (what was observed)
+        String summary,          // one plain-language sentence built from the evidence (what was observed)
+        String listedCategory) { // exposure signals: category the label source gives the listed address (SANCTIONED,
+                                 // ISSUER_FROZEN, MIXER...), so rules can tell a sanctions list from an issuer freeze; else null
 
     public Signal {
         if (confidence < 0 || confidence > 1) throw new IllegalArgumentException("confidence must be in [0,1]");
@@ -29,10 +31,17 @@ public record Signal(
         if (summary == null || summary.isBlank()) summary = SignalText.fallbackSummary(type, evidence);
     }
 
+    /** Not about a listed address (no {@link #listedCategory()}). */
+    public Signal(String id, SignalType type, Address address, String txHash, Severity severity, double confidence,
+                  EvidenceLevel evidenceLevel, List<Evidence> evidence, String detectorId, Instant detectedAt,
+                  String title, String summary) {
+        this(id, type, address, txHash, severity, confidence, evidenceLevel, evidence, detectorId, detectedAt, title, summary, null);
+    }
+
     /** Without explicit wording: the title is derived from the type and the summary from the evidence. */
     public Signal(String id, SignalType type, Address address, String txHash, Severity severity, double confidence,
                   EvidenceLevel evidenceLevel, List<Evidence> evidence, String detectorId, Instant detectedAt) {
-        this(id, type, address, txHash, severity, confidence, evidenceLevel, evidence, detectorId, detectedAt, null, null);
+        this(id, type, address, txHash, severity, confidence, evidenceLevel, evidence, detectorId, detectedAt, null, null, null);
     }
 
     public enum EvidenceLevel {

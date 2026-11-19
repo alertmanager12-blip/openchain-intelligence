@@ -48,6 +48,7 @@ Common fields of `ChainEvent.fields` (the full catalogue, with an `available` fl
 | `wallet.risk_score`, `counterparty.risk_score` | integer 0–100 | enriched transfers (`RISK_SCORE_CHANGED` events are not produced yet) |
 | `wallet.labels`, `counterparty.labels` | comma-separated category ids | `sanctioned,exchange` (use `CONTAINS`) |
 | `signal.type`, `signal.evidence_level` | string | on `DETECTION_SIGNAL` events |
+| `signal.listed_category` | string | exposure signals only: category the source gives the listed address (`sanctioned`, `issuer-frozen`, `mixer`, `scam`, `phishing`…) |
 | `transaction.fee`, `transaction.success`, `transaction.method` | decimal / boolean / string | on `NATIVE_TRANSFER` events (native units, e.g. `ETH`, `TRX`) |
 | `approval.owner`, `approval.spender`, `approval.amount`, `approval.unlimited` | address / decimal / boolean | on `APPROVAL` events (owner also as `wallet.*`, spender as `counterparty.*`) |
 | `approval.spender_is_contract` | boolean | on `APPROVAL` events with a real provider (EVM `eth_getCode`, TRON `/wallet/getcontract`); absent on simulated chains or when the lookup failed |

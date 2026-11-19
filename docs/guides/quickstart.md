@@ -39,7 +39,7 @@ curl -s -H "X-API-Key: $OCI_KEY" localhost:8080/api/v1/demo/scenarios | jq '.ite
 | Scenario | Story | Expected rule | Expected signal |
 |---|---|---|---|
 | A | Large USDT transfer | `large-usdt-transfer` | `UNUSUAL_AMOUNT` |
-| B | Indirect exposure (2 hops) to a listed address | `sanctioned-exposure-signal` | `INDIRECT_EXPOSURE` |
+| B | Indirect exposure (2 hops) to a sanctioned address | `sanctioned-exposure-signal` | `INDIRECT_EXPOSURE` |
 | C | Wallet draining | `wallet-draining` | `RAPID_DRAIN` |
 | D | Fund splitting (fan-out) | `fund-splitting` | `FLOW_CONCENTRATION` |
 | E | Dormant wallet reactivation | `dormant-wallet-reactivation` | `DORMANT_REACTIVATION` |

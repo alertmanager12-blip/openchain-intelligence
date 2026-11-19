@@ -97,6 +97,8 @@ public final class FieldCatalog {
             new FieldDef("signal.severity", FieldType.STRING, "INFO|LOW|MEDIUM|HIGH|CRITICAL"),
             new FieldDef("signal.confidence", FieldType.DECIMAL, "Signal confidence 0..1"),
             new FieldDef("signal.evidence_level", FieldType.STRING, "ANOMALY|RISK_SIGNAL|CONFIRMED_BY_SOURCE"),
+            new FieldDef("signal.listed_category", FieldType.STRING,
+                    "Exposure signals: category the source gives the listed address (sanctioned, issuer-frozen, mixer, scam...)"),
             // internal events produced by INTERNAL_EVENT actions (loop protection)
             new FieldDef("internal.hop", FieldType.INTEGER, "Number of alert->event hops that produced this event"),
             new FieldDef("internal.origin_chain", FieldType.STRING, "Comma-separated rule ids that produced this event"),

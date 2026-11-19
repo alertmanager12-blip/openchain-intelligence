@@ -1,0 +1,93 @@
+apiVersion: openchain.io/rule/v1
+id: listed-address-exposure
+version: 1.0.0
+name: Indirect exposure to a listed address (not a sanction)
+description: Value reached the wallet through intermediaries from an address that a source lists as risky but not as sanctioned (frozen by a stablecoin issuer, mixer, scam, stolen funds...).
+author: openchain-community
+enabled: true
+tags: [generic, exposure, listed]
+scope:
+  eventTypes: [DETECTION_SIGNAL]
+conditions:
+  logic: AND
+  rules:
+    - field: signal.type
+      operator: EQUALS
+      value: INDIRECT_EXPOSURE
+    - field: signal.listed_category
+      operator: NOT_EQUALS
+      value: sanctioned
+    - field: signal.confidence
+      operator: GREATER_THAN_OR_EQUAL
+      value: "0.5"
+severity: MEDIUM
+evidenceLevel: RISK_SIGNAL
+cooldown: 6h
+dedupKey: "{{rule.id}}:{{event.wallet.address}}"
+expectedConfidence: 0.5
+actions:
+  - type: WEBHOOK
+    connectorId: default-webhook
+documentation: |
+  Raises an alert when oci-intelligence emits an INDIRECT_EXPOSURE signal (value that reached the wallet through
+  intermediaries) to an address listed in a category other than SANCTIONED, with a confidence of at least 0.5
+  (direct or 2-hop exposure to a reliable source). signal.listed_category says what the source states: for
+  issuer-frozen, the stablecoin issuer froze that address in its own contract, for reasons it does not publish
+  (law-enforcement request, hack, precaution); it is not a sanctions listing. Sanctions exposure is handled by
+  sanctioned-exposure-signal (HIGH). Exposure describes where funds came from, not who owns the wallet; the alert
+  detail gives the traced path and the amount bounded by its smallest hop. One alert per wallet per 6 hours.
+examples:
+  - name: 2-hop exposure to an issuer-frozen address matches
+    expect: MATCH
+    event:
+      network: ethereum
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.listed_category: issuer-frozen
+        signal.confidence: "0.5"
+        wallet.address: "0xb69a051e6eb38f8e2b1d9f2bda5e1879f6e970e2"
+  - name: sanctions exposure is left to sanctioned-exposure-signal
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.listed_category: sanctioned
+        signal.confidence: "0.5"
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: a signal without a listed category does not match
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.confidence: "0.5"
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+  - name: 3-hop exposure with confidence 0.25 does not match
+    expect: NO_MATCH
+    event:
+      network: tron
+      fields:
+        signal.type: INDIRECT_EXPOSURE
+        signal.listed_category: mixer
+        signal.confidence: "0.25"
+        wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+tests:
+  - name: repeated exposure signals for the same wallet are grouped
+    events:
+      - offset: 0s
+        network: tron
+        fields:
+          signal.type: INDIRECT_EXPOSURE
+          signal.listed_category: issuer-frozen
+          signal.confidence: "0.5"
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+      - offset: 10m
+        network: tron
+        fields:
+          signal.type: INDIRECT_EXPOSURE
+          signal.listed_category: issuer-frozen
+          signal.confidence: "0.5"
+          wallet.address: TJDENsfBJs4RFETt1X1W8wMDc8M5XnJhCe
+    expectTriggers: 2
+    expectAlerts: 1

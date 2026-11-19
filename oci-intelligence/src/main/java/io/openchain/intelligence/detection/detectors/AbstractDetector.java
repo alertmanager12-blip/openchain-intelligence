@@ -38,8 +38,15 @@ public abstract class AbstractDetector implements Detector {
      */
     protected Signal signal(DetectionContext ctx, SignalType type, Address address, String txHash, Severity severity,
                             double confidence, EvidenceLevel level, List<Evidence> evidence, String discriminator, String summary) {
+        return signal(ctx, type, address, txHash, severity, confidence, level, evidence, discriminator, summary, null);
+    }
+
+    /** @param listedCategory category of the listed address an exposure signal is about (LabelCategory name), else null */
+    protected Signal signal(DetectionContext ctx, SignalType type, Address address, String txHash, Severity severity,
+                            double confidence, EvidenceLevel level, List<Evidence> evidence, String discriminator, String summary,
+                            String listedCategory) {
         return new Signal(SignalIds.of(qualifiedId(), address, type + "|" + discriminator), type, address, txHash, severity,
-                clamp(confidence), level, evidence, qualifiedId(), ctx.now(), SignalText.title(type), summary);
+                clamp(confidence), level, evidence, qualifiedId(), ctx.now(), SignalText.title(type), summary, listedCategory);
     }
 
     protected static Evidence flowEvidence(ValueFlow f, String description) {
