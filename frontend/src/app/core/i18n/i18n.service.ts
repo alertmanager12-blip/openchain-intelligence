@@ -14,6 +14,9 @@ export type Dictionary = { readonly [K in Key]: Entry };
 const KEY = 'oci.lang';
 const DICTS: Record<Lang, Dictionary> = { en, fr };
 
+/** True when the dictionary defines the key: lets a helper fall back for a value this console does not know. */
+export function hasKey(key: string): key is Key { return key in en; }
+
 /** Pure translation: a function entry is called, a string entry goes through the ICU subset. */
 export function translate(lang: Lang, key: Key, params?: Params): string {
   const e = DICTS[lang][key];

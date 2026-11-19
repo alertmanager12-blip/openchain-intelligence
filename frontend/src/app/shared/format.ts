@@ -1,3 +1,5 @@
+import { hasKey, translate } from '../core/i18n/i18n.service';
+
 /** Exact decimal formatting of raw integer amounts (base units): BigInt only, never floating point. */
 export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6): string {
   if (raw === null || raw === undefined || !/^-?\d+$/.test(raw)) return '—';
@@ -63,17 +65,8 @@ export function netLabel(n: string): string {
   return NET_LABELS[n] ?? n;
 }
 
-const SEVERITY_NAMES: Record<'en' | 'fr', Record<string, string>> = {
-  en: { CRITICAL: 'Critical', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low', INFO: 'Info' },
-  fr: { CRITICAL: 'Critique', HIGH: 'Élevée', MEDIUM: 'Moyenne', LOW: 'Faible', INFO: 'Info' },
-};
-const STATUS_NAMES: Record<'en' | 'fr', Record<string, string>> = {
-  en: { OPEN: 'Open', ACKNOWLEDGED: 'Acknowledged', INVESTIGATING: 'Investigating', RESOLVED: 'Resolved', FALSE_POSITIVE: 'False positive' },
-  fr: { OPEN: 'Ouverte', ACKNOWLEDGED: 'Prise en charge', INVESTIGATING: 'En enquête', RESOLVED: 'Résolue', FALSE_POSITIVE: 'Faux positif' },
-};
-
 /** Severity name in the console's language (spec 2026-11-19); unknown values in sentence case. */
-export function severityName(s: string, lang: 'en' | 'fr'): string { return SEVERITY_NAMES[lang][s] ?? sentence(s); }
+export function severityName(s: string, lang: 'en' | 'fr'): string { const k = `enum.severity.${s}`; return hasKey(k) ? translate(lang, k) : sentence(s); }
 
 /** Alert status name in the console's language. */
-export function statusName(s: string, lang: 'en' | 'fr'): string { return STATUS_NAMES[lang][s] ?? sentence(s); }
+export function statusName(s: string, lang: 'en' | 'fr'): string { const k = `enum.status.${s}`; return hasKey(k) ? translate(lang, k) : sentence(s); }

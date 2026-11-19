@@ -7,12 +7,7 @@ import { EvidenceLevel, NetworkId, RiskLevel, Severity } from '../core/models';
 import { RiskGauge } from './risk-gauge';
 import { netLabel, sentence, shortHash } from './format';
 import { Skeleton, SkeletonKind } from './skeleton';
-import { I18nService } from '../core/i18n/i18n.service';
-
-const RISK_NAMES: Record<'en' | 'fr', Record<string, string>> = {
-  en: { CRITICAL: 'Critical', HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low', UNKNOWN: 'Not scored' },
-  fr: { CRITICAL: 'Critique', HIGH: 'Élevé', MEDIUM: 'Moyen', LOW: 'Faible', UNKNOWN: 'Non évalué' },
-};
+import { I18nService, hasKey, translate } from '../core/i18n/i18n.service';
 
 /** Re-exported for the pages: sentence() lives in format.ts so the app shell can use it without loading these components. */
 export { sentence };
@@ -94,7 +89,7 @@ export class EvidenceBadge {
 export class RiskBadge {
   private readonly i18n = inject(I18nService);
   /** The level in the console language (spec 2026-11-19). */
-  readonly name = computed(() => RISK_NAMES[this.i18n.lang()][this.value()] ?? sentence(this.value()));
+  readonly name = computed(() => { const k = `enum.risk.${this.value()}`; return hasKey(k) ? translate(this.i18n.lang(), k) : sentence(this.value()); });
   readonly value = input.required<RiskLevel>();
   readonly score = input<number | null>(null);
   readonly sentence = sentence;
