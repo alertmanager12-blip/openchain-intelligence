@@ -74,7 +74,7 @@ public final class ExposureDetector extends AbstractDetector {
             EvidenceLevel lvl = l.evidenceLevel() == EvidenceLevel.CONFIRMED_BY_SOURCE ? EvidenceLevel.CONFIRMED_BY_SOURCE : EvidenceLevel.RISK_SIGNAL;
             out.add(signal(ctx, l.category().exposureType(), s, fl.getLast().txHash(), directSeverity(l.category()),
                     l.sourceReliability(), lvl, ev, "direct|" + l.address() + "|" + l.category() + "|" + l.source(),
-                    directSummary(l, perToken, fl.size())));
+                    directSummary(l, perToken, fl.size()), l.category().name()));
         }
         return out;
     }
@@ -126,7 +126,8 @@ public final class ExposureDetector extends AbstractDetector {
         String summary = "Received funds that trace back, through " + plural(hops - 1, "intermediary address", "intermediary addresses")
                 + ", to an address listed as " + category(l.category().name()) + " by " + l.source() + " (at most "
                 + amount(bottleneck.amount(), bottleneck.token().symbol()) + " traced).";
-        return signal(ctx, SignalType.INDIRECT_EXPOSURE, ctx.subject(), path.getLast().txHash(), sev, conf, EvidenceLevel.RISK_SIGNAL, ev, disc, summary);
+        return signal(ctx, SignalType.INDIRECT_EXPOSURE, ctx.subject(), path.getLast().txHash(), sev, conf, EvidenceLevel.RISK_SIGNAL, ev, disc,
+                summary, l.category().name());
     }
 
     /** "Received 12,500 USDT directly from an address listed as sanctioned by ofac-sdn" (sent / both directions alike). */

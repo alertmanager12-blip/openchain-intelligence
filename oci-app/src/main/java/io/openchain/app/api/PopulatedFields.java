@@ -40,7 +40,7 @@ public final class PopulatedFields {
             // operator watchlist (WatchlistService): every enriched transfer and approval
             "wallet.watchlisted", "counterparty.watchlisted", "watchlist.active",
             // DETECTION_SIGNAL events
-            "signal.type", "signal.severity", "signal.confidence", "signal.evidence_level",
+            "signal.type", "signal.severity", "signal.confidence", "signal.evidence_level", "signal.listed_category",
             // INTERNAL_EVENT connector
             "internal.hop", "internal.origin_chain", "alert.id", "alert.rule_id", "alert.severity", "alert.group_key");
 

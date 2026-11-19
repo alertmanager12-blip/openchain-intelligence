@@ -8,6 +8,14 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (analysis — sanctions alerts that were not about sanctions)
+
+- **Exposure to an address frozen by a stablecoin issuer was alerted as a sanctions exposure**: in production on 2026-11-18, all 3 `sanctioned-exposure-signal` alerts (HIGH, Telegram title "Exposition à une adresse sanctionnée") traced funds to an address frozen by Tether (`tether-onchain`, category ISSUER_FROZEN); none is on the OFAC list. The rule matched any `INDIRECT_EXPOSURE`, and the signal did not say which list the address was on. Exposure signals now carry the source's category (`Signal.listedCategory`, rule field `signal.listed_category`: `sanctioned`, `issuer-frozen`, `mixer`...).
+  - `sanctioned-exposure-signal` 1.1.0 fires only on `signal.listed_category = sanctioned`.
+  - New rule `listed-address-exposure` (MEDIUM, RISK_SIGNAL): indirect exposure to an address listed in any other category, worded for what the source says. Same confidence floor (0.5) and 6 h cooldown: no new kind of alert, the same ones correctly named.
+  - Past alerts are not rewritten.
+  - Working-set snapshot: signal format 2 (adds the category); snapshots in format 1 are still read. An older image cannot read a format-2 snapshot (it starts with an empty working set and says so in its logs).
+
 ### Changed (deployment — TRON resume gap)
 
 - **TRON no longer skips a night of blocks after an outage**: `OCI_CHAINS_TRON_MAX_RESUME_GAP` defaults to 30,000 blocks (about 25 h) in `docker-compose.yml` instead of 7,200 (6 h). On 2026-11-19 a restart after an overnight outage skipped 12,300 TRON blocks (recorded in `indexer_gaps`), although TronGrid serves old blocks and catching up takes a few hours.

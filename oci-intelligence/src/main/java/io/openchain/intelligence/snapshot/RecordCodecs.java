@@ -13,6 +13,7 @@ import io.openchain.intelligence.flow.ValueFlow;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
@@ -25,7 +26,8 @@ import java.util.function.UnaryOperator;
 public final class RecordCodecs {
     private RecordCodecs() {}
 
-    public static final int FLOW_FORMAT = 1, SIGNAL_FORMAT = 1, SCORE_FORMAT = 1;
+    /** SIGNAL_FORMAT 2 adds the listed category (exposure signals); format 1 is still read (category null). */
+    public static final int FLOW_FORMAT = 1, SIGNAL_FORMAT = 2, SCORE_FORMAT = 1;
 
     /** Canonicalisation applied while reading (shared instances, CanonicalInstances); identity for none. */
     public record Canon(UnaryOperator<Address> address, UnaryOperator<Token> token) {
@@ -75,10 +77,12 @@ public final class RecordCodecs {
         writeInstant(out, s.detectedAt());
         writeString(out, s.title());
         writeString(out, s.summary());
+        writeString(out, s.listedCategory());
     }
 
     public static Signal readSignal(DataInput in, Canon c) throws IOException {
-        expectVersion(in, SIGNAL_FORMAT, "signal");
+        int format = in.readUnsignedByte();
+        if (format != 1 && format != SIGNAL_FORMAT) throw new SnapshotFormatException("signal: format version " + format + ", expected 1 or " + SIGNAL_FORMAT);
         String id = readString(in);
         SignalType type = constant(SignalType.class, readString(in));
         Address address = readAddress(in, c.address());
@@ -89,8 +93,11 @@ public final class RecordCodecs {
         int n = count(in, 10_000);
         List<Signal.Evidence> evidence = new ArrayList<>(n);
         for (int i = 0; i < n; i++) evidence.add(new Signal.Evidence(readString(in), readString(in), readString(in), readString(in), readInstant(in)));
-        return new Signal(id, type, address, txHash, severity, confidence, level, evidence, readString(in), readInstant(in),
-                readString(in), readString(in));
+        String detector = readString(in);
+        Instant detectedAt = readInstant(in);
+        String title = readString(in), summary = readString(in);
+        return new Signal(id, type, address, txHash, severity, confidence, level, evidence, detector, detectedAt, title, summary,
+                format >= 2 ? readString(in) : null);
     }
 
     // ---- risk scores

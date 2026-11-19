@@ -164,6 +164,8 @@ const CATALOG: FieldDef[] = [
   { path: 'signal.severity', type: 'enum', description: 'INFO|LOW|MEDIUM|HIGH|CRITICAL', options: ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
   { path: 'signal.confidence', type: 'amount', description: 'Signal confidence 0..1' },
   { path: 'signal.evidence_level', type: 'enum', description: 'ANOMALY|RISK_SIGNAL|CONFIRMED_BY_SOURCE', options: ['ANOMALY', 'RISK_SIGNAL', 'CONFIRMED_BY_SOURCE'] },
+  { path: 'signal.listed_category', type: 'enum', description: 'Exposure signals: category the source gives the listed address',
+    options: ['sanctioned', 'mixer', 'scam', 'phishing', 'ransomware', 'stolen-funds', 'darknet-market', 'flagged-community', 'issuer-frozen'] },
   { path: 'internal.hop', type: 'number', description: 'Number of alert->event hops that produced this event' },
   { path: 'internal.origin_chain', type: 'string', description: 'Comma-separated rule ids that produced this event' },
   { path: 'alert.id', type: 'string', description: 'Originating alert id' },
@@ -178,7 +180,7 @@ const POPULATED = new Set([
   'transaction.amount', 'transaction.token.symbol', 'transaction.token.contract', 'transaction.token.decimals', 'wallet.address',
   'wallet.balance', 'wallet.risk_score', 'wallet.risk_level', 'wallet.age_days', 'wallet.tx_count', 'wallet.labels', 'wallet.sanctioned',
   'counterparty.address', 'counterparty.risk_score', 'counterparty.labels', 'counterparty.age_days', 'counterparty.sanctioned',
-  'signal.type', 'signal.severity', 'signal.confidence', 'signal.evidence_level', 'internal.hop', 'internal.origin_chain', 'alert.id',
+  'signal.type', 'signal.severity', 'signal.confidence', 'signal.evidence_level', 'signal.listed_category', 'internal.hop', 'internal.origin_chain', 'alert.id',
   'alert.rule_id', 'alert.severity', 'alert.group_key',
 ]);
 export const DEFAULT_FIELDS: FieldDef[] = CATALOG.map((f) => ({ ...f, available: POPULATED.has(f.path) }));

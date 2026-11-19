@@ -97,6 +97,7 @@ public final class TelegramMessage {
             case "suspicious-wallet" -> "Portefeuille au comportement suspect";
             case "issuer-freeze-counterparty" -> "Contrepartie d'une adresse gelée par l'émetteur";
             case "sanctioned-exposure-signal" -> "Exposition à une adresse sanctionnée";
+            case "listed-address-exposure" -> "Exposition indirecte à une adresse listée (hors sanctions)";
             case "contract-exploit" -> "Possible exploitation de contrat";
             case "dormant-wallet-reactivation" -> "Réveil d'un portefeuille dormant";
             default -> n.title();

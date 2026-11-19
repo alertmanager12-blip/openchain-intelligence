@@ -302,9 +302,22 @@ class DetectorsTest {
                 assertThat(s.type()).isEqualTo(SignalType.SANCTIONED_EXPOSURE);
                 assertThat(s.severity()).isEqualTo(Severity.CRITICAL);
                 assertThat(s.evidenceLevel()).isEqualTo(EvidenceLevel.CONFIRMED_BY_SOURCE);
+                assertThat(s.listedCategory()).isEqualTo("SANCTIONED");
                 assertThat(s.evidence()).anyMatch(e -> e.kind().equals("label"));
                 assertThat(s.evidence()).anyMatch(e -> e.kind().equals("flow") && e.reference().equals(f.txHash()));
                 assertWellFormed(s, "exposure@1");
+            });
+        }
+
+        @Test void indirectExposureSaysWhichListTheSourceIsOn() {
+            // production 2026-11-18: issuer-frozen exposures were alerted as sanctions; the category travels with the signal
+            fx.label(sanctioned, LabelCategory.ISSUER_FROZEN, 1.0, EvidenceLevel.CONFIRMED_BY_SOURCE);
+            Address h1 = a("h1");
+            fx.flow(sanctioned, h1, "1000", min(0));
+            assertThat(d.detect(fx.ctx(me, fx.flow(h1, me, "975", min(10))))).singleElement().satisfies(s -> {
+                assertThat(s.type()).isEqualTo(SignalType.INDIRECT_EXPOSURE);
+                assertThat(s.listedCategory()).isEqualTo("ISSUER_FROZEN");
+                assertThat(s.severity()).isEqualTo(Severity.MEDIUM);
             });
         }
 
@@ -328,6 +341,7 @@ class DetectorsTest {
                 assertThat(s.type()).isEqualTo(SignalType.INDIRECT_EXPOSURE);
                 assertThat(s.evidenceLevel()).isEqualTo(EvidenceLevel.RISK_SIGNAL);
                 assertThat(s.confidence()).isEqualTo(0.25); // 1.0 * 0.5^2
+                assertThat(s.listedCategory()).isEqualTo("SANCTIONED");
                 assertThat(s.evidence().stream().filter(e -> e.kind().equals("flow")).map(Signal.Evidence::reference))
                         .containsExactly(f1.txHash(), f2.txHash(), f3.txHash());
                 assertThat(s.evidence()).anyMatch(e -> e.kind().equals("hops") && e.description().equals("3"));
