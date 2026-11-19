@@ -46,10 +46,12 @@ public class DashboardController {
     private final EventHistory history;
     private final RuleRegistry rules;
     private final InvestigationController investigation;
+    private final io.openchain.app.alerts.NotificationRouting routing;
     private final Clock clock;
 
     public DashboardController(ChainIngestionService chains, IntelligencePipeline intelligence, AlertService alerts, AlertFacade alertFacade,
-                               EventHistory history, RuleRegistry rules, InvestigationController investigation, Clock clock) {
+                               EventHistory history, RuleRegistry rules, InvestigationController investigation,
+                               io.openchain.app.alerts.NotificationRouting routing, Clock clock) {
         this.chains = chains;
         this.intelligence = intelligence;
         this.alerts = alerts;
@@ -57,6 +59,7 @@ public class DashboardController {
         this.history = history;
         this.rules = rules;
         this.investigation = investigation;
+        this.routing = routing;
         this.clock = clock;
     }
 
@@ -115,7 +118,9 @@ public class DashboardController {
         out.put("generatedAt", now.toString());
         out.put("totals", totals);
         out.put("riskDistribution", riskDist);
-        out.put("networks", investigation.networks(false));
+        List<Dto.NetworkDto> networks = investigation.networks(false);
+        out.put("networks", networks);
+        out.put("coverage", Map.of("gaps", gaps(networks)));
         out.put("activity", activity);
         List<String> omitted = new ArrayList<>();
         if (canAlerts) {
@@ -138,10 +143,26 @@ public class DashboardController {
             alertSection.put("openBySeverity", openBySeverity);
             alertSection.put("recent", alerts.repository().findPage(io.openchain.alerting.alert.AlertRepository.AlertQuery.any(), 0, 5)
                     .stream().map(alertFacade::dto).toList());
+            // the overview's "handle now": the most severe open alerts, not merely the latest ones (spec 2026-11-19 §3)
+            alertSection.put("attention", alerts.repository().findTopOpen(AlertFacade.OPEN_STATUSES, 5).stream().map(alertFacade::dto).toList());
+            alertSection.put("last24h", last24h(now));
             out.put("alerts", alertSection);
         } else {
             out.put("alerts", null);
             omitted.add("alerts (needs alerts:read)");
+        }
+        if (scopes.contains(Scopes.RULES_READ) && scopes.contains(Scopes.WEBHOOKS_READ)) {
+            List<String> unrouted = routing.unroutedRules();
+            Set<String> un = Set.copyOf(unrouted);
+            long openUnrouted = alerts.repository().openAndRecentByRule(AlertFacade.OPEN_STATUSES, now).stream()
+                    .filter(r -> un.contains(r.ruleId())).mapToLong(r -> r.open()).sum();
+            Map<String, Object> n = new LinkedHashMap<>();
+            n.put("unroutedRules", unrouted);
+            n.put("openAlertsUnrouted", openUnrouted);
+            out.put("notifications", n);
+        } else {
+            out.put("notifications", null);
+            omitted.add("notifications (needs rules:read and webhooks:read)");
         }
         if (canRisk) {
             out.put("recentSignals", signals.stream().limit(10).map(ApiMapper::signal).toList());
@@ -150,6 +171,51 @@ public class DashboardController {
             omitted.add("recentSignals (needs risk:read)");
         }
         out.put("omittedSections", omitted);
+        return out;
+    }
+
+    /** Indexing gaps of the enabled networks, newest detection first (blocks never analysed: spec 2026-11-19 §3). */
+    private List<Map<String, Object>> gaps(List<Dto.NetworkDto> networks) {
+        List<io.openchain.app.chain.IndexingCoverage.Gap> all = new ArrayList<>();
+        for (Dto.NetworkDto n : networks) {
+            if (n.enabled()) all.addAll(chains.indexingCoverage().gaps(io.openchain.core.model.Network.fromId(n.network())));
+        }
+        all.sort(Comparator.comparing(io.openchain.app.chain.IndexingCoverage.Gap::detectedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (var g : all) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("network", g.network().id());
+            m.put("fromBlock", g.fromBlock());
+            m.put("toBlock", g.toBlock());
+            m.put("blocks", g.toBlock() - g.fromBlock() + 1);
+            m.put("cause", g.cause().name());
+            m.put("detectedAt", g.detectedAt() == null ? null : g.detectedAt().toString());
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** Alerts created in the last 24 hours, split by rule, largest first. */
+    private Map<String, Object> last24h(Instant now) {
+        var per = alerts.repository().openAndRecentByRule(AlertFacade.OPEN_STATUSES, now.minus(Duration.ofHours(24))).stream()
+                .filter(r -> r.createdSince() > 0)
+                .sorted(Comparator.comparingLong((io.openchain.alerting.alert.AlertRepository.RuleOpenAndRecent r) -> r.createdSince())
+                        .reversed().thenComparing(r -> r.ruleId()))
+                .toList();
+        List<Map<String, Object>> byRule = new ArrayList<>();
+        long total = 0;
+        for (var r : per) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("ruleId", r.ruleId());
+            m.put("ruleName", rules.find(r.ruleId()).map(s -> s.current().rule().name()).orElse(r.ruleId()));
+            m.put("count", r.createdSince());
+            byRule.add(m);
+            total += r.createdSince();
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", total);
+        out.put("byRule", byRule);
         return out;
     }
 

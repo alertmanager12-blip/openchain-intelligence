@@ -38,7 +38,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class AlertFacade {
 
-    private static final Set<AlertStatus> OPEN = EnumSet.of(AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED);
+    /** Engine statuses shown as API status OPEN: the one definition of an open alert (overview, filters, counts). */
+    public static final Set<AlertStatus> OPEN_STATUSES = java.util.Collections.unmodifiableSet(
+            EnumSet.of(AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED));
+    private static final Set<AlertStatus> OPEN = OPEN_STATUSES;
     private static final Set<AlertStatus> INTERMEDIATE = EnumSet.of(AlertStatus.PENDING, AlertStatus.ACKNOWLEDGED);
 
     public record Filter(String status, String severity, String ruleId, String address, String network, Instant from, Instant to) {}

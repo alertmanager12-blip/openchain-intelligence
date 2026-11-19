@@ -57,6 +57,36 @@ class DashboardAndRoutingApiTest extends ApiTestSupport {
     }
 
     @Test
+    void dashboardSectionsOfTheOverview() throws Exception {
+        String body = mvc.perform(get("/api/v1/dashboard").header("X-API-Key", ADMIN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.coverage.gaps").isArray())
+                .andExpect(jsonPath("$.notifications.unroutedRules").isArray())
+                .andExpect(jsonPath("$.notifications.openAlertsUnrouted").isNumber())
+                .andExpect(jsonPath("$.alerts.attention").isArray())
+                .andExpect(jsonPath("$.alerts.last24h.total").isNumber())
+                .andExpect(jsonPath("$.alerts.last24h.byRule").isArray())
+                .andReturn().getResponse().getContentAsString();
+        java.util.List<String> sev = com.jayway.jsonpath.JsonPath.read(body, "$.alerts.attention[*].severity");
+        java.util.List<String> st = com.jayway.jsonpath.JsonPath.read(body, "$.alerts.attention[*].status");
+        java.util.List<String> order = java.util.List.of("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO");
+        org.assertj.core.api.Assertions.assertThat(sev).hasSizeLessThanOrEqualTo(5).isNotEmpty()
+                .isSortedAccordingTo(java.util.Comparator.comparingInt(order::indexOf));
+        org.assertj.core.api.Assertions.assertThat(st).containsOnly("OPEN");
+        Integer total = com.jayway.jsonpath.JsonPath.read(body, "$.alerts.last24h.total");
+        java.util.List<Integer> counts = com.jayway.jsonpath.JsonPath.read(body, "$.alerts.last24h.byRule[*].count");
+        org.assertj.core.api.Assertions.assertThat(counts.stream().mapToInt(Integer::intValue).sum()).isEqualTo(total);
+        org.assertj.core.api.Assertions.assertThat(counts).isSortedAccordingTo(java.util.Comparator.reverseOrder());
+        java.util.List<String> names = com.jayway.jsonpath.JsonPath.read(body, "$.alerts.last24h.byRule[*].ruleName");
+        org.assertj.core.api.Assertions.assertThat(names).doesNotContainNull();
+        // reader has rules:read but not webhooks:read: notifications are omitted, and said so
+        mvc.perform(get("/api/v1/dashboard").header("X-API-Key", READER))
+                .andExpect(jsonPath("$.notifications").doesNotExist())
+                .andExpect(jsonPath("$.omittedSections", hasItem(startsWith("notifications"))))
+                .andExpect(jsonPath("$.coverage.gaps").isArray());
+    }
+
+    @Test
     void networksCarryTheLastIndexedBlockTime() throws Exception {
         String body = mvc.perform(get("/api/v1/dashboard").header("X-API-Key", READER))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
