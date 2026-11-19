@@ -78,4 +78,13 @@ public final class InMemoryFlowStore implements FlowStore {
     @Override public synchronized List<ValueFlow> all() { return List.copyOf(byId.values()); }
     @Override public synchronized List<ValueFlow> outgoing(Address a) { return List.copyOf(out.getOrDefault(a, List.of())); }
     @Override public synchronized List<ValueFlow> incoming(Address a) { return List.copyOf(in.getOrDefault(a, List.of())); }
+
+    /** Copies only the {@code max} newest flows, not the whole list. */
+    @Override public synchronized List<ValueFlow> recentIncoming(Address a, int max) {
+        List<ValueFlow> l = in.get(a);
+        if (l == null || max <= 0) return List.of();
+        List<ValueFlow> out = new java.util.ArrayList<>(Math.min(max, l.size()));
+        for (int i = l.size() - 1; i >= 0 && out.size() < max; i--) out.add(l.get(i));
+        return out;
+    }
 }

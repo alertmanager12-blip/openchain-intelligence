@@ -23,6 +23,7 @@ public final class JournalingStores {
         @Override public boolean contains(String eventId) { return delegate.contains(eventId); }
         @Override public List<ValueFlow> outgoing(Address a) { return delegate.outgoing(a); }
         @Override public List<ValueFlow> incoming(Address a) { return delegate.incoming(a); }
+        @Override public List<ValueFlow> recentIncoming(Address a, int max) { return delegate.recentIncoming(a, max); }
         @Override public List<ValueFlow> involving(Address a) { return delegate.involving(a); }
         @Override public int evictBefore(java.util.function.Function<io.openchain.core.model.Network, java.time.Instant> cutoff,
                                          java.util.function.Predicate<Address> keep) { return delegate.evictBefore(cutoff, keep); }
