@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Dashboard, SanctionsList } from '../../core/models';
-import { I18nService } from '../../core/i18n/i18n.service';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 import { fmtDate, fmtNumber } from '../../core/i18n/format';
 import { netLabel } from '../../shared/format';
 import { BandLine, reliability } from './reliability';
@@ -16,17 +16,17 @@ import { BandLine, reliability } from './reliability';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="band v-{{ r().verdict }}" aria-labelledby="h-rel">
-      <h2 id="h-rel"><span>{{ i18n.t('band.title') }}</span> <strong class="verdict">{{ i18n.t('band.' + r().verdict) }}</strong></h2>
+      <h2 id="h-rel"><span>{{ i18n.t('band.title') }}</span> <strong class="verdict">{{ i18n.t(verdictKey()) }}</strong></h2>
       <ul class="lines">
         @for (l of shown(); track l.check + l.text) {
           <li class="s-{{ l.state }}"><span class="mark" aria-hidden="true">{{ mark(l) }}</span>
-            <span class="sr-only">{{ i18n.t('band.state.' + l.state) }} : </span>{{ l.text }}
-            @if (l.link) { <a [routerLink]="l.link.path" [queryParams]="l.link.query">{{ i18n.t('band.fix') }}</a> }
+            <span class="txt"><span class="sr-only">{{ i18n.t(stateKey(l)) }} </span>{{ l.text }}
+              @if (l.link) { <a [routerLink]="l.link.path" [queryParams]="l.link.query">{{ i18n.t('band.fix') }}</a> }</span>
           </li>
         }
         @if (collapsed()) {
           <li class="s-pass"><span class="mark" aria-hidden="true">✓</span>
-            <button type="button" class="more" [attr.aria-expanded]="open()" (click)="open.set(!open())">{{ i18n.t('band.passed', { count: passes().length }) }}</button>
+            <button type="button" class="more txt" [attr.aria-expanded]="open()" (click)="open.set(!open())">{{ i18n.t('band.passed', { count: passes().length }) }}</button>
           </li>
         }
       </ul>
@@ -46,8 +46,10 @@ import { BandLine, reliability } from './reliability';
     .verdict { font-size: 15px; }
     .v-yes .verdict { color: var(--ok); } .v-partly .verdict { color: var(--warn); } .v-no .verdict { color: var(--danger); }
     .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-    li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
-    .mark { width: 1.2em; flex: none; font-weight: 700; }
+    li { display: grid; grid-template-columns: 1.2em minmax(0, 1fr); gap: 8px; align-items: baseline; color: var(--ink); }
+    .txt { min-width: 0; overflow-wrap: anywhere; justify-self: start; }
+    .txt a { margin-left: 6px; white-space: nowrap; }
+    .mark { font-weight: 700; }
     .s-fail .mark { color: var(--danger); } .s-warn .mark { color: var(--warn); } .s-unknown .mark { color: var(--ink-2); } .s-pass .mark { color: var(--ok); }
     a, .more { font-size: var(--fs-12); }
     .more { font: inherit; font-size: var(--fs-12); background: none; border: 0; padding: 0; color: var(--ink-2); cursor: pointer; text-decoration: underline dotted; }
@@ -69,6 +71,8 @@ export class ReliabilityBand {
   protected readonly collapsed = computed(() => this.passes().length > 2 && !this.open());
   protected readonly shown = computed(() => (this.collapsed() ? this.r().lines.filter((l) => l.state !== 'pass') : this.r().lines));
 
+  protected readonly verdictKey = computed((): Key => `band.${this.r().verdict}` as const);
+  protected stateKey(l: BandLine): Key { return `band.state.${l.state}` as const; }
   protected mark(l: BandLine): string { return l.state === 'pass' ? '✓' : l.state === 'unknown' ? '?' : l.state === 'warn' ? '!' : '✕'; }
   protected readonly netLabel = netLabel;
   protected fmt(n: number): string { return fmtNumber(n, this.i18n.lang()); }

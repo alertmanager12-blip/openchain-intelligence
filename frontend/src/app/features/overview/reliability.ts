@@ -57,7 +57,11 @@ export function reliability(d: Dashboard, sanctions: SanctionsList | null | unde
     lines.push({ check: 'notifications', state: 'unknown', text: fr ? 'Notifications : non visibles avec votre rôle' : 'Notifications: not visible with your role' });
   } else if (d.notifications.unroutedRules.length) {
     const n = d.notifications.openAlertsUnrouted, k = d.notifications.unroutedRules.length;
-    lines.push({ check: 'notifications', state: 'warn', link: { path: '/integrations' }, text: fr
+    if (n === 0) {
+      lines.push({ check: 'notifications', state: 'warn', link: { path: '/integrations' }, text: fr
+        ? `${k} ${plural(k, lang, { one: "règle active n'a", other: "règles actives n'ont" })} pas de destination : ${plural(k, lang, { one: 'ses', other: 'leurs' })} alertes ne parviendraient à personne`
+        : `${k} enabled ${plural(k, lang, { one: 'rule has', other: 'rules have' })} no destination: ${plural(k, lang, { one: 'its', other: 'their' })} alerts would reach nobody` });
+    } else lines.push({ check: 'notifications', state: 'warn', link: { path: '/integrations' }, text: fr
       ? `${fmtNumber(n, lang)} ${plural(n, lang, { one: 'alerte ouverte ne parvient', other: 'alertes ouvertes ne parviennent' })} à personne (${k} ${plural(k, lang, { one: 'règle', other: 'règles' })} sans destination)`
       : `${fmtNumber(n, lang)} open ${plural(n, lang, { one: 'alert reaches', other: 'alerts reach' })} nobody (${k} ${plural(k, lang, { one: 'rule', other: 'rules' })} without a destination)` });
   } else {

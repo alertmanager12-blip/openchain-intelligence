@@ -76,6 +76,10 @@ describe('App shell', () => {
     await settle(f, 50);
     expect(labels()).toEqual(expect.arrayContaining(['Overview', 'Alerts', 'Settings']));
     expect(labels()).not.toContain('Alertes');
+    TestBed.inject(I18nService).set('fr');
+    await settle(f, 50);
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('.disclaimer')?.textContent).toBe("Les signaux ne sont pas des preuves d'un délit.");
     f.destroy();
   });
 

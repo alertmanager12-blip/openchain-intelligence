@@ -73,7 +73,7 @@ type Menu = 'env' | 'user' | null;
       </nav>
 
       <div class="side-bottom">
-        <p class="disclaimer">Signals are not proof of wrongdoing.</p>
+        <p class="disclaimer">{{ i18n.t('shell.disclaimer') }}</p>
         <div class="user-row">
         <div class="pop-wrap">
           <button class="user" type="button" (click)="toggle('user', $event)" [attr.aria-expanded]="menu() === 'user'" aria-controls="user-pop"
@@ -82,13 +82,13 @@ type Menu = 'env' | 'user' | null;
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M12 4l1.5 1.5"/></svg>
             </span>
             <span class="user-text"><span class="user-mode">{{ shell.credential().label }}</span>
-              <span class="user-key" [class.mono]="!!shell.credential().prefix">{{ shell.credential().prefix ?? 'Set one in Settings' }}</span></span>
+              <span class="user-key" [class.mono]="!!shell.credential().prefix">{{ shell.credential().prefix ?? i18n.t('shell.setCredential') }}</span></span>
             <svg class="chev" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg>
           </button>
           @if (menu() === 'user') {
             <div class="pop pop--user" id="user-pop" role="region" [attr.aria-label]="i18n.t('shell.account')">
               <div class="pop-head"><strong>{{ shell.credential().label }}</strong></div>
-              <p class="pop-text">@if (shell.credential().prefix; as p) { Using <span class="mono">{{ p }}</span>, stored in this browser only. } @else { No credential is stored in this browser. }</p>
+              <p class="pop-text">@if (shell.credential().prefix; as p) { {{ i18n.t('shell.using') }} <span class="mono">{{ p }}</span>{{ i18n.t('shell.storedHere') }} } @else { {{ i18n.t('shell.noCredential') }} }</p>
               <div class="pop-sep"></div>
               <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">{{ i18n.t('shell.settings') }}</a>
               <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'keys' }" (click)="menu.set(null)">{{ i18n.t('shell.apiKeys') }}</a>

@@ -1,113 +1,73 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
-import { catchError, forkJoin, map, of } from 'rxjs';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
-import { ALERT_STATUSES, NetworkId, NetworkStatus, RiskLevel, SEVERITIES } from '../../core/models';
+import { I18nService, Key, Params } from '../../core/i18n/i18n.service';
+import { fmtDuration, fmtNumber, fmtRelative } from '../../core/i18n/format';
+import { NetworkId, NetworkStatus } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
-import { sanctionsSentence } from '../../shared/sanctions-text';
-import { indexerLag, shortHash, timeAgo } from '../../shared/format';
-import { MAT_BUTTONS, MAT_TABLE } from '../../shared/material';
-import { PageHeader } from '../../shared/page-header';
-import { RISK_THRESHOLDS, levelLabel } from '../../shared/risk-gauge';
-import { signalSummary, signalTitle } from '../../shared/explain';
-import { UI, sentence } from '../../shared/ui';
-import { ActivityChart } from './activity-chart';
-
-const DIST_ORDER: RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN'];
-const LAG_WARN = 200;
-
-import { LiveStrip } from './live-strip';
-import { attention, emptyState } from './attention';
-import { VerdictPanel } from '../../shared/verdict-panel';
+import { ruleDisplayName } from '../../shared/alert-sentence';
 import { networkCoverageSentence } from '../../shared/coverage-text';
+import { netLabel } from '../../shared/format';
+import { MAT_BUTTONS } from '../../shared/material';
+import { PageHeader } from '../../shared/page-header';
+import { sanctionsSentence } from '../../shared/sanctions-text';
+import { UI } from '../../shared/ui';
+import { VerdictPanel } from '../../shared/verdict-panel';
+import { attention, emptyState } from './attention';
+import { DELAY_WARN_MS } from './reliability';
+import { ReliabilityBand } from './reliability-band';
+
+/**
+ * The overview, "watch post" (spec 2026-11-19, direction A): first whether monitoring can be trusted right now, then the
+ * most severe open alerts as verdicts, then a compact side column (last 24 hours, one line per network). Every word follows
+ * the console language.
+ */
 @Component({
   selector: 'oci-overview',
-  imports: [RouterLink, PageHeader, ActivityChart, LiveStrip, VerdictPanel, ...MAT_BUTTONS, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, ReliabilityBand, VerdictPanel, ...MAT_BUTTONS, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './overview.html',
   styleUrl: './overview.scss',
 })
 export class OverviewPage {
   private readonly api = inject(ApiService);
-  private readonly router = inject(Router);
+  protected readonly i18n = inject(I18nService);
   /** One call: GET /dashboard. */
   readonly dash = apiResource({ params: () => ({}), stream: () => this.api.dashboard() });
-  /** Official sanctions lists in force (ADR-0027), said in every verdict's coverage. */
+  /** Official sanctions lists in force (ADR-0027): the band and every verdict's coverage. */
   readonly sanctions = apiResource({ params: () => ({}), stream: () => this.api.sanctionsLists() });
-  /** Recent alerts also show their subject wallet's score (GET /wallets/{a}/risk each); null = could not be scored. */
-  readonly scores = apiResource({
-    params: () => {
-      const recent = (this.dash.value()?.alerts?.recent ?? []).filter((a) => a.address);
-      return recent.length ? recent : undefined;
-    },
-    stream: (alerts) =>
-      forkJoin(alerts.map((a) => this.api.walletRisk(a.address!, a.network).pipe(
-        map((r) => [a.id, { score: r.score, level: r.level }] as const),
-        catchError(() => of([a.id, null] as const)),
-      ))).pipe(map((pairs) => Object.fromEntries(pairs) as Record<string, { score: number; level: RiskLevel } | null>)),
-    keepPrevious: true,
+  /** undefined while loading or failed: the band then says "unknown", never a pass. */
+  readonly sanctionsList = computed(() => this.sanctions.value()?.items[0] ?? null);
+
+  readonly needs = computed(() => { const d = this.dash.value(); return d ? attention(d, this.i18n.lang()) : []; });
+  readonly empty = computed(() => { const d = this.dash.value(); return d ? emptyState(d, this.i18n.lang()) : { kind: 'none-open' as const, text: '' }; });
+  readonly openAlerts = computed(() => this.dash.value()?.totals.openAlerts ?? null);
+  readonly last24h = computed(() => {
+    const l = this.dash.value()?.alerts?.last24h;
+    if (!l) return null;
+    const max = Math.max(1, ...l.byRule.map((r) => r.count));
+    return { total: l.total, rules: l.byRule.map((r) => ({ ...r, name: ruleDisplayName(r.ruleId, r.ruleName, this.i18n.lang()), pct: (r.count / max) * 100 })) };
   });
+  readonly nets = computed(() => (this.dash.value()?.networks ?? []).filter((n) => n.enabled !== false));
 
-  readonly ago = timeAgo;
-  readonly sentence = sentence;
-  readonly signalTitle = signalTitle;
-  readonly signalSummary = signalSummary;
-  readonly short = (a: string) => shortHash(a, 8, 6);
-  readonly n = (v: number) => v.toLocaleString('en-US');
-  readonly thr = RISK_THRESHOLDS;
-  readonly severities = SEVERITIES;
-  readonly statuses = ALERT_STATUSES;
-  readonly lagWarn = LAG_WARN;
-  readonly openNet = signal<string | null>(null);
-    readonly netCols = ['x', 'network', 'health', 'head', 'lag', 'latency', 'checked'];
-  readonly signalCols = ['signal', 'evidence', 'address', 'detected'];
-  readonly byId = (_: number, r: { id: string }) => r.id;
-  readonly byNetwork = (_: number, r: NetworkStatus) => r.network;
+  t(key: Key, params?: Params): string { return this.i18n.t(key, params); }
+  n(v: number): string { return fmtNumber(v, this.i18n.lang()); }
+  ago(iso: string): string { return fmtRelative(iso, this.i18n.lang()); }
+  readonly netLabel = netLabel;
 
-  /** The most severe open alerts as verdicts (spec 2026-11-18). */
-  readonly needs = computed(() => { const d = this.dash.value(); return d ? attention(d) : []; });
-  readonly empty = computed(() => { const d = this.dash.value(); return d ? emptyState(d) : { kind: 'none-open' as const, text: '' }; });
   coverageOf(n: NetworkId): string {
     const s = this.dash.value()?.networks.find((x) => x.network === n);
     // an unknown network coverage stays unknown ('' shows "Coverage unknown"): the sanctions sentence completes a known one
-    return s ? `${networkCoverageSentence(s)} ${sanctionsSentence(this.sanctions.value()?.items[0])}` : '';
+    const lang = this.i18n.lang();
+    return s ? `${networkCoverageSentence(s, lang)} ${sanctionsSentence(this.sanctionsList() ?? undefined, lang)}` : '';
   }
 
-  readonly openAlerts = computed(() => this.dash.value()?.totals.openAlerts ?? null);
-  readonly openUrgent = computed(() => {
-    const o = this.dash.value()?.alerts?.openBySeverity;
-    return o ? { critical: o.CRITICAL ?? 0, high: o.HIGH ?? 0 } : null;
-  });
-  readonly health = computed(() => {
-    const nets = this.dash.value()?.networks ?? [];
-    const lags = nets.map((x) => this.lag(x));
-    const known = lags.filter((l): l is number => l !== null);
-    // unknownLag: networks whose head is unknown (provider failing); their lag is not 0 and is reported apart
-    return { healthy: nets.filter((x) => x.healthy).length, total: nets.length, maxLag: known.length ? Math.max(...known) : null,
-      unknownLag: lags.length - known.length };
-  });
-  readonly dist = computed(() => {
-    const r = this.dash.value()?.riskDistribution;
-    const total = DIST_ORDER.reduce((s, l) => s + (r?.[l] ?? 0), 0) || 1;
-    return DIST_ORDER.map((level) => ({ level, key: level.toLowerCase(), label: levelLabel(level), count: r?.[level] ?? 0, pct: Math.round(((r?.[level] ?? 0) / total) * 100) }));
-  });
-  readonly distTotal = computed(() => this.dist().reduce((s, b) => s + b.count, 0));
-  readonly distAria = computed(() => 'Risk distribution: ' + this.dist().map((b) => `${b.label} ${b.count}`).join(', '));
-
-  lag(x: NetworkStatus): number | null {
-    return indexerLag(x);
-  }
-
-  /** Whole-row navigation (the row also holds a real link for keyboard and assistive tech). */
-  openAlert(id: string): void {
-    void this.router.navigate(['/alerts'], { queryParams: { id } });
-  }
-
-  openWallet(network: NetworkId, address: string): void {
-    void this.router.navigate(['/wallets', network, address]);
-  }
-
-  toggleNet(id: string): void {
-    this.openNet.update((v) => (v === id ? null : id));
+  /** One network line: health and delay as time (blocks when the time of the last block is unknown). */
+  netLine(x: NetworkStatus): { text: string; warn: boolean } {
+    const lang = this.i18n.lang(), fr = lang === 'fr';
+    if (!x.healthy || x.indexerLag === null || x.indexerLag === undefined) return { text: this.t('overview.net.unknown'), warn: true };
+    if (!x.lastIndexedBlockTime) return { text: this.t('overview.net.blocks', { n: x.indexerLag }), warn: true };
+    const ms = Math.max(0, Date.now() - Date.parse(x.lastIndexedBlockTime));
+    return { text: `${fmtDuration(ms, lang)} ${fr ? 'de retard' : 'behind'}`, warn: ms > DELAY_WARN_MS };
   }
 }

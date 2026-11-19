@@ -62,6 +62,15 @@ describe('reliability', () => {
     expect(en).toContain('Ethereum: 1 h 20 min behind');
   });
 
+  it('warns about a rule without destination even before it has open alerts', () => {
+    const r = reliability(dash({ notifications: { unroutedRules: ['fund-splitting'], openAlertsUnrouted: 0 } }), list, 'fr', NOW);
+    const l = r.lines.find((x) => x.check === 'notifications')!;
+    expect(l.state).toBe('warn');
+    expect(l.text).toBe("1 règle active n'a pas de destination : ses alertes ne parviendraient à personne");
+    expect(reliability(dash({ notifications: { unroutedRules: ['a', 'b'], openAlertsUnrouted: 0 } }), list, 'en', NOW).lines
+      .find((x) => x.check === 'notifications')!.text).toBe('2 enabled rules have no destination: their alerts would reach nobody');
+  });
+
   it('links each fixable problem to where it is fixed', () => {
     const r = reliability(nov19, list, 'en', NOW);
     expect(r.lines.find((l) => l.check === 'notifications')?.link?.path).toBe('/integrations');
