@@ -75,7 +75,8 @@ public final class SanctionsListService {
         String sha;
         try (InputStream raw = download.get(); DigestInputStream in = new DigestInputStream(raw, sha256())) {
             try {
-                fetched = OfacSdnParser.parse(in);
+                // the XML parser closes its input at the end of the document; the source must stay open for the digest
+                fetched = OfacSdnParser.parse(new java.io.FilterInputStream(in) { @Override public void close() { } });
             } catch (IllegalArgumentException e) {
                 return refuse(null, now, null, "unreadable document: " + e.getMessage());
             }

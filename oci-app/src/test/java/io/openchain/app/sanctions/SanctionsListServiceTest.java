@@ -129,6 +129,23 @@ class SanctionsListServiceTest {
         assertThat(labels.size()).isZero();
     }
 
+    /** Like an HTTP response body: once closed, any read fails with "closed". */
+    static final class ClosingStream extends java.io.FilterInputStream {
+        boolean closed;
+        ClosingStream(byte[] b) { super(new ByteArrayInputStream(b)); }
+        @Override public int read() throws IOException { if (closed) throw new IOException("closed"); return super.read(); }
+        @Override public int read(byte[] b, int off, int len) throws IOException { if (closed) throw new IOException("closed"); return super.read(b, off, len); }
+        @Override public void close() throws IOException { closed = true; super.close(); }
+    }
+
+    @Test void aSourceThatRefusesReadsOnceClosedIsStillAcceptedLikeAnHttpBody() {
+        // the XML parser closes its input at the end of the document; the digest must not read the source again
+        var s = new SanctionsListService(store, labels, () -> new ClosingStream(full.getBytes(StandardCharsets.UTF_8)), clock, 0.2,
+                java.time.Duration.ofHours(72));
+        assertThat(s.refresh()).isEqualTo(SanctionsListService.Result.ACCEPTED);
+        assertThat(sanctioned(labels, TRON)).isTrue();
+    }
+
     @Test void aRestartWithoutNetworkReappliesTheStoredListAndItTurnsStaleAfter72Hours() {
         next.set(full);
         service(0.2).refresh();
