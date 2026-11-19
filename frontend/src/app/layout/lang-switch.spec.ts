@@ -15,6 +15,8 @@ describe('LangSwitch', () => {
     expect(frB.textContent?.trim()).toBe('FR');
     expect(frB.getAttribute('aria-pressed')).toBe('true');
     expect(enB.getAttribute('aria-pressed')).toBe('false');
+    expect(frB.getAttribute('aria-label')).toBe('Français');
+    expect(enB.getAttribute('aria-label')).toBe('English');
     expect(el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Langue');
     enB.click();
     await f.whenStable();

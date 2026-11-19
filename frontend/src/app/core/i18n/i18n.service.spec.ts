@@ -60,7 +60,7 @@ describe('I18nService', () => {
 
 describe('dictionaries', () => {
   const keys = Object.keys(en) as Key[];
-  const sample = { count: 2, n: 2, name: 'x', network: 'TRON', when: 'x', what: 'x', value: 'x', id: 'x' };
+  const sample = { count: 2, n: 2, name: 'x', network: 'TRON', when: 'x', what: 'x', value: 'x', id: 'x', label: 'x', host: 'x', sim: 1, total: 3 };
   const render = (e: unknown, lang: Lang) => (typeof e === 'function' ? (e as (p: object, l: Lang) => string)(sample, lang) : String(e));
 
   it('has every English key in French, never empty', () => {

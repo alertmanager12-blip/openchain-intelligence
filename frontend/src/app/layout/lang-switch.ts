@@ -8,7 +8,7 @@ import { I18nService, Lang } from '../core/i18n/i18n.service';
   template: `
     <div class="lang-sw" role="group" [attr.aria-label]="i18n.t('shell.language')">
       @for (l of langs; track l) {
-        <button type="button" [attr.aria-pressed]="i18n.lang() === l" [attr.lang]="l" (click)="i18n.set(l)">{{ l.toUpperCase() }}</button>
+        <button type="button" [attr.aria-pressed]="i18n.lang() === l" [attr.lang]="l" [attr.aria-label]="i18n.t(l === 'fr' ? 'shell.langFr' : 'shell.langEn')" (click)="i18n.set(l)">{{ l.toUpperCase() }}</button>
       }
     </div>
   `,

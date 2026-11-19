@@ -1,7 +1,7 @@
 import type { Entry } from '../i18n.service';
 
 /** Key prefixes this area owns (checked by dictionaries.spec.ts). */
-export const prefixes = ['shell.', 'nav.', 'palette.', 'help.'] as const;
+export const prefixes = ['shell.', 'nav.', 'palette.', 'help.', 'state.'] as const;
 
 export const shell = {
   'shell.skip': 'Skip to content',
@@ -55,4 +55,17 @@ export const shell = {
   'shell.using': 'Using',
   'shell.storedHere': ', stored in this browser only.',
   'shell.noCredential': 'No credential is stored in this browser.',
+  'shell.langFr': 'Français',
+  'shell.langEn': 'English',
+  'shell.envAria': 'ChainSentinel, {label}. Environment details',
+  'shell.envMock': 'Mock data',
+  'shell.envMockDetail': 'Fictitious data generated in this browser. Development build only.',
+  'shell.envDemo': 'Demo',
+  'shell.envDemoDetail': '{sim} of {total} networks read the simulated demo ledger, not a real chain.',
+  'shell.envApiDetail': 'Backend at {host}',
+  'shell.networksConfigured': '{count, plural, one {# network configured} other {# networks configured}}',
+  'shell.networksConfiguredSim': '{count, plural, one {# network configured} other {# networks configured}}, {sim} simulated.',
+  'shell.connectionSettings': 'Connection settings',
+  'shell.networkHealth': 'Network health on Overview',
+  'state.retry': 'Retry',
 } as const satisfies Record<string, Entry>;

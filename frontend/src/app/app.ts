@@ -38,7 +38,7 @@ type Menu = 'env' | 'user' | null;
       <div class="side-top">
         <div class="pop-wrap">
           <button class="env" type="button" (click)="toggle('env', $event)" [attr.aria-expanded]="menu() === 'env'" aria-controls="env-pop"
-            [attr.aria-label]="'ChainSentinel, ' + shell.env().label + '. Environment details'">
+            [attr.aria-label]="i18n.t('shell.envAria', { label: shell.env().label })">
             <svg class="mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" class="mark-bg"/><path class="m-line" d="M5.4 13.6 8.8 6.6l5.2 3.6"/><circle class="m-bar" cx="5.4" cy="13.6" r="1.5"/><circle class="m-bar" cx="8.8" cy="6.6" r="1.5"/><circle class="m-ring" cx="14" cy="10.2" r="2.3"/></svg>
             <span class="env-text"><span class="product">ChainSentinel</span><span class="env-line"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span>{{ shell.env().label }}</span></span>
           </button>
@@ -46,10 +46,10 @@ type Menu = 'env' | 'user' | null;
             <div class="pop pop--env" id="env-pop" role="region" [attr.aria-label]="i18n.t('shell.environment')">
               <div class="pop-head"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span><strong>{{ shell.env().label }}</strong></div>
               <p class="pop-text">{{ shell.env().detail }}</p>
-              @if (shell.networkCount()) { <p class="pop-text">{{ shell.networkCount() }} networks configured@if (shell.simulatedNetworks()) {, {{ shell.simulatedNetworks() }} simulated}.</p> }
+              @if (shell.networkCount()) { <p class="pop-text">{{ networksLine() }}</p> }
               <div class="pop-sep"></div>
-              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">Connection settings</a>
-              <a class="pop-item" routerLink="/overview" (click)="menu.set(null)">Network health on Overview</a>
+              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">{{ i18n.t('shell.connectionSettings') }}</a>
+              <a class="pop-item" routerLink="/overview" (click)="menu.set(null)">{{ i18n.t('shell.networkHealth') }}</a>
             </div>
           }
         </div>
@@ -156,6 +156,11 @@ export class App {
         }
       });
     });
+  }
+
+  protected networksLine(): string {
+    const count = this.shell.networkCount(), sim = this.shell.simulatedNetworks();
+    return this.i18n.t(sim ? 'shell.networksConfiguredSim' : 'shell.networksConfigured', { count, sim });
   }
 
   protected count(i: NavItem): number | null {

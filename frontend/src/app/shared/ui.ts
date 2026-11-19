@@ -26,7 +26,7 @@ export { sentence };
         <strong>{{ e.title }}</strong>
         @if (e.detail) { <p>{{ e.detail }}</p> }
         @for (f of e.fieldErrors; track $index) { <p class="mono small">{{ f.field }}: {{ f.message }}</p> }
-        @if (e.retryable || retryAlways()) { <button matButton="outlined" class="sm" type="button" (click)="retry.emit()">Retry</button> }
+        @if (e.retryable || retryAlways()) { <button matButton="outlined" class="sm" type="button" (click)="retry.emit()">{{ i18n.t('state.retry') }}</button> }
       </div>
     } @else if (loading() && !hasData()) {
       <oci-skeleton [kind]="skeleton()" [rows]="skeletonRows()" [columns]="skeletonColumns()" [label]="loadingText()" [style.--cols]="gridCols()" />
@@ -38,6 +38,7 @@ export { sentence };
   `,
 })
 export class StateComponent {
+  protected readonly i18n = inject(I18nService);
   readonly loading = input(false);
   readonly error = input<ApiError | null>(null);
   readonly empty = input(false);
