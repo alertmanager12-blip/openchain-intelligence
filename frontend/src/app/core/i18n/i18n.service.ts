@@ -2,7 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, inject, signal } from '@angular/core';
 import { en } from './en';
 import { fr } from './fr';
-import { fmtNumber } from './format';
+import { formatIcu } from './icu';
 
 export type Lang = 'en' | 'fr';
 export type Params = Record<string, string | number>;
@@ -13,6 +13,13 @@ export type Dictionary = { readonly [K in Key]: Entry };
 
 const KEY = 'oci.lang';
 const DICTS: Record<Lang, Dictionary> = { en, fr };
+
+/** Pure translation: a function entry is called, a string entry goes through the ICU subset. */
+export function translate(lang: Lang, key: Key, params?: Params): string {
+  const e = DICTS[lang][key];
+  if (typeof e === 'function') return e(params ?? {}, lang);
+  return params ? formatIcu(e, params, lang) : e;
+}
 
 /**
  * Console language (spec 2026-11-19 §1): the stored choice, else French for a French browser, else English. Switching
@@ -32,16 +39,7 @@ export class I18nService {
     try { localStorage.setItem(KEY, l); } catch { /* not persisted */ }
   }
 
-  t(key: Key, params?: Params): string {
-    const lang = this.current();
-    const e = DICTS[lang][key];
-    if (typeof e === 'function') return e(params ?? {}, lang);
-    if (!params) return e;
-    return e.replace(/\{(\w+)\}/g, (m, p: string) => {
-      const v = params[p];
-      return v === undefined ? m : typeof v === 'number' ? fmtNumber(v, lang) : v;
-    });
-  }
+  t(key: Key, params?: Params): string { return translate(this.current(), key, params); }
 
   private initial(): Lang {
     try {
