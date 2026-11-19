@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { I18nService } from '../core/i18n/i18n.service';
 import { Level, levelWord } from './levels';
 
 /**
@@ -13,7 +14,8 @@ import { Level, levelWord } from './levels';
       <span class="lvl">{{ word() }}</span>
       <span class="text">{{ text() }}</span>
       @if (detail()) { <span class="detail">{{ detail() }}</span> }
-      @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="'Show the evidence of ' + cite()">{{ cite() }}</button> }
+      @if (original()) { <details class="orig"><summary>{{ i18n.t('evidence.original') }}</summary>{{ original() }}</details> }
+      @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }
     </div>`,
   styles: `
     .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 7px 12px; background: var(--surface);
@@ -22,6 +24,8 @@ import { Level, levelWord } from './levels';
     .text { flex: 1 1 260px; }
     .detail { font-size: var(--fs-12); color: var(--ink-2); }
     .cite { font: inherit; font-size: var(--fs-12); color: var(--ink-2); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; }
+    .orig { flex-basis: 100%; font-size: var(--fs-12); color: var(--ink-2); }
+    .orig summary { cursor: pointer; width: fit-content; }
     .cite:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     .lvl-observed { border-left-color: var(--lvl-observed); } .lvl-observed .lvl { color: var(--lvl-observed); }
     .lvl-inferred { border-left-color: var(--lvl-inferred-rule); } .lvl-inferred .lvl { color: var(--lvl-inferred); }
@@ -36,5 +40,9 @@ export class EvidenceLine {
   readonly detail = input<string | null>(null);
   readonly cite = input<string | null>(null);
   readonly citeClick = output<string>();
-  readonly word = computed(() => levelWord(this.level()));
+  protected readonly i18n = inject(I18nService);
+  /** The engine's own wording (English), kept reachable when the line is written in the console's language. */
+  readonly original = input<string | null>(null);
+  readonly word = computed(() => levelWord(this.level(), this.i18n.lang()));
+  protected citeLabel(c: string): string { return this.i18n.t('evidence.cite', { id: c }); }
 }

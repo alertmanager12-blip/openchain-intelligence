@@ -4,6 +4,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { ThemeService } from './core/theme.service';
+import { I18nService } from './core/i18n/i18n.service';
 import { CommandPalette } from './layout/command-palette';
 import { NAV, NAV_ITEMS, NavItem } from './layout/navigation';
 import { Shell, isLandingUrl, isTypingTarget } from './layout/shell';
@@ -30,9 +31,9 @@ type Menu = 'env' | 'user' | null;
     '[class.bare]': 'bare()',
   },
   template: `
-    <a class="skip" href="#main">Skip to content</a>
+    <a class="skip" href="#main">{{ i18n.t('shell.skip') }}</a>
     @if (!bare()) {
-    <aside class="side" id="sidebar" aria-label="Sidebar" [class.open]="!docked() && shell.drawerOpen()" [attr.inert]="!docked() && !shell.drawerOpen() ? '' : null"
+    <aside class="side" id="sidebar" [attr.aria-label]="i18n.t('shell.sidebar')" [class.open]="!docked() && shell.drawerOpen()" [attr.inert]="!docked() && !shell.drawerOpen() ? '' : null"
       (keydown.escape)="closeDrawer()">
       <div class="side-top">
         <div class="pop-wrap">
@@ -42,7 +43,7 @@ type Menu = 'env' | 'user' | null;
             <span class="env-text"><span class="product">ChainSentinel</span><span class="env-line"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span>{{ shell.env().label }}</span></span>
           </button>
           @if (menu() === 'env') {
-            <div class="pop pop--env" id="env-pop" role="region" aria-label="Environment">
+            <div class="pop pop--env" id="env-pop" role="region" [attr.aria-label]="i18n.t('shell.environment')">
               <div class="pop-head"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span><strong>{{ shell.env().label }}</strong></div>
               <p class="pop-text">{{ shell.env().detail }}</p>
               @if (shell.networkCount()) { <p class="pop-text">{{ shell.networkCount() }} networks configured@if (shell.simulatedNetworks()) {, {{ shell.simulatedNetworks() }} simulated}.</p> }
@@ -54,15 +55,15 @@ type Menu = 'env' | 'user' | null;
         </div>
       </div>
 
-      <nav class="nav" aria-label="Primary">
+      <nav class="nav" [attr.aria-label]="i18n.t('shell.primary')">
         @for (g of nav; track g.title) {
-          <div class="nav-group" role="group" [attr.aria-label]="g.title || 'Home'">
-            @if (g.title) { <div class="nav-title" aria-hidden="true">{{ g.title }}</div> }
+          <div class="nav-group" role="group" [attr.aria-label]="i18n.t(g.titleKey)">
+            @if (g.title) { <div class="nav-title" aria-hidden="true">{{ i18n.t(g.titleKey) }}</div> }
             @for (i of g.items; track i.path) {
               <a class="nav-link" [routerLink]="i.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: !!i.exact }" ariaCurrentWhenActive="page"
-                [attr.aria-keyshortcuts]="i.key ? 'G ' + i.key.toUpperCase() : null" [attr.title]="shell.collapsed() && docked() ? i.label : null">
+                [attr.aria-keyshortcuts]="i.key ? 'G ' + i.key.toUpperCase() : null" [attr.title]="shell.collapsed() && docked() ? i18n.t(i.labelKey) : null">
                 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="i.icon"/></svg>
-                <span class="nav-label">{{ i.label }}</span>
+                <span class="nav-label">{{ i18n.t(i.labelKey) }}</span>
                 @if (count(i); as c) { <span class="nav-count" [attr.aria-label]="c + ' ' + countLabel(i)">{{ c }}</span> }
                 @if (i.key) { <span class="nav-keys" aria-hidden="true"><kbd>G</kbd><kbd>{{ i.key.toUpperCase() }}</kbd></span> }
               </a>
@@ -72,7 +73,7 @@ type Menu = 'env' | 'user' | null;
       </nav>
 
       <div class="side-bottom">
-        <p class="disclaimer">Signals are not proof of wrongdoing.</p>
+        <p class="disclaimer">{{ i18n.t('shell.disclaimer') }}</p>
         <div class="user-row">
         <div class="pop-wrap">
           <button class="user" type="button" (click)="toggle('user', $event)" [attr.aria-expanded]="menu() === 'user'" aria-controls="user-pop"
@@ -81,26 +82,26 @@ type Menu = 'env' | 'user' | null;
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M12 4l1.5 1.5"/></svg>
             </span>
             <span class="user-text"><span class="user-mode">{{ shell.credential().label }}</span>
-              <span class="user-key" [class.mono]="!!shell.credential().prefix">{{ shell.credential().prefix ?? 'Set one in Settings' }}</span></span>
+              <span class="user-key" [class.mono]="!!shell.credential().prefix">{{ shell.credential().prefix ?? i18n.t('shell.setCredential') }}</span></span>
             <svg class="chev" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m5 6.5 3-3 3 3M5 9.5l3 3 3-3"/></svg>
           </button>
           @if (menu() === 'user') {
-            <div class="pop pop--user" id="user-pop" role="region" aria-label="Account">
+            <div class="pop pop--user" id="user-pop" role="region" [attr.aria-label]="i18n.t('shell.account')">
               <div class="pop-head"><strong>{{ shell.credential().label }}</strong></div>
-              <p class="pop-text">@if (shell.credential().prefix; as p) { Using <span class="mono">{{ p }}</span>, stored in this browser only. } @else { No credential is stored in this browser. }</p>
+              <p class="pop-text">@if (shell.credential().prefix; as p) { {{ i18n.t('shell.using') }} <span class="mono">{{ p }}</span>{{ i18n.t('shell.storedHere') }} } @else { {{ i18n.t('shell.noCredential') }} }</p>
               <div class="pop-sep"></div>
-              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">Settings</a>
-              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'keys' }" (click)="menu.set(null)">API keys</a>
-              <button class="pop-item" type="button" (click)="theme.toggle()">{{ theme.effective() === 'dark' ? 'Light theme' : 'Dark theme' }}</button>
-              <button class="pop-item" type="button" (click)="menu.set(null); shell.help.set(true)">Keyboard shortcuts<kbd>?</kbd></button>
+              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">{{ i18n.t('shell.settings') }}</a>
+              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'keys' }" (click)="menu.set(null)">{{ i18n.t('shell.apiKeys') }}</a>
+              <button class="pop-item" type="button" (click)="theme.toggle()">{{ i18n.t(theme.effective() === 'dark' ? 'shell.lightTheme' : 'shell.darkTheme') }}</button>
+              <button class="pop-item" type="button" (click)="menu.set(null); shell.help.set(true)">{{ i18n.t('shell.shortcuts') }}<kbd>?</kbd></button>
               <div class="pop-sep"></div>
-              <button class="pop-item danger" type="button" (click)="signOut()" [disabled]="!shell.credential().prefix">Sign out</button>
+              <button class="pop-item danger" type="button" (click)="signOut()" [disabled]="!shell.credential().prefix">{{ i18n.t('shell.signOut') }}</button>
             </div>
           }
         </div>
           @if (docked()) {
-            <button class="icon-btn collapse" type="button" (click)="shell.toggleCollapsed()" [attr.aria-label]="shell.collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
-              [attr.aria-pressed]="shell.collapsed()" aria-keyshortcuts="[" [attr.title]="(shell.collapsed() ? 'Expand' : 'Collapse') + ' sidebar  ['">
+            <button class="icon-btn collapse" type="button" (click)="shell.toggleCollapsed()" [attr.aria-label]="i18n.t(shell.collapsed() ? 'shell.expandSidebar' : 'shell.collapseSidebar')"
+              [attr.aria-pressed]="shell.collapsed()" aria-keyshortcuts="[" [attr.title]="i18n.t(shell.collapsed() ? 'shell.expandSidebar' : 'shell.collapseSidebar') + '  ['">
               <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6.5 2.5v11"/></svg>
             </button>
           }
@@ -122,6 +123,7 @@ type Menu = 'env' | 'user' | null;
 })
 export class App {
   protected readonly theme = inject(ThemeService);
+  protected readonly i18n = inject(I18nService);
   protected readonly shell = inject(Shell);
   private readonly router = inject(Router);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -162,7 +164,7 @@ export class App {
   }
 
   protected countLabel(i: NavItem): string {
-    return i.count === 'openAlerts' ? 'open alerts' : 'enabled rules';
+    return this.i18n.t(i.count === 'openAlerts' ? 'shell.countOpenAlerts' : 'shell.countEnabledRules');
   }
 
   protected toggle(m: Exclude<Menu, null>, e: Event): void {

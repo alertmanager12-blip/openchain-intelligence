@@ -22,3 +22,15 @@ describe('sanctionsSentence (ADR-0027)', () => {
     expect(sanctionsSentence(undefined)).toBe('Sanctions screening status unknown.');
   });
 });
+
+describe('sanctionsSentence in French (spec 2026-11-19)', () => {
+  it('says the same facts in French', () => {
+    expect(sanctionsSentence({ ...base, issued: '2026-11-19', ethereum: 128 }, 'fr'))
+      .toBe('Liste de sanctions : OFAC SDN du 19 nov. 2026 (351 adresses TRON et 128 adresses Ethereum).');
+    expect(sanctionsSentence({ ...base, state: 'STALE', checkedAt: '2026-11-14T08:00:00Z' }, 'fr'))
+      .toBe('Liste de sanctions : OFAC SDN du 18 nov. 2026, non confirmée depuis le 14 nov. 2026 : des inscriptions plus récentes peuvent manquer.');
+    expect(sanctionsSentence({ ...base, state: 'NONE', issued: null, tron: 0, ethereum: 0 }, 'fr'))
+      .toBe("Aucune liste officielle de sanctions n'est chargée : une adresse sanctionnée ne serait pas reconnue.");
+    expect(sanctionsSentence(undefined, 'fr')).toBe('État de la liste de sanctions inconnu.');
+  });
+});

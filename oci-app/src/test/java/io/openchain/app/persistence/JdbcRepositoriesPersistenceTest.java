@@ -362,6 +362,14 @@ class JdbcRepositoriesPersistenceTest {
         assertThat(repo.findPage(io.openchain.alerting.alert.AlertRepository.AlertQuery.any(), 0, 3)).allSatisfy(a -> assertThat(a.history()).isNotEmpty());
         assertThat(repo.countByStatusAndSeverity()).containsExactlyInAnyOrderElementsOf(reference.countByStatusAndSeverity());
         assertThat(repo.createdAtSince(T0.plusSeconds(300))).containsExactlyInAnyOrderElementsOf(reference.createdAtSince(T0.plusSeconds(300)));
+        // overview queries (spec 2026-11-19): same answers in SQL as the reference
+        var open = java.util.EnumSet.of(AlertStatus.DETECTED, AlertStatus.PENDING, AlertStatus.NOTIFIED);
+        for (int limit : new int[] {1, 5, 100}) {
+            assertThat(repo.findTopOpen(open, limit)).extracting(Alert::id).as("top open " + limit)
+                    .containsExactlyElementsOf(reference.findTopOpen(open, limit).stream().map(Alert::id).toList());
+        }
+        assertThat(repo.openAndRecentByRule(open, T0.plusSeconds(300)))
+                .containsExactlyInAnyOrderElementsOf(reference.openAndRecentByRule(open, T0.plusSeconds(300)));
     }
 
     static Alert alert(String id, String dedup, List<String> events) {

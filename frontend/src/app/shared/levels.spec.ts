@@ -1,4 +1,4 @@
-import { levelOfSignal, levelWord } from './levels';
+import { evidenceDetail, levelOfSignal, levelWord } from './levels';
 
 /** ADR-0023 amendment 1 rule 4, as the console shows it (spec 2026-11-18). */
 describe('levels of proof', () => {
@@ -15,5 +15,15 @@ describe('levels of proof', () => {
   it('uses the five exact words', () => {
     expect(['OBSERVED', 'INFERRED', 'CONFIRMED', 'PREDICTED', 'SIMULATED'].map((l) => levelWord(l as never)))
       .toEqual(['Observed', 'Inferred', 'Confirmed', 'Predicted', 'Simulated']);
+  });
+});
+
+describe('levels of proof in French (spec 2026-11-19)', () => {
+  it('names the levels and the original evidence level', () => {
+    expect(levelWord('INFERRED', 'fr')).toBe('Déduit');
+    expect(levelWord('CONFIRMED', 'fr')).toBe('Confirmé');
+    expect(levelWord('OBSERVED', 'fr')).toBe('Observé');
+    expect(evidenceDetail('RISK_SIGNAL', 'fr')).toBe('signal de risque');
+    expect(levelWord('INFERRED')).toBe('Inferred');
   });
 });

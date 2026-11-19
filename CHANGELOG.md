@@ -8,6 +8,16 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (console — French and English)
+
+- **The console speaks French and English**: a FR | EN switch in every page's top bar, without reloading; the default follows the browser, the choice is remembered in the browser. Translated now: navigation, command palette, page header, verdicts, levels of proof, coverage and sanctions sentences, risk badges, and the whole overview. Numbers, dates and durations follow the language. The other screens are still English (next steps, screen by screen).
+- **Alert sentences written from the alert's own fields** in both languages for the rules seen in production (wallet-draining, large-usdt-transfer, fund-splitting, issuer-freeze-counterparty, sanctioned-exposure-signal, listed-address-exposure); the engine's English wording stays reachable ("Engine's wording") and is used when a field is missing. An exposure is called "sanctioned" only when the signal says the list is a sanctions list.
+
+### Changed (overview — "is monitoring reliable?")
+
+- **New overview** (spec `docs/superpowers/specs/2026-11-19-home-bilingual-design.md`): first a band answering "Is monitoring reliable?" (Yes / Partly / No) from facts the old page never showed: blocks never analysed in the last 7 days, the indexing delay as time per network (15 min threshold), enabled rules whose alerts reach nobody, the sanctions list in force, provider health. A fact the role cannot see, or that is unknown, is said so and never counts as a pass. Then "Handle now": the 5 most severe open alerts as verdicts (the old page only saw the 5 latest alerts of any status), and a side column with the last 24 hours by rule and one line per network. Removed from the overview (still in their screens): live strip, counters, recent alerts, risk distribution, alerts by status, networks table, activity chart, recent signals.
+- `GET /api/v1/dashboard` gains `networks[].lastIndexedBlockTime`, `coverage.gaps`, `notifications`, `alerts.attention` and `alerts.last24h` (additive; permissions as in docs/api).
+
 ### Fixed (analysis — sanctions alerts that were not about sanctions)
 
 - **Exposure to an address frozen by a stablecoin issuer was alerted as a sanctions exposure**: in production on 2026-11-18, all 3 `sanctioned-exposure-signal` alerts (HIGH, Telegram title "Exposition à une adresse sanctionnée") traced funds to an address frozen by Tether (`tether-onchain`, category ISSUER_FROZEN); none is on the OFAC list. The rule matched any `INDIRECT_EXPOSURE`, and the signal did not say which list the address was on. Exposure signals now carry the source's category (`Signal.listedCategory`, rule field `signal.listed_category`: `sanctioned`, `issuer-frozen`, `mixer`...).

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { I18nService } from '../core/i18n/i18n.service';
 import { EvidenceLine } from './evidence-line';
 
 describe('EvidenceLine', () => {
@@ -27,5 +28,17 @@ describe('EvidenceLine', () => {
 
   it('shows no cite button without a citation', () => {
     expect((render({ level: 'OBSERVED', text: 'x' }).nativeElement as HTMLElement).querySelector('button.cite')).toBeNull();
+  });
+});
+
+describe('EvidenceLine in French (spec 2026-11-19)', () => {
+  afterEach(() => TestBed.inject(I18nService).set('en'));
+  it('shows the level word in the console language', () => {
+    TestBed.inject(I18nService).set('fr');
+    const f = TestBed.createComponent(EvidenceLine);
+    f.componentRef.setInput('level', 'INFERRED');
+    f.componentRef.setInput('text', 'x');
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).querySelector('.lvl')?.textContent).toBe('Déduit');
   });
 });

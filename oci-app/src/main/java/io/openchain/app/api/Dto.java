@@ -95,7 +95,9 @@ public final class Dto {
                              /** Blocks behind the head; null when the head is unknown (provider failing): not "no lag". */
                              Long indexerLag, boolean simulated,
                              /** What this instance cannot see or detect on this network (data-source limits). */
-                             List<String> limitations) {}
+                             List<String> limitations,
+                             /** Timestamp of the last indexed block; null until one is known (just after a start). */
+                             Instant lastIndexedBlockTime) {}
 
     public record GraphNodeDto(String id, String address, String network, String label, List<String> labels, String riskLevel,
                                /** null = not resolved (graph nodes are not looked up, to bound provider calls) */

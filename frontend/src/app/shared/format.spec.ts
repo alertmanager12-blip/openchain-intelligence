@@ -1,4 +1,5 @@
 import { formatUnits, indexerLag, shortHash } from './format';
+import { severityName, statusName } from './format';
 
 describe('formatUnits', () => {
   it('formats exactly with grouping and trimmed fractions', () => {
@@ -29,5 +30,15 @@ describe('formatUnits', () => {
   });
   it('shortens hashes', () => {
     expect(shortHash('0x1234567890abcdef')).toBe('0x1234…cdef');
+  });
+});
+
+describe('severity and status names (spec 2026-11-19)', () => {
+  it('names them in both languages', () => {
+    expect(severityName('HIGH', 'fr')).toBe('Élevée');
+    expect(severityName('HIGH', 'en')).toBe('High');
+    expect(statusName('OPEN', 'fr')).toBe('Ouverte');
+    expect(statusName('FALSE_POSITIVE', 'fr')).toBe('Faux positif');
+    expect(statusName('FALSE_POSITIVE', 'en')).toBe('False positive');
   });
 });

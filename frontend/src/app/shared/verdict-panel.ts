@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { I18nService } from '../core/i18n/i18n.service';
 import { RiskLevel } from '../core/models';
 import { EvidenceLine } from './evidence-line';
 import { Level } from './levels';
 import { RiskBadge } from './ui';
 
-export interface VerdictLine { level: Level; text: string; detail?: string | null; cite?: string | null }
+export interface VerdictLine { level: Level; text: string; detail?: string | null; cite?: string | null; /** The engine's own wording, shown on demand. */ original?: string | null }
 
 /**
  * A verdict (spec 2026-11-18): one plain sentence, the risk, the findings that support it with their level of proof, and
@@ -21,9 +22,9 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
         @if (risk(); as r) { <oci-risk [value]="r" /> }
       </div>
       @if (lines().length) {
-        <div class="lines">@for (l of lines(); track $index) { <oci-evidence-line [level]="l.level" [text]="l.text" [detail]="l.detail ?? null" [cite]="l.cite ?? null" /> }</div>
+        <div class="lines">@for (l of lines(); track $index) { <oci-evidence-line [level]="l.level" [text]="l.text" [detail]="l.detail ?? null" [cite]="l.cite ?? null" [original]="l.original ?? null" /> }</div>
       }
-      <p class="coverage">{{ coverage() || 'Coverage unknown: the data this rests on could not be stated.' }}@if (limit()) { {{ ' ' + limit() }} }</p>
+      <p class="coverage">{{ coverage() || i18n.t('verdict.coverageUnknown') }}@if (limit()) { {{ ' ' + limit() }} }</p>
     </section>`,
   styles: `
     .verdict { background: var(--band); border-radius: var(--r-panel); padding: 16px 18px; display: grid; gap: 10px; }
@@ -34,6 +35,7 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
   `,
 })
 export class VerdictPanel {
+  protected readonly i18n = inject(I18nService);
   readonly sentence = input.required<string>();
   readonly risk = input<RiskLevel | null>(null);
   readonly lines = input<VerdictLine[]>([]);

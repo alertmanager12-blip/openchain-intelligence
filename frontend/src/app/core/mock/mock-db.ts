@@ -333,6 +333,8 @@ export class MockDb {
       detail: null,
       enabled: !MockDb.DISABLED.includes(n), lastIndexedBlock: base[n] - [64, 19, 15, 128, 6, 32][i] - [2, 0, 1, 4, 0, 940][i], indexerLag: [64, 19, 15, 128, 6, 32][i] + [2, 0, 1, 4, 0, 940][i],
       simulated: n === 'polygon',
+      // delay as time (spec 2026-11-19): a few minutes behind, Ethereum about 20 minutes (a "partly" band)
+      lastIndexedBlockTime: new Date(NOW - [20, 1, 2, 3, 1, 5][i] * 60_000).toISOString(),
     }));
   }
 
@@ -568,9 +570,20 @@ export class MockDb {
         bySeverity: count(SEVERITIES, (sv) => this.alerts.filter((a) => a.severity === sv).length),
         openBySeverity: count(SEVERITIES, (sv) => open.filter((a) => a.severity === sv).length),
         recent: this.alerts.slice(0, 5),
+        attention: [...open].sort((x, y) => SEVERITIES.indexOf(x.severity) - SEVERITIES.indexOf(y.severity)
+          || Date.parse(y.createdAt) - Date.parse(x.createdAt)).slice(0, 5),
+        last24h: (() => {
+          const recent = this.alerts.filter((a) => Date.parse(a.createdAt) > NOW - D);
+          const by = new Map<string, { ruleId: string; ruleName: string; count: number }>();
+          for (const a of recent) by.set(a.ruleId, { ruleId: a.ruleId, ruleName: a.ruleName, count: (by.get(a.ruleId)?.count ?? 0) + 1 });
+          return { total: recent.length, byRule: [...by.values()].sort((x, y) => y.count - x.count) };
+        })(),
       },
       recentSignals: this.signals.slice(0, 10),
       omittedSections: [],
+      // a "partly" band: a gap detected yesterday, a few alerts that reach nobody (spec 2026-11-19 §3)
+      coverage: { gaps: [{ network: 'tron', fromBlock: 88_122_971, toBlock: 88_135_270, blocks: 12_300, cause: 'RESUME_GAP', detectedAt: new Date(NOW - D).toISOString() }] },
+      notifications: { unroutedRules: ['fund-splitting'], openAlertsUnrouted: open.filter((a) => a.ruleId === 'fund-splitting').length },
     };
   }
 
