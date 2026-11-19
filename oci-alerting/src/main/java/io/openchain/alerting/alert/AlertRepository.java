@@ -89,4 +89,32 @@ public interface AlertRepository {
         return m.entrySet().stream().map(e -> new RuleAlertStats(e.getKey(), e.getValue()[0], e.getValue()[1], e.getValue()[2],
                 e.getValue()[3], e.getValue()[4])).toList();
     }
+
+    /** Per rule: alerts whose status is in the given "open" set, and alerts created at or after {@code since} (any status). */
+    record RuleOpenAndRecent(String ruleId, long open, long createdSince) {}
+
+    /**
+     * The most severe alerts whose status is in {@code open}: severity CRITICAL first, then the newest (creation time, then
+     * id, descending). The overview's "handle now" list (spec 2026-11-19); database implementations sort and limit in SQL.
+     */
+    default List<Alert> findTopOpen(java.util.Set<AlertStatus> open, int limit) {
+        java.util.Comparator<Alert> order = java.util.Comparator.<Alert>comparingInt(a -> a.severity().ordinal()).reversed()
+                .thenComparing(Alert::createdAt, java.util.Comparator.reverseOrder())
+                .thenComparing(Alert::id, java.util.Comparator.reverseOrder());
+        return findAll().stream().filter(a -> open.contains(a.status())).sorted(order).limit(Math.max(0, limit)).toList();
+    }
+
+    /** Open and recently created alerts per rule; rules with neither are left out. */
+    default List<RuleOpenAndRecent> openAndRecentByRule(java.util.Set<AlertStatus> open, java.time.Instant since) {
+        java.util.Map<String, long[]> m = new java.util.TreeMap<>();
+        for (Alert a : findAll()) {
+            boolean isOpen = open.contains(a.status());
+            boolean recent = a.createdAt() != null && !a.createdAt().isBefore(since);
+            if (!isOpen && !recent) continue;
+            long[] c = m.computeIfAbsent(a.ruleId(), k -> new long[2]);
+            if (isOpen) c[0]++;
+            if (recent) c[1]++;
+        }
+        return m.entrySet().stream().map(e -> new RuleOpenAndRecent(e.getKey(), e.getValue()[0], e.getValue()[1])).toList();
+    }
 }

@@ -164,6 +164,22 @@ public final class JdbcAlertRepository implements AlertRepository {
                         rs.getLong("open"), rs.getLong("fp"), rs.getLong("resolved"), rs.getLong("recent")));
     }
 
+    @Override public List<Alert> findTopOpen(java.util.Set<AlertStatus> open, int limit) {
+        if (open.isEmpty() || limit <= 0) return List.of();
+        return query("where status in (:open) order by case severity when 'CRITICAL' then 0 when 'HIGH' then 1 when 'MEDIUM' then 2 "
+                + "when 'LOW' then 3 else 4 end, created_at desc, id desc limit :limit",
+                Map.of("open", open.stream().map(Enum::name).toList(), "limit", limit));
+    }
+
+    @Override public List<RuleOpenAndRecent> openAndRecentByRule(java.util.Set<AlertStatus> open, java.time.Instant since) {
+        List<String> st = open.isEmpty() ? List.of("") : open.stream().map(Enum::name).toList();
+        return jdbc.query("select rule_id, count(*) filter (where status in (:open)) open, "
+                + "count(*) filter (where created_at >= :since) recent from alerts "
+                + "where status in (:open) or created_at >= :since group by rule_id order by rule_id",
+                Map.of("open", st, "since", Sql.ts(since)),
+                (rs, i) -> new RuleOpenAndRecent(rs.getString("rule_id"), rs.getLong("open"), rs.getLong("recent")));
+    }
+
     // ---- reading ------------------------------------------------------------------------------------------------
 
     private List<Alert> query(String tail, Map<String, ?> params) {
