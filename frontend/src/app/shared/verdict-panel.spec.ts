@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { I18nService } from '../core/i18n/i18n.service';
 import { VerdictPanel } from './verdict-panel';
 
 describe('VerdictPanel', () => {
@@ -22,5 +23,17 @@ describe('VerdictPanel', () => {
 
   it('never hides missing coverage', () => {
     expect(render({ sentence: 'x', risk: null, lines: [], coverage: '' }).textContent).toContain('Coverage unknown');
+  });
+});
+
+describe('VerdictPanel in French (spec 2026-11-19)', () => {
+  afterEach(() => TestBed.inject(I18nService).set('en'));
+  it('says a missing coverage in French', () => {
+    TestBed.inject(I18nService).set('fr');
+    const f = TestBed.createComponent(VerdictPanel);
+    f.componentRef.setInput('sentence', 'x');
+    f.componentRef.setInput('coverage', '');
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('Couverture inconnue');
   });
 });

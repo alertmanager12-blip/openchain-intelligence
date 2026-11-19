@@ -50,4 +50,6 @@ export const fr: Dictionary = {
   'nav.group.configure': 'Configurer',
   'shell.countOpenAlerts': 'alertes ouvertes',
   'shell.countEnabledRules': 'règles actives',
+  'verdict.coverageUnknown': "Couverture inconnue : les données sur lesquelles ce verdict repose n'ont pas pu être précisées.",
+  'evidence.cite': 'Voir les preuves de {id}',
 };

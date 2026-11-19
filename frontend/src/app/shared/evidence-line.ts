@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { I18nService } from '../core/i18n/i18n.service';
 import { Level, levelWord } from './levels';
 
 /**
@@ -13,7 +14,7 @@ import { Level, levelWord } from './levels';
       <span class="lvl">{{ word() }}</span>
       <span class="text">{{ text() }}</span>
       @if (detail()) { <span class="detail">{{ detail() }}</span> }
-      @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="'Show the evidence of ' + cite()">{{ cite() }}</button> }
+      @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }
     </div>`,
   styles: `
     .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 7px 12px; background: var(--surface);
@@ -36,5 +37,7 @@ export class EvidenceLine {
   readonly detail = input<string | null>(null);
   readonly cite = input<string | null>(null);
   readonly citeClick = output<string>();
-  readonly word = computed(() => levelWord(this.level()));
+  private readonly i18n = inject(I18nService);
+  readonly word = computed(() => levelWord(this.level(), this.i18n.lang()));
+  protected citeLabel(c: string): string { return this.i18n.t('evidence.cite', { id: c }); }
 }

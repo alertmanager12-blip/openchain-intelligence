@@ -1,12 +1,15 @@
 import { NetworkStatus } from '../core/models';
 import { netLabel } from './format';
+import type { Lang } from '../core/i18n/i18n.service';
+import { fmtNumber, plural } from '../core/i18n/format';
 
 /**
  * The coverage sentence of a verdict built from a network's live indexing (spec 2026-11-18, decision 3). The API gives no
  * date since when a network is covered, so none is claimed: the sentence names the network, the block reached and the lag,
  * and says that earlier activity is not covered. It never says that nothing exists.
  */
-export function networkCoverageSentence(s: NetworkStatus): string {
+export function networkCoverageSentence(s: NetworkStatus, lang: Lang = 'en'): string {
+  if (lang === 'fr') return coverageFr(s);
   const name = netLabel(s.network);
   const tail = ' Activity before monitoring started is not covered.';
   if (s.indexerLag === null || s.indexerLag === undefined || !s.healthy) {
@@ -15,4 +18,15 @@ export function networkCoverageSentence(s: NetworkStatus): string {
   const block = (s.lastIndexedBlock ?? s.headBlock).toLocaleString('en-US');
   const lag = s.indexerLag === 1 ? '1 block behind' : `${s.indexerLag.toLocaleString('en-US')} blocks behind`;
   return `Based on the transfers this instance indexes on ${name} (block ${block}, ${lag}).${tail}`;
+}
+
+function coverageFr(s: NetworkStatus): string {
+  const name = netLabel(s.network);
+  const tail = " L'activité antérieure au début de la surveillance n'est pas couverte.";
+  if (s.indexerLag === null || s.indexerLag === undefined || !s.healthy) {
+    return `D'après les transferts que cette instance indexe sur ${name} ; tête de chaîne inconnue pour le moment.${tail}`;
+  }
+  const block = fmtNumber(s.lastIndexedBlock ?? s.headBlock, 'fr');
+  const lag = `${fmtNumber(s.indexerLag, 'fr')} ${plural(s.indexerLag, 'fr', { one: 'bloc', other: 'blocs' })} de retard`;
+  return `D'après les transferts que cette instance indexe sur ${name} (bloc ${block}, ${lag}).${tail}`;
 }

@@ -50,4 +50,6 @@ export const en = {
   'nav.group.configure': 'Configure',
   'shell.countOpenAlerts': 'open alerts',
   'shell.countEnabledRules': 'enabled rules',
+  'verdict.coverageUnknown': 'Coverage unknown: the data this rests on could not be stated.',
+  'evidence.cite': 'Show the evidence of {id}',
 } as const satisfies Record<string, Entry>;

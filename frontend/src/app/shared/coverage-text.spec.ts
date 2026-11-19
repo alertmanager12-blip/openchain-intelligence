@@ -22,3 +22,13 @@ describe('networkCoverageSentence', () => {
     }
   });
 });
+
+describe('networkCoverageSentence in French (spec 2026-11-19)', () => {
+  it('names the network, the block and the lag', () => {
+    expect(networkCoverageSentence(base, 'fr')).toBe(
+      "D'après les transferts que cette instance indexe sur TRON (bloc 88\u202f105\u202f040, 3 blocs de retard). L'activité antérieure au début de la surveillance n'est pas couverte.");
+  });
+  it('says when the chain head is unknown', () => {
+    expect(networkCoverageSentence({ ...base, indexerLag: null }, 'fr')).toContain('tête de chaîne inconnue');
+  });
+});
