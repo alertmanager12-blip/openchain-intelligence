@@ -1,9 +1,9 @@
-import type { Entry } from './i18n.service';
+import type { Entry } from '../i18n.service';
 
-/** English: the source of the keys (fr.ts must define every one). Keys are namespaced by area. */
-export const en = {
-  'overview.title': 'Overview',
-  'overview.allOpen': 'See all {count} open alerts',
+/** Key prefixes this area owns (checked by dictionaries.spec.ts). */
+export const prefixes = ['shell.', 'nav.', 'palette.', 'help.'] as const;
+
+export const shell = {
   'shell.skip': 'Skip to content',
   'shell.sidebar': 'Sidebar',
   'shell.primary': 'Primary',
@@ -48,40 +48,11 @@ export const en = {
   'nav.group.investigate': 'Investigate',
   'nav.group.monitor': 'Monitor',
   'nav.group.configure': 'Configure',
-  'shell.countOpenAlerts': 'open alerts',
-  'shell.countEnabledRules': 'enabled rules',
-  'verdict.coverageUnknown': 'Coverage unknown: the data this rests on could not be stated.',
-  'evidence.cite': 'Show the evidence of {id}',
-  'band.title': 'Is monitoring reliable?',
-  'band.yes': 'Yes',
-  'band.partly': 'Partly',
-  'band.no': 'No',
-  'band.fix': 'Fix',
-  'band.passed': '{count} checks passed',
-  'band.olderGaps': 'Older indexing gaps ({count})',
-  'band.state.fail': 'Failing:',
-  'band.state.warn': 'Warning:',
-  'band.state.unknown': 'Unknown:',
-  'band.state.pass': 'Passed:',
-  'evidence.original': "Engine's wording",
-  'overview.lede': 'Whether monitoring can be trusted right now, then the alerts to handle first. A signal is a reason to look closer, not proof of wrongdoing.',
-  'overview.updated': 'Updated {when}',
-  'overview.refresh': 'Refresh',
-  'overview.loading': 'Loading the overview',
-  'overview.handleNow': 'Handle now',
-  'overview.handleNote': 'The most severe open alerts, with what they rest on.',
-  'overview.reviewOpen': 'Review the open alerts',
-  'overview.addWatchlist': 'Add wallets to the watchlist to follow them closely',
-  'overview.last24h': 'Last 24 hours',
-  'overview.alertsUnit': 'alerts',
-  'overview.networks': 'Networks',
-  'overview.net.unknown': 'delay unknown',
-  'overview.net.blocks': '{n} blocks behind',
+  'shell.countOpenAlerts': '{count, plural, one {# open alert} other {# open alerts}}',
+  'shell.countEnabledRules': '{count, plural, one {# enabled rule} other {# enabled rules}}',
   'shell.disclaimer': 'Signals are not proof of wrongdoing.',
   'shell.setCredential': 'Set one in Settings',
   'shell.using': 'Using',
   'shell.storedHere': ', stored in this browser only.',
   'shell.noCredential': 'No credential is stored in this browser.',
-  'band.hidePassed': 'Hide the passed checks',
-  'overview.openAlert': 'Open the alert',
 } as const satisfies Record<string, Entry>;

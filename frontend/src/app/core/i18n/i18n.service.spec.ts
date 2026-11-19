@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { en } from './en';
 import { fr } from './fr';
 import { isWellFormedIcu } from './icu';
-import { I18nService, Key, Lang } from './i18n.service';
+import { I18nService, Key, Lang, translate } from './i18n.service';
 
 /** Spec 2026-11-19 §1: language from the stored choice, else the browser; switched live; every key in both languages. */
 describe('I18nService', () => {
@@ -72,9 +72,8 @@ describe('dictionaries', () => {
 
   it('leaves no parameter unfilled once rendered', () => {
     for (const k of keys) {
-      for (const [lang, d] of [['en', en], ['fr', fr]] as const) {
-        const raw = render(d[k], lang);
-        const filled = raw.replace(/\{(\w+)\}/g, (_, p: string) => (p in sample ? 'ok' : `{${p}}`));
+      for (const lang of ['en', 'fr'] as const) {
+        const filled = translate(lang, k, sample);
         expect(filled, `${lang} ${k}`).not.toMatch(/\{\w+\}/);
       }
     }

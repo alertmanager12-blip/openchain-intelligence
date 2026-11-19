@@ -64,7 +64,7 @@ type Menu = 'env' | 'user' | null;
                 [attr.aria-keyshortcuts]="i.key ? 'G ' + i.key.toUpperCase() : null" [attr.title]="shell.collapsed() && docked() ? i18n.t(i.labelKey) : null">
                 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="i.icon"/></svg>
                 <span class="nav-label">{{ i18n.t(i.labelKey) }}</span>
-                @if (count(i); as c) { <span class="nav-count" [attr.aria-label]="c + ' ' + countLabel(i)">{{ c }}</span> }
+                @if (count(i); as c) { <span class="nav-count" [attr.aria-label]="countLabel(i, c)">{{ c }}</span> }
                 @if (i.key) { <span class="nav-keys" aria-hidden="true"><kbd>G</kbd><kbd>{{ i.key.toUpperCase() }}</kbd></span> }
               </a>
             }
@@ -163,8 +163,8 @@ export class App {
     return v ? v : null;
   }
 
-  protected countLabel(i: NavItem): string {
-    return this.i18n.t(i.count === 'openAlerts' ? 'shell.countOpenAlerts' : 'shell.countEnabledRules');
+  protected countLabel(i: NavItem, count: number): string {
+    return this.i18n.t(i.count === 'openAlerts' ? 'shell.countOpenAlerts' : 'shell.countEnabledRules', { count });
   }
 
   protected toggle(m: Exclude<Menu, null>, e: Event): void {
