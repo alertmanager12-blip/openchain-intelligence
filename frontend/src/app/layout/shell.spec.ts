@@ -151,6 +151,7 @@ describe('App shell', () => {
     expect(pop.textContent).toContain("État des réseaux sur la vue d'ensemble");
     expect(pop.textContent).not.toContain('Connection settings');
     expect(el.querySelector('button.env')?.getAttribute('aria-label')).toContain("Détails de l'environnement");
+    expect(el.querySelector('button.user')?.getAttribute('aria-label')).toMatch(/^Identifiant\u202f: .*Menu du compte$/);
     f.destroy();
 
     const s = TestBed.createComponent(StateComponent);

@@ -67,5 +67,12 @@ export const shell = {
   'shell.networksConfiguredSim': '{count, plural, one {# network configured} other {# networks configured}}, {sim} simulated.',
   'shell.connectionSettings': 'Connection settings',
   'shell.networkHealth': 'Network health on Overview',
+  'shell.userAria': 'Credential: {label}. Account menu',
+  'shell.credNone': 'No credential',
+  'shell.credApiKey': 'API key',
+  'shell.credBearer': 'Bearer token (OIDC)',
+  'state.copy': 'Copy',
+  'state.copied': 'Copied',
+  'state.copyLabel': 'Copy to clipboard',
   'state.retry': 'Retry',
 } as const satisfies Record<string, Entry>;

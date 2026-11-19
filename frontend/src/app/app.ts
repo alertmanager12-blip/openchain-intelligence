@@ -77,7 +77,7 @@ type Menu = 'env' | 'user' | null;
         <div class="user-row">
         <div class="pop-wrap">
           <button class="user" type="button" (click)="toggle('user', $event)" [attr.aria-expanded]="menu() === 'user'" aria-controls="user-pop"
-            [attr.aria-label]="'Credential: ' + shell.credential().label + (shell.credential().prefix ? ' ' + shell.credential().prefix : '') + '. Account menu'">
+            [attr.aria-label]="i18n.t('shell.userAria', { label: shell.credential().label + (shell.credential().prefix ? ' ' + shell.credential().prefix : '') })">
             <span class="avatar" [class.on]="shell.credential().signedIn" aria-hidden="true">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M12 4l1.5 1.5"/></svg>
             </span>

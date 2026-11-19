@@ -7,6 +7,7 @@ type Fs = {
 
 const ROOT = 'src/app';
 const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'matTooltip'];
+const BOUND = ['attr.aria-label', 'attr.title', 'attr.label', 'attr.placeholder', 'aria-label', 'title', 'placeholder', 'matTooltip'];
 
 function fs(): Fs {
   return (globalThis as unknown as { process: { getBuiltinModule(n: string): Fs } }).process.getBuiltinModule('node:fs');
@@ -38,6 +39,13 @@ export function findings(template: string, tokens: RegExp[] = COVERAGE_ALLOWLIST
   const found: string[] = [];
   const attrRe = new RegExp(`(?:^|[\\s])(${ATTRS.join('|')})="([^"]*)"`, 'g');
   for (const m of template.matchAll(attrRe)) if (words(m[2].replace(/\{\{[\s\S]*?\}\}/g, ' '), tokens).length) found.push(m[2]);
+  // string literals inside bound visible attributes; the argument of i18n.t(...) / translate(...) is a key, not text
+  const boundRe = new RegExp(`\\[(?:${BOUND.map((a) => a.replace('.', '\\.')).join('|')})\\]="([^"]*)"`, 'g');
+  for (const m of template.matchAll(boundRe)) {
+    const expr = m[1].replace(/\b(?:i18n\.t|t|translate)\(\s*(?:'[^']*'|[^,)]*)/g, ' ');
+    const lits = [...expr.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((l) => l[1]);
+    if (lits.some((l) => !/^[a-z]+(\.[A-Za-z]+)+$/.test(l) && words(l, tokens).length)) found.push(m[1]);
+  }
   const text = template
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/\{\{[\s\S]*?\}\}/g, ' ')
@@ -56,6 +64,8 @@ describe('hard-coded English scanner (spec 2026-11-19 §6)', () => {
     expect(findings('<p>Nothing to show</p>')).toEqual(['Nothing to show']);
     expect(findings('<button aria-label="Close dialog" [attr.title]="x">{{ t }}</button>')).toEqual(['Close dialog']);
     expect(findings('@if (a) { <b>{{ i18n.t(k) }}</b> } @else { <i>&nbsp;·&nbsp;</i> } @for (x of xs; track x) { <kbd>G</kbd> }')).toEqual([]);
+    expect(findings(`<b [attr.aria-label]="'Revoke ' + k.name" [title]="x ? 'Copy link' : i18n.t('k')">{{ t }}</b>`)).toEqual(["'Revoke ' + k.name", "x ? 'Copy link' : i18n.t('k')"]);
+    expect(findings(`<b [attr.aria-label]="i18n.t('shell.x', { id: a })" [matTooltip]="'USDT'"></b>`)).toEqual([]);
     expect(findings('<span>USDT ETH TRON 0x12</span>')).toEqual([]);
   });
 

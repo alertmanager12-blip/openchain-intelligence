@@ -69,7 +69,7 @@ export class Shell {
   /** The stored credential, described without its secret: mode and the first characters of the key only. */
   readonly credential = computed(() => {
     const { authMode, token } = this.settings.connection();
-    const mode: Record<AuthMode, string> = { none: 'No credential', apiKey: 'API key', bearer: 'Bearer token (OIDC)' };
+    const mode: Record<AuthMode, string> = { none: this.i18n.t('shell.credNone'), apiKey: this.i18n.t('shell.credApiKey'), bearer: this.i18n.t('shell.credBearer') };
     // at most 8 characters, and never more than a quarter of the value
     const prefix = token && authMode !== 'none' ? token.slice(0, Math.min(8, Math.floor(token.length / 4))) + '…' : null;
     return { mode: authMode, label: mode[authMode], prefix, signedIn: authMode !== 'none' && !!token };

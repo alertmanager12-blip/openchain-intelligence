@@ -65,5 +65,12 @@ export const shell: Record<keyof typeof enShell, Entry> = {
   'shell.networksConfiguredSim': '{count, plural, one {# réseau configuré} other {# réseaux configurés}}, dont {sim} simulés.',
   'shell.connectionSettings': 'Réglages de connexion',
   'shell.networkHealth': "État des réseaux sur la vue d'ensemble",
+  'shell.userAria': 'Identifiant\u202f: {label}. Menu du compte',
+  'shell.credNone': 'Aucun identifiant',
+  'shell.credApiKey': 'Clé API',
+  'shell.credBearer': 'Jeton Bearer (OIDC)',
+  'state.copy': 'Copier',
+  'state.copied': 'Copié',
+  'state.copyLabel': 'Copier dans le presse-papiers',
   'state.retry': 'Réessayer',
 };

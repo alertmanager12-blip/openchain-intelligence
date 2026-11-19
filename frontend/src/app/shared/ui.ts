@@ -125,13 +125,14 @@ export class AddressLink {
   selector: 'oci-copy',
   imports: [MatButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<button matButton class="sm" type="button" (click)="copy()" [attr.aria-label]="done() ? 'Copied' : label()">
+  template: `<button matButton class="sm" type="button" (click)="copy()" [attr.aria-label]="done() ? i18n.t('state.copied') : (label() ?? i18n.t('state.copyLabel'))">
       <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
-      <span aria-live="polite">{{ done() ? 'Copied' : 'Copy' }}</span></button>`,
+      <span aria-live="polite">{{ i18n.t(done() ? 'state.copied' : 'state.copy') }}</span></button>`,
 })
 export class CopyButton {
   readonly value = input.required<string>();
-  readonly label = input('Copy to clipboard');
+  protected readonly i18n = inject(I18nService);
+  readonly label = input<string | null>(null);
   readonly done = signal(false);
   copy(): void {
     void navigator.clipboard?.writeText(this.value()).then(() => {
