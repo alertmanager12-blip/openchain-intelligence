@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Changed (deployment — TRON resume gap)
+
+- **TRON no longer skips a night of blocks after an outage**: `OCI_CHAINS_TRON_MAX_RESUME_GAP` defaults to 30,000 blocks (about 25 h) in `docker-compose.yml` instead of 7,200 (6 h). On 2026-11-19 a restart after an overnight outage skipped 12,300 TRON blocks (recorded in `indexer_gaps`), although TronGrid serves old blocks and catching up takes a few hours.
+
 ### Fixed (indexing throughput — exposure walk)
 
 - **Block processing slowed down once real sanctions labels existed**: the exposure detector skips its graph walk while no risky label is loaded, so the OFAC list (478 addresses) switched it on for every transfer. Sampled in production (25 thread dumps, 2026-11-19): 56 % of block processing time in `ExposurePaths.indirect`, which copied the **whole** inbound list of each address it visited (`FlowStore.incoming`), tens of thousands of flows on an exchange hub, before reading only a few. New `FlowStore.recentIncoming(address, max)` copies only the newest `max`; the walk reads at most its budget (`maxVisitedFlows`, 5,000) on the subject and the remaining budget upstream. Same paths found (the 12 regression cases unchanged); a test counts the flows read on a 2,000-flow hub. Measured on a hub with 30,000 inbound flows: 4.70 ms → 0.74 ms per walk.

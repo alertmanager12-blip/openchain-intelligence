@@ -81,6 +81,10 @@ services:
       # wallet transactions and balances, freeze backfill): those wait for TronGrid, which is tried again after 30 s.
       OCI_CHAINS_TRON_FALLBACK_URLS: ${OCI_CHAINS_TRON_FALLBACK_URLS:-}
       OCI_CHAINS_TRON_START_BLOCK: ${OCI_CHAINS_TRON_START_BLOCK:--100}
+      # After a restart, TRON resumes from its checkpoint unless it is more than this many blocks behind (then it restarts near
+      # the head and records the skipped range). 7,200 (default, 6 h of TRON) skipped 12,300 blocks after a night's outage on
+      # 2026-11-19, while TronGrid serves old blocks and the catch-up takes a few hours: 30,000 blocks is about 25 h.
+      OCI_CHAINS_TRON_MAX_RESUME_GAP: ${OCI_CHAINS_TRON_MAX_RESUME_GAP:-30000}
       # In-memory working set bounds (ADR-0024 step 3a); OCI_INGESTION_WORKING_SET_TRIM_INTERVAL=0 disables the trim
       OCI_INGESTION_WORKING_SET_TRIM_INTERVAL: ${OCI_INGESTION_WORKING_SET_TRIM_INTERVAL:-10m}
       OCI_INGESTION_WORKING_SET_FLOW_RETENTION: ${OCI_INGESTION_WORKING_SET_FLOW_RETENTION:-24h}
