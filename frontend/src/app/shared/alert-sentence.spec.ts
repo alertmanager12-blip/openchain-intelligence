@@ -32,8 +32,11 @@ describe('alertSentence', () => {
 
   it('fund-splitting: says what the rule asserts, not a recipient count it does not carry', () => {
     const f = real('fund-splitting');
-    expect(alertSentence(alert('fund-splitting', f), 'fr')).toContain('plus de 30 destinataires distincts en 3 minutes');
-    expect(alertSentence(alert('fund-splitting', f), 'en')).toContain('more than 30 distinct recipients within 3 minutes');
+    // no threshold figure: an operator may edit the rule, and the alert does not carry the threshold it fired on
+    const fr = alertSentence(alert('fund-splitting', f), 'fr'), en = alertSentence(alert('fund-splitting', f), 'en');
+    expect(fr).toContain('de nombreux destinataires distincts en peu de temps');
+    expect(en).toContain('many distinct recipients within a short time');
+    expect(fr + en).not.toMatch(/30|3 minutes/);
   });
 
   it('issuer-freeze-counterparty: who froze what, and how many indexed wallets dealt with it', () => {
@@ -72,5 +75,16 @@ describe('ruleDisplayName', () => {
     expect(ruleDisplayName('wallet-draining', 'Wallet drained (>80% of balance out in 2 minutes)', 'fr')).toBe('Portefeuille vidé');
     expect(ruleDisplayName('listed-address-exposure', 'x', 'fr')).toBe('Exposition à une adresse listée (hors sanctions)');
     expect(ruleDisplayName('my-custom-rule', 'My rule', 'fr')).toBe('My rule');
+  });
+  it('reads correctly for every listed category, in both languages', () => {
+    for (const c of ['sanctioned', 'mixer', 'scam', 'phishing', 'ransomware', 'stolen-funds', 'darknet-market', 'flagged-community', 'issuer-frozen']) {
+      for (const type of ['INDIRECT_EXPOSURE', 'FLAGGED_EXPOSURE']) {
+        const f = { 'signal.type': type, 'signal.listed_category': c };
+        const fr = alertSentence(alert('listed-address-exposure', f), 'fr'), en = alertSentence(alert('listed-address-exposure', f), 'en');
+        expect(fr, c).toMatch(/une adresse listée comme \S/);
+        expect(en, c).toMatch(/an address listed as \S/);
+        expect(fr + en, c).not.toMatch(/adresse (un|une|de) |address (a|an) /);
+      }
+    }
   });
 });

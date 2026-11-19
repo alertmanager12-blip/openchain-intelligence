@@ -18,6 +18,12 @@ export const RECENT_GAP_MS = 7 * 86_400_000;
 const BLOCK_SECONDS: Partial<Record<string, number>> = { tron: 3, ethereum: 12, bsc: 3, polygon: 2 };
 
 const STATE_ORDER: CheckState[] = ['fail', 'unknown', 'warn', 'pass'];
+
+/** The server's clock when it built the dashboard: a skewed browser clock must not show up as indexing delay. */
+export function serverNow(d: Pick<Dashboard, 'generatedAt'>): number {
+  const t = Date.parse(d.generatedAt);
+  return Number.isFinite(t) ? t : Date.now();
+}
 const CHECK_ORDER: Check[] = ['gaps', 'notifications', 'delay', 'health', 'sanctions'];
 
 /**
@@ -25,7 +31,7 @@ const CHECK_ORDER: Check[] = ['gaps', 'notifications', 'delay', 'health', 'sanct
  * pass; the verdict is "yes" only when every line positively passed, "no" when a network is unhealthy or its head unknown or
  * no sanctions list is loaded, "partly" otherwise.
  */
-export function reliability(d: Dashboard, sanctions: SanctionsList | null | undefined, lang: Lang, now = Date.now()): Reliability {
+export function reliability(d: Dashboard, sanctions: SanctionsList | null | undefined, lang: Lang, now = serverNow(d)): Reliability {
   const fr = lang === 'fr';
   const nets = d.networks.filter((n) => n.enabled !== false);
   const lines: BandLine[] = [];
@@ -72,9 +78,16 @@ export function reliability(d: Dashboard, sanctions: SanctionsList | null | unde
   for (const n of nets) {
     const name = netLabel(n.network);
     const sep = fr ? ' : ' : ': ';
-    if (n.indexerLag === null || n.indexerLag === undefined || !n.healthy) {
+    if (!n.healthy) {
+      blocking = true;
+      lines.push({ check: 'delay', state: 'unknown', text: `${name}${sep}${fr ? 'retard inconnu (fournisseur en panne)' : 'delay unknown (provider failing)'}` });
+    } else if (n.indexerLag === null || n.indexerLag === undefined) {
       blocking = true;
       lines.push({ check: 'delay', state: 'unknown', text: `${name}${sep}${fr ? 'retard inconnu (tête de chaîne inconnue)' : 'delay unknown (chain head unknown)'}` });
+    } else if (n.simulated) {
+      // simulated blocks carry invented timestamps: a delay in time would be meaningless, blocks are the measure
+      lines.push({ check: 'delay', state: 'pass', text: `${name} (${fr ? 'simulé' : 'simulated'})${sep}${fmtNumber(n.indexerLag, lang)} ${fr
+        ? plural(n.indexerLag, lang, { one: 'bloc', other: 'blocs' }) + ' de retard' : plural(n.indexerLag, lang, { one: 'block', other: 'blocks' }) + ' behind'}` });
     } else if (!n.lastIndexedBlockTime) {
       lines.push({ check: 'delay', state: 'unknown', text: `${name}${sep}${fmtNumber(n.indexerLag, lang)} ${fr
         ? plural(n.indexerLag, lang, { one: 'bloc', other: 'blocs' }) + ' de retard (heure du dernier bloc inconnue)'

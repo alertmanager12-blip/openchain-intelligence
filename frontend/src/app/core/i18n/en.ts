@@ -82,4 +82,6 @@ export const en = {
   'shell.using': 'Using',
   'shell.storedHere': ', stored in this browser only.',
   'shell.noCredential': 'No credential is stored in this browser.',
+  'band.hidePassed': 'Hide the passed checks',
+  'overview.openAlert': 'Open the alert',
 } as const satisfies Record<string, Entry>;

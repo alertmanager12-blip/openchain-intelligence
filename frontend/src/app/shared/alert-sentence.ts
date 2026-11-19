@@ -40,11 +40,12 @@ type Builder = (f: Fields, lang: Lang) => string | null;
 const exposure: Builder = (f, lang) => {
   const type = str(f, 'signal.type'), cat = str(f, 'signal.listed_category');
   if (!type || !cat) return null;
+  // categoryName reads after "listed as" ("a mixer", "sanctioned", "frozen by the stablecoin issuer")
   const what = categoryName(cat, lang);
   if (type === 'INDIRECT_EXPOSURE') {
-    return lang === 'fr' ? `Fonds reçus indirectement d'une adresse ${what}` : `Funds received indirectly from an address ${what}`;
+    return lang === 'fr' ? `Fonds reçus indirectement d'une adresse listée comme ${what}` : `Funds received indirectly from an address listed as ${what}`;
   }
-  return lang === 'fr' ? `Transfert direct avec une adresse ${what}` : `Direct transfer with an address ${what}`;
+  return lang === 'fr' ? `Transfert direct avec une adresse listée comme ${what}` : `Direct transfer with an address listed as ${what}`;
 };
 
 const BUILDERS: Record<string, Builder> = {
@@ -65,8 +66,8 @@ const BUILDERS: Record<string, Builder> = {
     const from = str(f, 'transaction.from'), a = num(f, 'transaction.amount'), t = str(f, 'transaction.token.symbol'), to = str(f, 'transaction.to');
     if (!from || a === null || !t || !to) return null;
     return lang === 'fr'
-      ? `Fractionnement : ${addr(from)} a envoyé des fonds à plus de 30 destinataires distincts en 3 minutes (dernier : ${amt(a, lang)} ${t} vers ${addr(to)})`
-      : `Fund splitting: ${addr(from)} sent funds to more than 30 distinct recipients within 3 minutes (last: ${amt(a, lang)} ${t} to ${addr(to)})`;
+      ? `Fractionnement : ${addr(from)} a envoyé des fonds à de nombreux destinataires distincts en peu de temps (dernier : ${amt(a, lang)} ${t} vers ${addr(to)})`
+      : `Fund splitting: ${addr(from)} sent funds to many distinct recipients within a short time (last: ${amt(a, lang)} ${t} to ${addr(to)})`;
   },
   'issuer-freeze-counterparty': (f, lang) => {
     const who = str(f, 'freeze.address'), tok = str(f, 'freeze.token'), issuer = str(f, 'freeze.issuer'), n = num(f, 'freeze.known_counterparties');

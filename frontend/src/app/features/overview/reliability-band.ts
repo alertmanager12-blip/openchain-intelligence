@@ -4,7 +4,7 @@ import { Dashboard, SanctionsList } from '../../core/models';
 import { I18nService, Key } from '../../core/i18n/i18n.service';
 import { fmtDate, fmtNumber } from '../../core/i18n/format';
 import { netLabel } from '../../shared/format';
-import { BandLine, reliability } from './reliability';
+import { BandLine, reliability, serverNow } from './reliability';
 
 /**
  * "Is monitoring reliable?" (spec 2026-11-19 §4): the verdict word, then every problem with a link to where it is fixed;
@@ -24,9 +24,10 @@ import { BandLine, reliability } from './reliability';
               @if (l.link) { <a [routerLink]="l.link.path" [queryParams]="l.link.query">{{ i18n.t('band.fix') }}</a> }</span>
           </li>
         }
-        @if (collapsed()) {
-          <li class="s-pass"><span class="mark" aria-hidden="true">✓</span>
-            <button type="button" class="more txt" [attr.aria-expanded]="open()" (click)="open.set(!open())">{{ i18n.t('band.passed', { count: passes().length }) }}</button>
+        @if (passes().length > 2) {
+          <!-- always rendered, so the focus stays on it when the passed checks are shown or hidden -->
+          <li class="s-pass toggle"><span class="mark" aria-hidden="true">{{ open() ? '' : '✓' }}</span>
+            <button type="button" class="more txt" [attr.aria-expanded]="open()" (click)="open.set(!open())">{{ open() ? i18n.t('band.hidePassed') : i18n.t('band.passed', { count: passes().length }) }}</button>
           </li>
         }
       </ul>
@@ -66,7 +67,7 @@ export class ReliabilityBand {
   readonly now = input<number | null>(null);
   protected readonly open = signal(false);
 
-  protected readonly r = computed(() => reliability(this.dashboard(), this.sanctions(), this.i18n.lang(), this.now() ?? Date.now()));
+  protected readonly r = computed(() => reliability(this.dashboard(), this.sanctions(), this.i18n.lang(), this.now() ?? serverNow(this.dashboard())));
   protected readonly passes = computed(() => this.r().lines.filter((l) => l.state === 'pass'));
   protected readonly collapsed = computed(() => this.passes().length > 2 && !this.open());
   protected readonly shown = computed(() => (this.collapsed() ? this.r().lines.filter((l) => l.state !== 'pass') : this.r().lines));

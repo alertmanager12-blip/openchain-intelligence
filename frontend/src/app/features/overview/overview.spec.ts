@@ -60,6 +60,9 @@ describe('OverviewPage', () => {
     expect(el.textContent).toContain('24 dernières heures');
     expect(el.querySelectorAll('oci-verdict').length).toBe(5);
     expect(el.querySelector('oci-verdict')?.textContent).toContain('Portefeuille vidé');
+    // a verdict is not inside a link (its "engine's wording" must open): the alert has its own link
+    expect(el.querySelector('a oci-verdict')).toBeNull();
+    expect(el.querySelector('a.open-alert')?.getAttribute('href')).toBe('/alerts?id=1');
     const all = el.querySelector<HTMLAnchorElement>('a.all-open')!;
     expect(all.getAttribute('href')).toBe('/alerts?status=OPEN');
     expect(all.textContent?.trim()).toBe('Voir les 1 385 alertes ouvertes');

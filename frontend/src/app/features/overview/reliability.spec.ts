@@ -127,4 +127,23 @@ describe('reliability', () => {
     expect(r.lines.find((l) => l.check === 'gaps')?.state).toBe('unknown');
     expect(r.verdict).toBe('partly');
   });
+  it('measures the delay against the server time, not the browser clock', () => {
+    // no `now` given: the dashboard's generatedAt is the reference, whatever this machine's clock says
+    const r = reliability(nov19, list, 'en');
+    expect(r.lines.map((l) => l.text)).toContain('TRON: 27 min behind');
+  });
+
+  it('says blocks, not a delay in time, for a simulated network', () => {
+    const sim = { ...net('ethereum', 3, 60 * 24 * 300), simulated: true };
+    const r = reliability(dash({ networks: [net('tron', 2, 1), sim] }), list, 'fr', NOW);
+    const l = r.lines.find((x) => x.check === 'delay' && x.text.startsWith('Ethereum'))!;
+    expect(l.text).toBe('Ethereum (simulé) : 3 blocs de retard');
+    expect(l.state).toBe('pass');
+    expect(r.verdict).toBe('yes');
+  });
+
+  it('says the provider is failing, not that the head is unknown, when the head is known', () => {
+    const r = reliability(dash({ networks: [net('tron', 2, 1, false), net('ethereum', 1, 2)] }), list, 'fr', NOW);
+    expect(r.lines.find((x) => x.check === 'delay' && x.text.startsWith('TRON'))!.text).toBe('TRON : retard inconnu (fournisseur en panne)');
+  });
 });

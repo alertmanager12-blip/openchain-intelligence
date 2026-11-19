@@ -14,7 +14,7 @@ import { sanctionsSentence } from '../../shared/sanctions-text';
 import { UI } from '../../shared/ui';
 import { VerdictPanel } from '../../shared/verdict-panel';
 import { attention, emptyState } from './attention';
-import { DELAY_WARN_MS } from './reliability';
+import { DELAY_WARN_MS, serverNow } from './reliability';
 import { ReliabilityBand } from './reliability-band';
 
 /**
@@ -66,8 +66,10 @@ export class OverviewPage {
   netLine(x: NetworkStatus): { text: string; warn: boolean } {
     const lang = this.i18n.lang(), fr = lang === 'fr';
     if (!x.healthy || x.indexerLag === null || x.indexerLag === undefined) return { text: this.t('overview.net.unknown'), warn: true };
+    if (x.simulated) return { text: this.t('overview.net.blocks', { n: x.indexerLag }), warn: false };
     if (!x.lastIndexedBlockTime) return { text: this.t('overview.net.blocks', { n: x.indexerLag }), warn: true };
-    const ms = Math.max(0, Date.now() - Date.parse(x.lastIndexedBlockTime));
+    const d = this.dash.value();
+    const ms = Math.max(0, (d ? serverNow(d) : Date.now()) - Date.parse(x.lastIndexedBlockTime));
     return { text: `${fmtDuration(ms, lang)} ${fr ? 'de retard' : 'behind'}`, warn: ms > DELAY_WARN_MS };
   }
 }

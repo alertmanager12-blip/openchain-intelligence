@@ -82,4 +82,6 @@ export const fr: Dictionary = {
   'shell.using': 'Clé',
   'shell.storedHere': ', enregistrée dans ce navigateur uniquement.',
   'shell.noCredential': "Aucun identifiant n'est enregistré dans ce navigateur.",
+  'band.hidePassed': 'Masquer les vérifications réussies',
+  'overview.openAlert': "Ouvrir l'alerte",
 };

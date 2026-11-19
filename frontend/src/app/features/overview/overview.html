@@ -13,9 +13,10 @@
           <h2 id="h-needs">{{ t('overview.handleNow') }}</h2>
           <p class="needs-note">{{ t('overview.handleNote') }}</p>
           @for (v of needs(); track v.id) {
-            <a class="needs-item" [routerLink]="['/alerts']" [queryParams]="{ id: v.id }">
+            <article class="needs-item">
               <oci-verdict [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="coverageOf(v.network)" />
-            </a>
+              <a class="open-alert" [routerLink]="['/alerts']" [queryParams]="{ id: v.id }">{{ t('overview.openAlert') }}</a>
+            </article>
           } @empty {
             @let e = empty();
             <p class="needs-empty" [class.warn]="e.kind === 'hidden-open'">{{ e.text }}

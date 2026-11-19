@@ -4,9 +4,8 @@ oci-reliability-band { display: block; margin: 4px 0 20px; }
 .side { display: grid; gap: 16px; }
 .needs { display: grid; gap: 10px; }
 .needs h2, .card h2 { font-size: 17px; line-height: 24px; margin: 0; }
-.needs-item { display: block; color: inherit; text-decoration: none; border-radius: var(--r-panel); }
-.needs-item:hover { box-shadow: 0 0 0 1px var(--line); }
-.needs-item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.needs-item { display: grid; gap: 6px; }
+.open-alert { justify-self: end; font-size: var(--fs-12); font-weight: 500; }
 .needs-empty { margin: 0; padding: 16px 18px; background: var(--band); border-radius: var(--r-panel); color: var(--ink-2); }
 .needs-note { margin: -4px 0 4px; color: var(--ink-2); font-size: var(--fs-12); }
 .needs-empty.warn { color: var(--ink); box-shadow: inset 3px 0 0 var(--risk-high); }
