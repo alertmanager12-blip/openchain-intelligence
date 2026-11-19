@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, TemplateRef, effect, inject, model, untracked, viewChild } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { NAV_ITEMS } from './navigation';
+import { I18nService } from '../core/i18n/i18n.service';
 
 export interface Shortcut {
   keys: string[];
@@ -35,14 +36,14 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   template: `
     <ng-template #dialogTpl>
       <div class="help">
-        <header><h2 id="help-title">Keyboard shortcuts</h2><button type="button" class="x" (click)="close()" aria-label="Close"><kbd>Esc</kbd></button></header>
+        <header><h2 id="help-title">{{ i18n.t('help.title') }}</h2><button type="button" class="x" (click)="close()" [attr.aria-label]="i18n.t('help.close')"><kbd>Esc</kbd></button></header>
         <div class="groups">
           @for (g of groups; track g.group) {
             <section [attr.aria-labelledby]="'hg-' + $index">
-              <h3 [id]="'hg-' + $index">{{ g.group }}</h3>
+              <h3 [id]="'hg-' + $index">{{ g.group === 'Go to' ? i18n.t('help.goTo') : g.group }}</h3>
               <dl>
                 @for (s of g.items; track s.label) {
-                  <div class="r"><dt>{{ s.label }}</dt>
+                  <div class="r"><dt>{{ name(s) }}</dt>
                     <dd>@for (k of s.keys; track $index) { @if (!$first && s.sequence) { <span class="then">then</span> }<kbd>{{ k }}</kbd> }</dd></div>
                 }
               </dl>
@@ -68,6 +69,13 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
   `,
 })
 export class ShortcutHelp {
+  protected readonly i18n = inject(I18nService);
+  /** Page names follow the console language; the other shortcut descriptions are English for now (spec 2026-11-19: later screens). */
+  protected name(s: Shortcut): string {
+    const page = NAV_ITEMS.find((i) => i.label === s.label);
+    return page ? this.i18n.t(page.labelKey) : s.label;
+  }
+
   readonly open = model(false);
   readonly groups = SHORTCUTS;
   private readonly dialog = inject(MatDialog);

@@ -8,6 +8,7 @@ import { detectQuery } from '../core/network-detect';
 import { apiResource } from '../shared/api-resource';
 import { shortHash } from '../shared/format';
 import { NAV_ITEMS } from './navigation';
+import { I18nService } from '../core/i18n/i18n.service';
 
 export interface PaletteOption {
   id: string;
@@ -34,15 +35,15 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
         <div class="field">
           <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
           <input #input type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="palette-list" spellcheck="false" autocomplete="off"
-            [attr.aria-activedescendant]="activeId()" aria-label="Search an address, a transaction hash, a page or an alert"
-            placeholder="Address, transaction hash, page or alert" [value]="q()" (input)="setQuery($any($event.target).value)" />
+            [attr.aria-activedescendant]="activeId()" [attr.aria-label]="i18n.t('palette.aria')"
+            [placeholder]="i18n.t('palette.placeholder')" [value]="q()" (input)="setQuery($any($event.target).value)" />
           <kbd>Esc</kbd>
         </div>
         @if (detection(); as d) { <p class="det" [class.bad]="d.kind === 'unknown'">{{ d.reason }}</p> }
-        <div class="list" id="palette-list" role="listbox" aria-label="Results">
+        <div class="list" id="palette-list" role="listbox" [attr.aria-label]="i18n.t('palette.results')">
           @for (g of groups(); track g.name) {
             <div role="group" [attr.aria-labelledby]="'pg-' + $index">
-              <div class="g" [id]="'pg-' + $index" role="presentation">{{ g.name }}</div>
+              <div class="g" [id]="'pg-' + $index" role="presentation">{{ groupName(g.name) }}</div>
               @for (o of g.options; track o.id) {
                 <div class="opt" role="option" [id]="o.id" [attr.aria-selected]="o.id === activeId()" (click)="choose(o)" (mousemove)="hover(o.id)">
                   @if (o.severity) { <span class="badge sev-{{ o.severity.toLowerCase() }}">{{ o.severity.charAt(0) + o.severity.slice(1).toLowerCase() }}</span> }
@@ -82,6 +83,10 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
 })
 export class CommandPalette {
   private readonly router = inject(Router);
+  protected readonly i18n = inject(I18nService);
+  protected groupName(g: string): string {
+    return g === 'Pages' ? this.i18n.t('palette.pages') : g === 'Recent alerts' ? this.i18n.t('palette.recentAlerts') : g;
+  }
   private readonly api = inject(ApiService);
   private readonly networks = inject(EnabledNetworks);
   readonly open = model(false);
@@ -126,8 +131,9 @@ export class CommandPalette {
       }
     }
     for (const p of NAV_ITEMS) {
-      if (!t || `${p.label} ${p.keywords ?? ''}`.toLowerCase().includes(t)) {
-        out.push({ id: `po-page-${p.path.replace(/\W/g, '') || 'home'}`, group: 'Pages', label: p.label, run: () => this.router.navigateByUrl(p.path) });
+      const label = this.i18n.t(p.labelKey);
+      if (!t || `${label} ${p.label} ${p.keywords ?? ''}`.toLowerCase().includes(t)) {
+        out.push({ id: `po-page-${p.path.replace(/\W/g, '') || 'home'}`, group: 'Pages', label, run: () => this.router.navigateByUrl(p.path) });
       }
     }
     for (const a of this.alerts.value()?.items ?? []) {

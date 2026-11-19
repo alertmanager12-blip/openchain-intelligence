@@ -6,6 +6,7 @@ import { authInterceptor, errorInterceptor } from '../core/interceptors';
 import { mockBackendInterceptor } from '../core/mock/mock-backend.interceptor';
 import { ApiService } from '../core/api.service';
 import { SettingsService } from '../core/settings.service';
+import { I18nService } from '../core/i18n/i18n.service';
 import { NAV_ITEMS } from './navigation';
 import { Shell } from './shell';
 import { SHORTCUTS } from './shortcut-help';
@@ -31,6 +32,7 @@ describe('App shell', () => {
   });
 
   afterEach(() => {
+    TestBed.inject(I18nService).set('en');
     document.querySelectorAll('.cdk-overlay-container').forEach((c) => c.replaceChildren());
     history.replaceState(null, '', initialUrl);
   });
@@ -62,6 +64,18 @@ describe('App shell', () => {
     // every page with a go-to key is listed, and the inbox keys are there
     expect(NAV_ITEMS.filter((i) => i.key).every((i) => text.includes(i.label))).toBe(true);
     for (const label of ['Next alert', 'Previous alert', 'Open the highlighted alert', 'Acknowledge the open alert', 'Close the alert pane']) expect(text).toContain(label);
+    f.destroy();
+  });
+
+  it('shows the rail in French and switches it to English live', async () => {
+    TestBed.inject(I18nService).set('fr');
+    const f = await mount();
+    const labels = () => [...(f.nativeElement as HTMLElement).querySelectorAll('.nav-label')].map((e) => e.textContent?.trim());
+    expect(labels()).toEqual(expect.arrayContaining(["Vue d'ensemble", 'Alertes', 'Réglages']));
+    TestBed.inject(I18nService).set('en');
+    await settle(f, 50);
+    expect(labels()).toEqual(expect.arrayContaining(['Overview', 'Alerts', 'Settings']));
+    expect(labels()).not.toContain('Alertes');
     f.destroy();
   });
 

@@ -7,6 +7,7 @@ import { Router, provideRouter } from '@angular/router';
 import { authInterceptor, errorInterceptor } from '../core/interceptors';
 import { mockBackendInterceptor } from '../core/mock/mock-backend.interceptor';
 import { SettingsService } from '../core/settings.service';
+import { I18nService } from '../core/i18n/i18n.service';
 import { CommandPalette } from './command-palette';
 
 @Component({ imports: [CommandPalette], template: `<button id="opener">Search</button><oci-command-palette [(open)]="open" />` })
@@ -96,5 +97,13 @@ describe('CommandPalette', () => {
     expect(f.componentInstance.open()).toBe(false);
     expect(document.activeElement?.id).toBe('opener');
     el.remove();
+  });
+  it('finds a page by its French name', async () => {
+    TestBed.inject(I18nService).set('fr');
+    const { type, doc } = await openPalette();
+    await type('alertes');
+    const items = [...doc.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? '');
+    expect(items.some((t) => t.includes('Alertes'))).toBe(true);
+    TestBed.inject(I18nService).set('en');
   });
 });

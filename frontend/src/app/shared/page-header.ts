@@ -4,6 +4,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { Shell } from '../layout/shell';
+import { LangSwitch } from '../layout/lang-switch';
+import { I18nService } from '../core/i18n/i18n.service';
 
 export interface Crumb {
   label: string;
@@ -21,17 +23,17 @@ export interface Crumb {
  */
 @Component({
   selector: 'oci-page-header',
-  imports: [RouterLink],
+  imports: [RouterLink, LangSwitch],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'page-header' },
   template: `
     <div class="bar">
       @if (!docked()) {
-        <button class="ib" type="button" aria-label="Show navigation" aria-controls="sidebar" [attr.aria-expanded]="shell.drawerOpen()" (click)="shell.drawerOpen.set(true)">
+        <button class="ib" type="button" [attr.aria-label]="i18n.t('shell.showNav')" aria-controls="sidebar" [attr.aria-expanded]="shell.drawerOpen()" (click)="shell.drawerOpen.set(true)">
           <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
         </button>
       }
-      <nav class="crumbs" aria-label="Breadcrumb">
+      <nav class="crumbs" [attr.aria-label]="i18n.t('shell.breadcrumb')">
         <ol>
           @for (c of trail(); track $index) {
             <li [class.cur]="$last">
@@ -42,9 +44,10 @@ export interface Crumb {
         </ol>
       </nav>
       <div class="acts"><ng-content /></div>
-      <button class="search" type="button" (click)="shell.palette.set(true)" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" aria-label="Search">
+      <oci-lang-switch />
+      <button class="search" type="button" (click)="shell.palette.set(true)" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" [attr.aria-label]="i18n.t('shell.search')">
         <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
-        <span class="ph">Search</span><kbd>{{ shell.mac ? '⌘' : 'Ctrl' }}</kbd><kbd>K</kbd>
+        <span class="ph">{{ i18n.t('shell.search') }}</span><kbd>{{ shell.mac ? '⌘' : 'Ctrl' }}</kbd><kbd>K</kbd>
       </button>
     </div>
     @if (heading()) {
@@ -96,6 +99,7 @@ export interface Crumb {
 })
 export class PageHeader {
   protected readonly shell = inject(Shell);
+  protected readonly i18n = inject(I18nService);
   protected readonly docked = toSignal(inject(BreakpointObserver).observe('(min-width: 1000px)').pipe(map((s) => s.matches)), { initialValue: true });
   readonly heading = input<string>('');
   readonly lede = input('');
