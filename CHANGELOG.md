@@ -8,6 +8,10 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Fixed (sanctions list download)
+
+- **The first OFAC download in production failed with "closed"**: the XML parser closes its input at the end of the document, and the SHA-256 digest then read the HTTP body again, which refuses reads once closed (the tests used an in-memory stream that tolerates it). The parser now gets a view whose close leaves the source open; a test reproduces an HTTP-like body. Verified end to end against OFAC: publication of 2026-11-18 accepted in 51 s, 478 labels.
+
 ### Added (official sanctions lists, ADR-0027)
 
 - **OFAC SDN list in real mode**: until now production loaded **no label at all**, so sanctions screening was blind without saying so. The application now fetches OFAC's `SDN_ADVANCED.XML` at start and every 24 h (`OCI_SANCTIONS_OFAC_ENABLED`, on in `docker-compose.yml`), streamed into a StAX parser (about 1 s and 40 MB for the 129 MB document, no temporary file), and keeps the "Digital Currency Address" features of the indexed networks: TRON addresses listed under TRX/USDT/USDC, Ethereum addresses listed under ETH/USDT/USDC (an address listed only under BSC or ARB is not applied to Ethereum). On the publication of 2026-11-18: 351 TRON and 127 Ethereum addresses; the SDN **CSV** export would have given 132 and 100 (its remarks column is cut at 1,000 characters).
