@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { I18nService } from '../core/i18n/i18n.service';
 import { RiskLevel } from '../core/models';
+import { EngineText } from './engine-text';
 import { EvidenceLine } from './evidence-line';
 import { Level } from './levels';
 import { RiskBadge } from './ui';
@@ -13,7 +14,7 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
  */
 @Component({
   selector: 'oci-verdict',
-  imports: [EvidenceLine, RiskBadge],
+  imports: [EngineText, EvidenceLine, RiskBadge],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="verdict">
@@ -24,7 +25,7 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
       @if (lines().length) {
         <div class="lines">@for (l of lines(); track $index) { <oci-evidence-line [level]="l.level" [text]="l.text" [detail]="l.detail ?? null" [cite]="l.cite ?? null" [original]="l.original ?? null" [textLang]="l.textLang ?? null" /> }</div>
       }
-      <p class="coverage">{{ coverage() || i18n.t('verdict.coverageUnknown') }}@if (limit()) { {{ ' ' + limit() }} }</p>
+      <p class="coverage">{{ coverage() || i18n.t('verdict.coverageUnknown') }}@if (limit()) { {{ ' ' + limit() }} }@if (engineCoverage()) { <oci-engine-text [text]="engineCoverage()!" /> }</p>
     </section>`,
   styles: `
     .verdict { background: var(--band); border-radius: var(--r-panel); padding: 16px 18px; display: grid; gap: 10px; }
@@ -41,4 +42,6 @@ export class VerdictPanel {
   readonly lines = input<VerdictLine[]>([]);
   readonly coverage = input.required<string>();
   readonly limit = input<string | null>(null);
+  /** The engine's own coverage sentence (English), shown after the coverage when the console is not in English. */
+  readonly engineCoverage = input<string | null>(null);
 }

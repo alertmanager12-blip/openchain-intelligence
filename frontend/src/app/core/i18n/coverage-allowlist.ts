@@ -20,7 +20,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/landing/investigation-preview.ts',
     'features/landing/landing.ts',
     'features/predictions/predictions.ts',
-    'features/risk/risk.html',
     'features/rule-builder/actions-step.ts',
     'features/rule-builder/condition-group.ts',
     'features/rule-builder/rule-builder.ts',
@@ -31,10 +30,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/settings/settings.html',
     'features/simulator/simulator.ts',
     'features/traces/traces.ts',
-    'features/wallet/history-coverage.ts',
-    'features/wallet/score-sheet.ts',
-    'features/wallet/wallet-profile.ts',
-    'features/wallet/wallet.html',
     'features/watchlist/watchlist.ts',
   ],
   tokens: [

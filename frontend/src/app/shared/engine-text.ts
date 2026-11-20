@@ -10,7 +10,9 @@ import { I18nService } from '../core/i18n/i18n.service';
   selector: 'oci-engine-text',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (mode() === 'collapsed') {
+    @if (plainInEnglish() && i18n.lang() === 'en') {
+      {{ text() }}
+    } @else if (mode() === 'collapsed') {
       <details class="engine"><summary>{{ i18n.t('engine.label') }}</summary><span lang="en">{{ text() }}</span></details>
     } @else {
       <span class="engine"><span class="engine-label">{{ i18n.t('engine.label') }}</span> <span lang="en">{{ text() }}</span></span>
@@ -25,4 +27,6 @@ export class EngineText {
   protected readonly i18n = inject(I18nService);
   readonly text = input.required<string>();
   readonly mode = input<'visible' | 'collapsed'>('visible');
+  /** In English the text is the page's own language: show it plain, without the label. */
+  readonly plainInEnglish = input(false);
 }

@@ -6,6 +6,8 @@ import { enums } from './enums';
 import { errors } from './errors';
 import { shared } from './shared';
 import { alerts } from './alerts';
+import { wallet } from './wallet';
+import { risk } from './risk';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -17,4 +19,6 @@ export const en = {
   ...errors,
   ...shared,
   ...alerts,
+  ...wallet,
+  ...risk,
 } as const;

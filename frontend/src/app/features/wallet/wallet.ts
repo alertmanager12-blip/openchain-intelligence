@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, li
 import { MatTabsModule } from '@angular/material/tabs';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { toApiError } from '../../core/api-error';
+import { codedText, errorText, toApiError } from '../../core/api-error';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { fmtDate, fmtNumber, fmtPercent } from '../../core/i18n/format';
 import { ApiService } from '../../core/api.service';
 import { Toasts } from '../../core/toasts';
 import { Counterparty, ExposureEntry, NetworkId, Page, ChainTransaction } from '../../core/models';
@@ -12,9 +14,10 @@ import { formatUnits, netLabel, shortHash, timeAgo } from '../../shared/format';
 import { Crumb, PageHeader } from '../../shared/page-header';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { TableState } from '../../shared/table-state';
-import { signalSummary, signalTitle } from '../../shared/explain';
+import { categoryName, signalSummary, signalTitle } from '../../shared/explain';
 import { NetworkNotEnabled, isNetworkNotEnabled } from '../../shared/network-not-enabled';
-import { UI, sentence } from '../../shared/ui';
+import { EngineText } from '../../shared/engine-text';
+import { UI } from '../../shared/ui';
 import { HISTORY_POLL_MS, HistoryCoverageLine, historyLoading } from './history-coverage';
 import { ScoreSheet } from './score-sheet';
 import { WalletProfile } from './wallet-profile';
@@ -25,7 +28,7 @@ import { VerdictPanel } from '../../shared/verdict-panel';
 import { walletVerdict } from './wallet-verdict';
 @Component({
   selector: 'oci-wallet',
-  imports: [RouterLink, PageHeader, VerdictPanel, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, VerdictPanel, MatTabsModule, ScoreSheet, WalletProfile, HistoryCoverageLine, NetworkNotEnabled, EngineText, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './wallet.html',
   styleUrl: './wallet.scss',
@@ -33,6 +36,7 @@ import { walletVerdict } from './wallet-verdict';
 export class WalletPage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
 
   /** Whether this wallet is one of the organisation's own wallets (watchlist). */
   readonly watchlist = apiResource({ params: () => ({}), stream: () => this.api.watchlist() });
@@ -47,15 +51,14 @@ export class WalletPage {
       if (w) {
         await firstValueFrom(this.api.removeFromWatchlist(w.id));
         this.watchlist.update((l) => (l ?? []).filter((x) => x.id !== w.id));
-        this.toasts.success('Wallet no longer watched');
+        this.toasts.success(this.i18n.t('wallet.toast.unwatched'));
       } else {
         const e = await firstValueFrom(this.api.addToWatchlist(this.network(), this.address(), null));
         this.watchlist.update((l) => [...(l ?? []), e]);
-        this.toasts.success('Wallet watched', 'Behavioural rules now focus on your watched wallets.');
+        this.toasts.success(this.i18n.t('wallet.toast.watched'), this.i18n.t('wallet.toast.watchedDetail'));
       }
     } catch (err) {
-      const a = toApiError(err);
-      this.toasts.error('Watchlist not updated', a.detail ?? a.title);
+      this.toasts.error(this.i18n.t('wallet.toast.watchFailed'), errorText(toApiError(err), this.i18n.lang()));
     } finally {
       this.watchBusy.set(false);
     }
@@ -66,13 +69,24 @@ export class WalletPage {
 
   private readonly key = computed(() => ({ address: this.address(), network: this.network() }));
   /** The verdict at the top of the page (spec 2026-11-18). */
-  readonly verdict = computed(() => { const a = this.w.value(); return a ? walletVerdict(a) : null; });
+  readonly verdict = computed(() => { const a = this.w.value(); return a ? walletVerdict(a, this.i18n.lang()) : null; });
   /** Official sanctions lists in force (ADR-0027), said in the verdict's coverage. */
   readonly sanctions = apiResource({ params: () => ({}), stream: () => this.api.sanctionsLists() });
   /** A known coverage completed by what sanctions screening rests on; an unknown one stays unknown. */
   withSanctions(coverage: string): string {
+    const lang = this.i18n.lang();
+    // The history sentence is the server's English one: in French it is shown separately, as the engine's wording.
+    if (lang !== 'en') return coverage ? sanctionsSentence(this.sanctions.value()?.items[0], lang) : '';
     return coverage ? `${coverage} ${sanctionsSentence(this.sanctions.value()?.items[0])}` : '';
   }
+  /** The server's own coverage sentence, shown apart (labelled as the engine's wording) when the console is not in English. */
+  engineCoverage(coverage: string): string | null { return this.i18n.lang() !== 'en' && coverage ? coverage : null; }
+  /** Limitations in the console's language, from their codes; the server's English sentence for a code it does not know. */
+  readonly limitations = computed(() => {
+    const a = this.w.value();
+    const lang = this.i18n.lang();
+    return (a?.limitations ?? []).map((l, i) => { const c = a?.limitationCodes?.[i]; return c ? codedText(c, lang, l) : l; });
+  });
   readonly w = apiResource({ params: this.key, stream: (k) => this.api.walletAnalysis(k.address, k.network) });
   readonly history = computed(() => this.w.value()?.history ?? null);
   /** The API refused the network (422 on /network): explain it instead of showing the raw validation error. */
@@ -87,11 +101,12 @@ export class WalletPage {
     this.investigating.set(true);
     this.api.createInvestigation(this.network(), this.address()).subscribe({
       next: (i) => { this.investigating.set(false); void this.router.navigate(['/investigations'], { queryParams: { id: i.id } }); },
-      error: (e: { title: string; detail?: string | null }) => { this.investigating.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+      error: (e: unknown) => { this.investigating.set(false); const a = toApiError(e); this.toasts.error(a.title, errorText(a, this.i18n.lang())); },
     });
   }
 
-  readonly relLabel = (t: string) => (t === 'COMMON_FUNDER' ? 'common funder' : t === 'COMMON_SINK' ? 'common destination' : 'shared counterparties');
+  readonly relError = computed(() => { const e = this.rel.error(); return e ? errorText(e, this.i18n.lang()) : ''; });
+  readonly relLabel = (t: string) => this.i18n.t(`wallet.rel.${t === 'COMMON_FUNDER' || t === 'COMMON_SINK' ? t : 'SHARED_COUNTERPARTIES'}`);
 
   /** Transaction pages: the cursor resets when the wallet changes; pages accumulate for "Load more". */
   private readonly cursor = linkedSignal<string, string | null>({ source: () => this.address() + this.network(), computation: () => null });
@@ -106,13 +121,16 @@ export class WalletPage {
   });
   readonly nextCursor = computed(() => this.txPage.value()?.nextCursor ?? null);
 
-  readonly ago = timeAgo;
-  readonly units = formatUnits;
+  readonly ago = (iso: string | null | undefined) => timeAgo(iso, Date.now(), this.i18n.lang());
+  readonly units = (raw: string | null | undefined, decimals: number, max = 6) => formatUnits(raw, decimals, max, this.i18n.lang());
+  readonly num = (n: number) => fmtNumber(n, this.i18n.lang());
+  readonly date = (iso: string) => fmtDate(iso, this.i18n.lang());
+  readonly cat = (c: string) => categoryName(c, this.i18n.lang());
+  readonly dir = (d: string) => this.i18n.t(`wallet.cp.dir.${d === 'IN' || d === 'OUT' ? d : 'BOTH'}`);
   readonly short = (h: string) => shortHash(h, 10, 6);
-  readonly sentence = sentence;
-  readonly signalTitle = signalTitle;
+  readonly signalTitle = (s: Parameters<typeof signalTitle>[0]) => signalTitle(s, this.i18n.lang());
   readonly signalSummary = signalSummary;
-  readonly pct = (v: number) => (v * 100).toFixed(0);
+  readonly pct = (v: number) => fmtPercent(v, this.i18n.lang());
 
   readonly tabIndex = signal(0);
   readonly txCols = ['hash', 'when', 'dir', 'cp', 'value', 'status'];
@@ -120,14 +138,14 @@ export class WalletPage {
   readonly expCols = ['category', 'hops', 'amount', 'via', 'evidence'];
   /** Direct: "received 1,000 USDT, sent 0.5 TRX"; indirect: "at most 100 USDT traced". Never a sum across tokens. */
   readonly expAmount = (x: ExposureEntry): string => {
-    if (x.traced) return `at most ${x.traced.amount} ${x.traced.token} traced`;
+    if (x.traced) return this.i18n.t('wallet.exp.traced', { amount: x.traced.amount, token: x.traced.token });
     const parts = (x.amounts ?? []).flatMap((a) => [
-      ...(a.received !== '0' ? [`received ${a.received} ${a.token}`] : []),
-      ...(a.sent !== '0' ? [`sent ${a.sent} ${a.token}`] : []),
+      ...(a.received !== '0' ? [this.i18n.t('wallet.exp.received', { amount: a.received, token: a.token })] : []),
+      ...(a.sent !== '0' ? [this.i18n.t('wallet.exp.sent', { amount: a.sent, token: a.token })] : []),
     ]);
     return parts.length ? parts.join(', ') : '—';
   };
-  readonly ignoredReason = (r: string) => (r === 'unverified_token' ? 'unverified token contract' : 'below the dust threshold');
+  readonly ignoredReason = (r: string) => this.i18n.t(r === 'unverified_token' ? 'wallet.exp.reason.unverified_token' : 'wallet.exp.reason.dust');
   readonly sigCols = ['signal', 'severity', 'evidence', 'detected'];
   readonly byHash = (_: number, t: ChainTransaction) => t.id ?? t.hash;
   /** The node cannot list the address's transactions: rows are the transfers the platform knows. */
@@ -136,13 +154,14 @@ export class WalletPage {
   /** Tab labels with the record count of each (shown after the label). */
   readonly tabs = computed<{ label: string; count?: string | number }[]>(() => {
     const a = this.w.value();
+    const t = (k: 'score' | 'transactions' | 'counterparties' | 'exposure' | 'signals' | 'balances') => this.i18n.t(`wallet.tab.${k}`);
     return [
-      { label: 'Score' },
-      { label: 'Transactions', count: a?.txCount.toLocaleString('en-US') },
-      { label: 'Counterparties', count: a?.counterparties.length },
-      { label: 'Exposure', count: this.exp.value() ? this.expRows().length : undefined },
-      { label: 'Signals', count: a?.signals.length },
-      { label: 'Balances and activity' },
+      { label: t('score') },
+      { label: t('transactions'), count: a ? this.num(a.txCount) : undefined },
+      { label: t('counterparties'), count: a?.counterparties.length },
+      { label: t('exposure'), count: this.exp.value() ? this.expRows().length : undefined },
+      { label: t('signals'), count: a?.signals.length },
+      { label: t('balances') },
     ];
   });
   readonly expRows = computed(() => {
@@ -169,7 +188,7 @@ export class WalletPage {
   }
 
   readonly crumbs = computed<Crumb[]>(() => [
-    { label: 'Wallets', link: '/risk' }, { label: netLabel(this.network()) }, { label: shortHash(this.address(), 6, 4), mono: true },
+    { label: this.i18n.t('wallet.crumb'), link: '/risk' }, { label: netLabel(this.network()) }, { label: shortHash(this.address(), 6, 4), mono: true },
   ]);
 
   /** Whole-row navigation; the hash and address cells keep their own links for keyboard users. */

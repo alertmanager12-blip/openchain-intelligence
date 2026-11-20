@@ -23,7 +23,9 @@ export function factorTitle(factor: string, lang: Lang = 'en'): string {
   return signalTypeTitle(key, lang);
 }
 
+/** The server's title (English), unless the console is in another language and knows the factor: then its own name. */
 export function contributionTitle(c: Pick<RiskContribution, 'factor' | 'title'>, lang: Lang = 'en'): string {
+  if (lang !== 'en' && (c.factor.startsWith('label:') || signalTypeName(c.factor.replace(/^signal:/, ''), lang))) return factorTitle(c.factor, lang);
   return c.title?.trim() || factorTitle(c.factor, lang);
 }
 
@@ -33,6 +35,7 @@ export function contributionSummary(c: Pick<RiskContribution, 'summary'>): strin
 }
 
 export function signalTitle(s: Pick<Signal, 'type' | 'title'>, lang: Lang = 'en'): string {
+  if (lang !== 'en' && signalTypeName(s.type, lang)) return signalTypeTitle(s.type, lang);
   return s.title?.trim() || signalTypeTitle(s.type, lang);
 }
 

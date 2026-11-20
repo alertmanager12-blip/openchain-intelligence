@@ -39,7 +39,7 @@ export const ACTIONS: Record<AlertStatus, AlertAction[]> = {
  */
 import { EvidenceLine } from '../../shared/evidence-line';
 import { alertLines } from './alert-lines';
-import { fmtStamp } from './evidence';
+import { fmtStamp } from '../../core/i18n/format';
 @Component({
   selector: 'oci-alert-detail',
   imports: [FormField, AlertWhy, EngineText, EvidenceLine, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],

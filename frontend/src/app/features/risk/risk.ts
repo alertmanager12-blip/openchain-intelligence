@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { fmtNumber, fmtPercent } from '../../core/i18n/format';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { EvidenceLevel, NETWORKS, NetworkId, RiskContribution } from '../../core/models';
 import { EnabledNetworks } from '../../core/enabled-networks';
 import { detectQuery } from '../../core/network-detect';
@@ -10,6 +12,7 @@ import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
 import { contributionSummary, contributionTitle } from '../../shared/explain';
+import { EngineText } from '../../shared/engine-text';
 import { NetworkNotEnabled, isNetworkNotEnabled } from '../../shared/network-not-enabled';
 import { UI } from '../../shared/ui';
 
@@ -17,13 +20,14 @@ const EVIDENCE_ORDER: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL:
 
 @Component({
   selector: 'oci-risk-page',
-  imports: [RouterLink, PageHeader, NetworkNotEnabled, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [RouterLink, PageHeader, NetworkNotEnabled, EngineText, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './risk.html',
   styleUrl: './risk.scss',
 })
 export class RiskPage {
   private readonly api = inject(ApiService);
+  protected readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   readonly network = input<NetworkId>();
   readonly address = input<string>();
@@ -40,9 +44,11 @@ export class RiskPage {
     stream: (p) => this.api.walletRisk(p.a, p.n),
   });
   readonly notEnabled = computed(() => isNetworkNotEnabled(this.risk.error()));
-  readonly ago = timeAgo;
-  readonly age = formatAge;
-  readonly title = contributionTitle;
+  readonly ago = (iso: string | null | undefined) => timeAgo(iso, Date.now(), this.i18n.lang());
+  readonly age = (seconds: number) => formatAge(seconds, this.i18n.lang());
+  readonly pct = (v: number) => fmtPercent(v, this.i18n.lang());
+  readonly weight = (w: number) => fmtNumber(w, this.i18n.lang(), 2, 2);
+  readonly title = (c: Parameters<typeof contributionTitle>[0]) => contributionTitle(c, this.i18n.lang());
   readonly summary = contributionSummary;
   readonly open = signal<string | null>(null);
   readonly cols = ['x', 'factor', 'ev', 'points', 'confidence', 'age'];

@@ -1,7 +1,7 @@
 import { hasKey, translate, type Lang } from '../core/i18n/i18n.service';
 
 /** Exact decimal formatting of raw integer amounts (base units): BigInt only, never floating point. */
-export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6): string {
+export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6, lang: Lang = 'en'): string {
   if (raw === null || raw === undefined || !/^-?\d+$/.test(raw)) return '—';
   const neg = raw.startsWith('-');
   const digits = (neg ? raw.slice(1) : raw).replace(/^0+(?=\d)/, '');
@@ -12,11 +12,12 @@ export function formatUnits(raw: string | null | undefined, decimals: number, ma
   // A non-zero amount below the displayed precision is never shown as "0": a dust transfer (address poisoning) must
   // stay visible. "<0.01" says "more than nothing, less than the smallest unit shown".
   if (/^0+$/.test(int) && !shown && /[1-9]/.test(frac)) {
-    return `${neg ? '-' : ''}<${maxFraction > 0 ? '0.' + '0'.repeat(maxFraction - 1) + '1' : '1'}`;
+    return `${neg ? '-' : ''}<${maxFraction > 0 ? (lang === 'fr' ? '0,' : '0.') + '0'.repeat(maxFraction - 1) + '1' : '1'}`;
   }
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const fr = lang === 'fr';
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, fr ? '\u202f' : ',');
   const zero = /^0+$/.test(int) && !shown;
-  return `${neg && !zero ? '-' : ''}${grouped}${shown ? '.' + shown : ''}`;
+  return `${neg && !zero ? '-' : ''}${grouped}${shown ? (fr ? ',' : '.') + shown : ''}`;
 }
 
 

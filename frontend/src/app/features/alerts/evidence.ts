@@ -1,5 +1,4 @@
 import { NetworkId } from '../../core/models';
-import { LOCALE } from '../../core/i18n/format';
 import { Lang, hasKey, translate } from '../../core/i18n/i18n.service';
 
 /** One condition outcome as written by the engine: "field op expected (actual value) -> true". */
@@ -25,12 +24,6 @@ export function opSymbol(op: string, lang: Lang = 'en'): string {
   const k = op.toLowerCase();
   const key = `alerts.op.${k}`;
   return SYMBOLS[k] ?? (hasKey(key) ? translate(lang, key) : k.replace(/_/g, ' '));
-}
-
-/** "Nov 19, 14:05" / "19 nov., 14:05" in UTC (the caller adds "UTC"); seconds on request. */
-export function fmtStamp(iso: string, lang: Lang, seconds = false): string {
-  return new Date(iso).toLocaleString(lang === 'en' ? 'en-US' : LOCALE[lang], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23', timeZone: 'UTC' });
 }
 
 /** ISO-8601 duration (Java Duration.toString, e.g. "PT2H30M", "PT0.5S", "P1D") in plain words. */

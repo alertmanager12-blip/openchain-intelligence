@@ -11,7 +11,8 @@ import { EngineText } from '../../shared/engine-text';
 import { alertSentence } from '../../shared/alert-sentence';
 import { fmtNumber } from '../../core/i18n/format';
 import { I18nService, hasKey, type Key, type Params } from '../../core/i18n/i18n.service';
-import { compareScale, fmtStamp, isoDuration, opSymbol, parseCondition, parseEventId, parseStep } from './evidence';
+import { fmtStamp } from '../../core/i18n/format';
+import { compareScale, isoDuration, opSymbol, parseCondition, parseEventId, parseStep } from './evidence';
 
 /** "Why this alert fired": engine evidence as readouts, condition outcomes, transactions and the subject wallet's score. */
 @Component({

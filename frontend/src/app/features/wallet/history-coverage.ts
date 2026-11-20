@@ -1,5 +1,8 @@
-import { ChangeDetectionStrategy, Component, InjectionToken, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input } from '@angular/core';
 import { MatProgressSpinner } from '@angular/material/progress-spinner';
+import { fmtNumber } from '../../core/i18n/format';
+import { I18nService, hasKey } from '../../core/i18n/i18n.service';
+import { EngineText } from '../../shared/engine-text';
 import { HistoryCoverage, HistoryStatus } from '../../core/models';
 import { TechDetail } from '../../shared/ui';
 
@@ -24,33 +27,29 @@ export function coverageTone(s: HistoryStatus): CoverageTone {
   }
 }
 
-const STATUS_LABEL: Record<HistoryStatus, string> = {
-  NOT_CONFIGURED: 'Indexed data only', PENDING: 'Queued', RUNNING: 'Loading', COMPLETE: 'Complete', TRUNCATED: 'Partial', FAILED: 'Failed',
-};
-
 /** One line saying how much of the wallet's history the figures below are based on (ADR-0020). */
 @Component({
   selector: 'oci-history-coverage',
-  imports: [MatProgressSpinner, TechDetail],
+  imports: [MatProgressSpinner, TechDetail, EngineText],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let h = history();
     <div class="cov tone-{{ tone() }}" [attr.role]="tone() === 'error' ? 'alert' : null">
-      <span class="chip cov-chip">History: {{ label() }}</span>
+      <span class="chip cov-chip">{{ i18n.t('wallet.hist.chip', { status: label() }) }}</span>
       @if (loading()) {
         <span class="cov-loading" aria-live="polite" role="status">
           <mat-progress-spinner mode="indeterminate" diameter="14" strokeWidth="2" aria-hidden="true" />
-          <span class="strong">Loading history…</span>@if (h.eventsFound > 0) { <span class="muted">&#32;{{ h.eventsFound.toLocaleString('en-US') }} events so far.</span> }
+          <span class="strong">{{ i18n.t('wallet.hist.loading') }}</span>@if (h.eventsFound > 0) { <span class="muted">&#32;{{ i18n.t('wallet.hist.soFar', { count: h.eventsFound }) }}</span> }
         </span>
       }
-      <span class="cov-msg">{{ h.message }}</span>
+      <span class="cov-msg"><oci-engine-text [text]="h.message" [plainInEnglish]="true" /></span>
     </div>
     @if (h.sources.length || h.coveredFromBlock !== null) {
-      <oci-tech label="Coverage detail">
-        @if (h.sources.length) { <span>Sources <span class="mono">{{ h.sources.join(', ') }}</span></span> }
-        @if (h.coveredFromBlock !== null) { <span>Blocks <span class="mono">{{ h.coveredFromBlock.toLocaleString('en-US') }}</span> to <span class="mono">{{ h.coveredToBlock?.toLocaleString('en-US') ?? 'head' }}</span>@if (h.coveredFromTime) { , since {{ h.coveredFromTime }} } </span> }
-        <span>Token transfers {{ yn(h.tokenTransfersCovered) }}, approvals {{ yn(h.approvalsCovered) }}, native {{ yn(h.nativeCovered) }}, internal {{ yn(h.internalCovered) }}</span>
-        <span>{{ h.eventsFound.toLocaleString('en-US') }} events found@if (h.truncated) { , caps reached: older history not loaded }</span>
+      <oci-tech [label]="i18n.t('wallet.hist.detail')">
+        @if (h.sources.length) { <span>{{ i18n.t('wallet.hist.sources') }} <span class="mono">{{ h.sources.join(', ') }}</span></span> }
+        @if (h.coveredFromBlock !== null) { <span>{{ i18n.t('wallet.hist.blocks') }} <span class="mono">{{ num(h.coveredFromBlock) }}</span> {{ i18n.t('wallet.hist.to') }} <span class="mono">{{ h.coveredToBlock !== null ? num(h.coveredToBlock) : i18n.t('wallet.hist.head') }}</span>@if (h.coveredFromTime) { {{ i18n.t('wallet.hist.since', { time: h.coveredFromTime }) }} } </span> }
+        <span>{{ i18n.t('wallet.hist.covers', { tokens: yn(h.tokenTransfersCovered), approvals: yn(h.approvalsCovered), native: yn(h.nativeCovered), internal: yn(h.internalCovered) }) }}</span>
+        <span>{{ i18n.t('wallet.hist.found', { count: h.eventsFound }) }}@if (h.truncated) { {{ i18n.t('wallet.hist.capped') }} }</span>
       </oci-tech>
     }
   `,
@@ -70,7 +69,9 @@ const STATUS_LABEL: Record<HistoryStatus, string> = {
 export class HistoryCoverageLine {
   readonly history = input.required<HistoryCoverage>();
   readonly tone = computed(() => coverageTone(this.history().status));
-  readonly label = computed(() => STATUS_LABEL[this.history().status] ?? this.history().status);
+  protected readonly i18n = inject(I18nService);
+  readonly num = (n: number) => fmtNumber(n, this.i18n.lang());
+  readonly label = computed(() => { const k = `wallet.hist.${this.history().status}`; return hasKey(k) ? this.i18n.t(k) : this.history().status; });
   readonly loading = computed(() => historyLoading(this.history()));
-  readonly yn = (v: boolean) => (v ? 'covered' : 'not covered');
+  readonly yn = (v: boolean) => this.i18n.t(v ? 'wallet.hist.covered' : 'wallet.hist.notCovered');
 }

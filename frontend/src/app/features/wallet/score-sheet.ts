@@ -1,4 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { fmtNumber, fmtPercent } from '../../core/i18n/format';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { EngineText } from '../../shared/engine-text';
 import { RiskScore } from '../../core/models';
 import { formatAge } from '../../shared/format';
 import { contributionSummary, contributionTitle } from '../../shared/explain';
@@ -10,32 +13,32 @@ import { UI } from '../../shared/ui';
  */
 @Component({
   selector: 'oci-score-sheet',
-  imports: [...UI],
+  imports: [EngineText, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="table-wrap"><table class="sheet">
       <thead><tr>
-        <th scope="col">Factor</th><th scope="col">Evidence</th>
-        <th scope="col" class="right">Confidence</th><th scope="col" class="right">Age</th><th scope="col" class="right">Points</th>
-        <th scope="col" class="bar-col"><span class="sr-only">Running total of points</span><span aria-hidden="true" class="scale-head"><span>0</span><span>{{ sheet().domain }}</span></span></th>
+        <th scope="col">{{ i18n.t('wallet.sheet.factor') }}</th><th scope="col">{{ i18n.t('wallet.sheet.evidence') }}</th>
+        <th scope="col" class="right">{{ i18n.t('wallet.sheet.confidence') }}</th><th scope="col" class="right">{{ i18n.t('wallet.sheet.age') }}</th><th scope="col" class="right">{{ i18n.t('wallet.sheet.points') }}</th>
+        <th scope="col" class="bar-col"><span class="sr-only">{{ i18n.t('wallet.sheet.running') }}</span><span aria-hidden="true" class="scale-head"><span>0</span><span>{{ sheet().domain }}</span></span></th>
       </tr></thead>
       <tbody>
         @for (c of sheet().rows; track c.factor) {
           <tr>
-            <td><span class="strong c-title">{{ title(c) }}</span>@if (summary(c); as sm) { <div class="sub expl c-summary">{{ sm }}</div> }
-              <oci-tech><span>Factor <span class="mono">{{ c.factor }}</span></span>@if (c.explanation) { <span class="mono">{{ c.explanation }}</span> }<span>Source {{ c.source }}, weight {{ c.weight.toFixed(2) }}</span>@if (c.signalId) { <span>Signal <span class="mono">{{ c.signalId }}</span></span> }</oci-tech></td>
+            <td><span class="strong c-title">{{ title(c) }}</span>@if (summary(c); as sm) { <div class="sub expl c-summary"><oci-engine-text [text]="sm" [plainInEnglish]="true" /></div> }
+              <oci-tech><span>{{ i18n.t('wallet.sheet.factor') }} <span class="mono">{{ c.factor }}</span></span>@if (c.explanation) { <span class="mono" lang="en">{{ c.explanation }}</span> }<span>{{ i18n.t('wallet.sheet.source', { source: c.source, weight: weight(c.weight) }) }}</span>@if (c.signalId) { <span>{{ i18n.t('wallet.sheet.signal') }} <span class="mono">{{ c.signalId }}</span></span> }</oci-tech></td>
             <td><oci-evidence [value]="c.evidenceLevel" /></td>
-            <td class="right">{{ pct(c.confidence) }}%</td>
-            <td class="right nowrap">{{ age(c.ageSeconds) }}</td>
+            <td class="right" [attr.data-label]="i18n.t('wallet.sheet.confidence')">{{ pct(c.confidence) }}</td>
+            <td class="right nowrap" [attr.data-label]="i18n.t('wallet.sheet.age')">{{ age(c.ageSeconds) }}</td>
             <td class="right pts" [class.neg]="c.points < 0">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td>
             <td class="bar-col"><span class="track" aria-hidden="true">@for (t of sheet().ticks; track $index) { <span class="thr" [style.left.%]="t"></span> }@if (sheet().cap; as cap) { <span class="cap" [style.left.%]="cap"></span> }
               <span class="piece" [class.neg]="c.points < 0" [style.left.%]="c.left" [style.width.%]="c.width"></span></span></td>
           </tr>
-        } @empty { <tr><td colspan="6" class="muted">No contribution: nothing notable was observed on this wallet.</td></tr> }
+        } @empty { <tr><td colspan="6" class="muted">{{ i18n.t('wallet.sheet.empty') }}</td></tr> }
       </tbody>
-      <tfoot><tr><td colspan="4">Score</td><td class="right pts">{{ risk().score }}</td><td class="bar-col"><oci-gauge [score]="risk().score" [level]="risk().level" label="Total score" /></td></tr></tfoot>
+      <tfoot><tr><td colspan="4">{{ i18n.t('wallet.sheet.total') }}</td><td class="right pts">{{ risk().score }}</td><td class="bar-col"><oci-gauge [score]="risk().score" [level]="risk().level" [label]="i18n.t('wallet.sheet.totalLabel')" /></td></tr></tfoot>
     </table></div>
-    @if (rawTotal() !== risk().score) { <p class="small muted">The contributions add up to {{ rawTotal() }}; the score is capped at {{ risk().score }} (red line).</p> }
+    @if (rawTotal() !== risk().score) { <p class="small muted">{{ i18n.t('wallet.sheet.capped', { raw: rawTotal(), score: risk().score }) }}</p> }
   `,
   styles: `
     .sheet { min-width: 760px; }
@@ -59,8 +62,8 @@ import { UI } from '../../shared/ui';
       .sheet tbody td:nth-child(1) { grid-area: f; } .sheet tbody td:nth-child(2) { grid-area: e; }
       .sheet tbody td:nth-child(3) { grid-area: c; } .sheet tbody td:nth-child(4) { grid-area: a; }
       .sheet tbody td:nth-child(5) { grid-area: p; text-align: right; } .sheet tbody td:nth-child(6) { grid-area: b; }
-      .sheet tbody td:nth-child(3)::before { content: 'Confidence '; color: var(--muted); }
-      .sheet tbody td:nth-child(4)::before { content: 'Age '; color: var(--muted); }
+      .sheet tbody td:nth-child(3)::before { content: attr(data-label) ' '; color: var(--muted); }
+      .sheet tbody td:nth-child(4)::before { content: attr(data-label) ' '; color: var(--muted); }
       .sheet tbody td[colspan] { grid-column: 1 / -1; }
       .sheet tfoot tr { grid-template-areas: 'l p' 'b b'; grid-template-columns: minmax(0, 1fr) auto; }
       .sheet tfoot td:nth-child(1) { grid-area: l; } .sheet tfoot td:nth-child(2) { grid-area: p; text-align: right; } .sheet tfoot td:nth-child(3) { grid-area: b; }
@@ -70,10 +73,12 @@ import { UI } from '../../shared/ui';
 })
 export class ScoreSheet {
   readonly risk = input.required<RiskScore>();
-  readonly title = contributionTitle;
+  protected readonly i18n = inject(I18nService);
+  readonly title = (c: Parameters<typeof contributionTitle>[0]) => contributionTitle(c, this.i18n.lang());
   readonly summary = contributionSummary;
-  readonly age = formatAge;
-  readonly pct = (v: number) => (v * 100).toFixed(0);
+  readonly age = (seconds: number) => formatAge(seconds, this.i18n.lang());
+  readonly pct = (v: number) => fmtPercent(v, this.i18n.lang());
+  readonly weight = (w: number) => fmtNumber(w, this.i18n.lang(), 2, 2);
   /** Total before clamping, to explain when the displayed score differs from the plain sum. */
   readonly rawTotal = computed(() => this.risk().contributions.reduce((s, c) => s + c.points, 0));
   readonly sheet = computed(() => {

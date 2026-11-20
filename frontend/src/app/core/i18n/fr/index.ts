@@ -6,6 +6,8 @@ import { enums } from './enums';
 import { errors } from './errors';
 import { shared } from './shared';
 import { alerts } from './alerts';
+import { wallet } from './wallet';
+import { risk } from './risk';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -18,4 +20,6 @@ export const fr: Dictionary = {
   ...errors,
   ...shared,
   ...alerts,
+  ...wallet,
+  ...risk,
 };
