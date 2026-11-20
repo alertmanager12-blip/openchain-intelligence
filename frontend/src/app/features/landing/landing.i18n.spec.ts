@@ -30,6 +30,22 @@ describe('Landing page in French', () => {
     expect(el.textContent).toContain('pas la preuve d’un acte répréhensible');
   });
 
+  it('keeps the wording no stronger than English (presented, anti-money laundering, splitting vs structuring)', () => {
+    expect(el.querySelector('#panel-understand')?.textContent).toContain('présentés en langage clair');
+    expect(el.querySelector('#use-cases')?.textContent).toContain('Équipes conformité et lutte anti-blanchiment');
+    expect(el.querySelector('#use-cases')?.textContent).not.toContain('LCB-FT');
+    expect(el.querySelector('oci-cs-hero-trace .alert')?.textContent).toContain('répartition de fonds');
+    expect(el.querySelector('oci-cs-hero-trace .alert')?.textContent).not.toContain('fractionnement');
+    expect(el.querySelector('#use-cases')?.textContent).toContain('schémas de vidage ou de répartition');
+    expect(el.querySelector('oci-cs-problem')?.textContent).toContain('répartitions, relais et allers-retours');
+  });
+
+  it('styles the bold facts and the lead sentence that come from innerHTML', () => {
+    const b = el.querySelector<HTMLElement>('.facts b')!;
+    expect(b).not.toBeNull();
+    expect(getComputedStyle(b).fontWeight).toBe('500');
+  });
+
   it('puts the language switch in the landing header and re-renders in English', async () => {
     const sw = el.querySelector('.cs-top oci-lang-switch');
     expect(sw).not.toBeNull();

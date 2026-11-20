@@ -23,7 +23,7 @@ import { publicLinks } from './public-links';
     .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 36px; }
     .cta .cs-link { margin-left: 8px; font-size: 15px; }
     .facts { margin-top: 28px; color: var(--cs-faint); font-size: 14px; }
-    .facts b { color: var(--cs-muted); font-weight: 500; white-space: nowrap; }
+    .facts ::ng-deep b { color: var(--cs-muted); font-weight: 500; white-space: nowrap; }
     @media (max-width: 1000px) { .hero { grid-template-columns: minmax(0, 1fr); gap: 48px; padding-top: 56px; padding-bottom: 72px; } }
 
     .cover { position: relative; border-top: 1px solid var(--cs-line); padding: 40px 0 48px; background: var(--cs-bg-2); }
