@@ -8,6 +8,7 @@ import io.openchain.app.security.Scopes;
 import io.openchain.app.security.UserDirectory;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -57,21 +58,22 @@ public class AdminController {
     public ApiKeyDto createKey(@RequestBody CreateKeyRequest req, Authentication auth) {
         List<ApiException.FieldError> errors = new ArrayList<>();
         String name = req.name() == null ? "" : req.name().strip();
-        if (name.isEmpty() || name.length() > 100) errors.add(new ApiException.FieldError("/name", "required", "name is required (max 100 chars)"));
+        if (name.isEmpty()) errors.add(FE("/name", ApiCode.FIELD_REQUIRED, Map.of("field", "name"), "name is required (max 100 chars)"));
+        else if (name.length() > 100) errors.add(FE("/name", ApiCode.FIELD_TOO_LONG, Map.of("field", "name", "max", 100), "name is required (max 100 chars)"));
         Set<String> scopes = Set.of();
         if (req.scopes() == null || req.scopes().isEmpty()) {
-            errors.add(new ApiException.FieldError("/scopes", "required", "at least one permission is required"));
+            errors.add(FE("/scopes", ApiCode.FIELD_REQUIRED, Map.of("field", "scopes"), "at least one permission is required"));
         } else {
             try {
                 scopes = Scopes.normalise(req.scopes());
             } catch (IllegalArgumentException e) {
-                errors.add(new ApiException.FieldError("/scopes", "unknown_permission", e.getMessage()));
+                errors.add(FE("/scopes", ApiCode.FIELD_UNKNOWN_PERMISSION, Map.of("reason", String.valueOf(e.getMessage()))));
             }
         }
         // a key can never hold more than its creator (ADR-0010: scopes intersected with the creator's role)
         Set<String> mine = Scopes.of(auth.getAuthorities());
         for (String s : scopes) {
-            if (!mine.contains(s)) errors.add(new ApiException.FieldError("/scopes", "exceeds_creator", "you do not hold " + s));
+            if (!mine.contains(s)) errors.add(FE("/scopes", ApiCode.FIELD_EXCEEDS_CREATOR, Map.of("permission", s)));
         }
         Duration ttl = props.getSecurity().getDefaultKeyTtl();
         Instant now = Instant.now();
@@ -81,10 +83,10 @@ public class AdminController {
         } else if (req.expiresInDays() != null) {
             ttl = Duration.ofDays(req.expiresInDays());
         }
-        if (ttl.isNegative() || ttl.isZero()) errors.add(new ApiException.FieldError("/expiresAt", "in_past", "expiry must be in the future"));
+        if (ttl.isNegative() || ttl.isZero()) errors.add(FE("/expiresAt", ApiCode.FIELD_IN_PAST, Map.of()));
         else if (ttl.compareTo(props.getSecurity().getMaxKeyTtl()) > 0)
-            errors.add(new ApiException.FieldError("/expiresAt", "max_exceeded", "expiry must be <= " + props.getSecurity().getMaxKeyTtl().toDays() + " days"));
-        if (!errors.isEmpty()) throw ApiException.validation("API key request is invalid", errors);
+            errors.add(FE("/expiresAt", ApiCode.FIELD_MAX_EXCEEDED, Map.of("days", props.getSecurity().getMaxKeyTtl().toDays())));
+        if (!errors.isEmpty()) throw ApiException.validation(ApiCode.KEY_REQUEST_INVALID, errors);
         ApiKeyService.Created c = keys.create(name, scopes, ttl, auth.getName(), ClientScope.of(auth));
         return dto(c.key(), c.plaintext());
     }
@@ -92,7 +94,7 @@ public class AdminController {
     @PostMapping("/api-keys/{id}/revoke")
     public ApiKeyDto revoke(@PathVariable String id, Authentication auth) {
         // another client's key gets the same answer as a key that does not exist (no disclosure)
-        keys.find(id, ClientScope.of(auth)).orElseThrow(() -> ApiException.notFound("API key " + id + " does not exist"));
+        keys.find(id, ClientScope.of(auth)).orElseThrow(() -> ApiException.notFound(ApiCode.KEY_NOT_FOUND, Map.of("id", id)));
         return dto(keys.revoke(id, auth.getName()), null);
     }
 
@@ -114,14 +116,22 @@ public class AdminController {
 
     @PatchMapping("/users/{id}")
     public UserDirectory.User updateUser(@PathVariable String id, @RequestBody RoleRequest req, Authentication auth) {
-        users.find(id).orElseThrow(() -> ApiException.notFound("user " + id + " does not exist"));
+        users.find(id).orElseThrow(() -> ApiException.notFound(ApiCode.USER_NOT_FOUND, Map.of("id", id)));
         String role = req.role() == null ? "" : req.role().trim().toUpperCase(Locale.ROOT);
         if (!UserDirectory.ROLES.contains(role)) {
-            throw ApiException.validation("unknown role", List.of(new ApiException.FieldError("/role", "invalid_value",
-                    "role must be one of " + UserDirectory.ROLES)));
+            throw ApiException.validation(ApiCode.USER_UNKNOWN_ROLE, List.of(FE("/role", ApiCode.FIELD_INVALID_ROLE,
+                    Map.of("roles", String.valueOf(UserDirectory.ROLES)))));
         }
         UserDirectory.User u = users.setRole(id, role);
         ApiKeyService.AUDIT.info("user.role_change id={} role={} actor={}", id, role, auth.getName());
         return u;
+    }
+
+    private static ApiException.FieldError FE(String pointer, ApiCode code, java.util.Map<String, Object> params) {
+        return ApiException.FieldError.of(pointer, code, params);
+    }
+
+    private static ApiException.FieldError FE(String pointer, ApiCode code, java.util.Map<String, Object> params, String message) {
+        return ApiException.FieldError.of(pointer, code, params, message);
     }
 }

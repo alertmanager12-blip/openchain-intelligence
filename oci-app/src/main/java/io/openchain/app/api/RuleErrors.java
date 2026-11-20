@@ -2,7 +2,6 @@ package io.openchain.app.api;
 
 import io.openchain.alerting.rule.ValidationError;
 import java.util.List;
-import java.util.Locale;
 
 /** Converts rule validation paths ({@code $.conditions.rules[2].field}) to JSON pointers ({@code /conditions/rules/2/field}). */
 public final class RuleErrors {
@@ -11,7 +10,7 @@ public final class RuleErrors {
 
     public static List<ApiException.FieldError> of(List<ValidationError> errors, String pointerPrefix) {
         return errors.stream().map(e -> new ApiException.FieldError(pointerPrefix + pointer(e.path()),
-                e.code().name().toLowerCase(Locale.ROOT), e.message())).toList();
+                e.key(), e.params(), e.message())).toList();
     }
 
     public static String pointer(String path) {

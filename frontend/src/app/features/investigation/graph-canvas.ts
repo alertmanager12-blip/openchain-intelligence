@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, afterRenderEffect, inject, input, output, untracked, viewChild } from '@angular/core';
+import { I18nService } from '../../core/i18n/i18n.service';
 import cytoscape, { Core, ElementDefinition, EventObject, NodeSingular } from 'cytoscape';
 import { GraphNode } from '../../core/models';
 import { formatUnits, shortHash } from '../../shared/format';
@@ -13,11 +14,11 @@ import { GraphCommand, GraphSelection, KeyedEdge, RISK_VAR, edgeWidths, graphDif
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div #el class="cy" role="img" tabindex="0" (keydown)="key($event)"
-      [attr.aria-label]="'Fund flow graph with ' + nodes().length + ' wallets and ' + edges().length + ' transfers. Drag to move, scroll or pinch to zoom, plus and minus keys to zoom, 0 to fit. The selected element is described in the inspector.'"></div>
-    <div class="zoom" role="group" aria-label="Zoom">
-      <button type="button" (click)="zoomBy(1.25)" title="Zoom in (+)" aria-label="Zoom in">+</button>
-      <button type="button" (click)="zoomBy(0.8)" title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
-      <button type="button" (click)="fitAll()" title="Fit to view (0)" aria-label="Fit to view">&#x2922;</button>
+      [attr.aria-label]="i18n.t('graph.canvas.aria', { wallets: nodes().length, transfers: edges().length })"></div>
+    <div class="zoom" role="group" [attr.aria-label]="i18n.t('graph.zoom')">
+      <button type="button" (click)="zoomBy(1.25)" [title]="i18n.t('graph.zoomInTip')" [attr.aria-label]="i18n.t('graph.zoomIn')">+</button>
+      <button type="button" (click)="zoomBy(0.8)" [title]="i18n.t('graph.zoomOutTip')" [attr.aria-label]="i18n.t('graph.zoomOut')">&minus;</button>
+      <button type="button" (click)="fitAll()" [title]="i18n.t('graph.fitTip')" [attr.aria-label]="i18n.t('graph.fitAria')">&#x2922;</button>
     </div>`,
   styles: `
     :host { display: block; position: relative; }
@@ -30,6 +31,7 @@ import { GraphCommand, GraphSelection, KeyedEdge, RISK_VAR, edgeWidths, graphDif
   `,
 })
 export class GraphCanvas {
+  protected readonly i18n = inject(I18nService);
   readonly nodes = input.required<GraphNode[]>();
   readonly edges = input.required<KeyedEdge[]>();
   readonly root = input<string | null>(null);
@@ -40,7 +42,8 @@ export class GraphCanvas {
 
   readonly selected = output<GraphSelection>();
   readonly expandRequested = output<string>();
-  readonly pathResult = output<string>();
+  /** Number of path transfers that go through wallets not drawn here. */
+  readonly pathResult = output<number>();
   readonly exported = output<void>();
 
   private readonly el = viewChild.required<ElementRef<HTMLDivElement>>('el');
@@ -64,6 +67,22 @@ export class GraphCanvas {
           if (!this.cy) return;
           this.cy.nodes().forEach((n) => { n.data('color', this.css(n.data('rv'))); });
           this.cy.style(this.stylesheet());
+        });
+      },
+    });
+    // the words and numbers drawn on the canvas (root label, amounts on the edges) follow the console's language
+    afterRenderEffect({
+      write: () => {
+        const lang = this.i18n.lang();
+        const edges = this.edges();
+        untracked(() => {
+          const cy = this.cy;
+          if (!cy) return;
+          cy.nodes('[?root]').data('short', this.i18n.t('graph.canvas.rootShort'));
+          for (const { key, edge } of edges) {
+            const el = cy.getElementById(key);
+            if (!el.empty()) el.data('label', `${formatUnits(edge.rawAmount, edge.token.decimals, 2, lang)} ${edge.token.symbol}`);
+          }
         });
       },
     });
@@ -127,13 +146,13 @@ export class GraphCanvas {
           id: n.id, rv: RISK_VAR[n.riskLevel], color: this.css(RISK_VAR[n.riskLevel]), labelled: !!n.label, contract: n.isContract === true, root: n.id === root,
           depth: n.depth,
           // short label at fit zoom (no overlap); full label on hover or selection
-          short: n.id === root ? 'Root' : n.label ? n.label : `…${n.address.slice(-4)}`,
+          short: n.id === root ? this.i18n.t('graph.canvas.rootShort') : n.label ? n.label : `…${n.address.slice(-4)}`,
           full: n.label ? `${n.label}\n${shortHash(n.address, 6, 4)}` : shortHash(n.address, 6, 4),
         },
       })),
       ...edges.filter(({ edge }) => ids.has(edge.source) && ids.has(edge.target)).map(({ key, edge }) => ({
         data: {
-          id: key, source: edge.source, target: edge.target, w: widths.get(key) ?? 1, label: `${formatUnits(edge.rawAmount, edge.token.decimals, 2)} ${edge.token.symbol}`,
+          id: key, source: edge.source, target: edge.target, w: widths.get(key) ?? 1, label: `${formatUnits(edge.rawAmount, edge.token.decimals, 2, this.i18n.lang())} ${edge.token.symbol}`,
           // direction relative to the root wallet: into it, out of it, or between two other wallets
           dir: edge.target === root ? 'in' : edge.source === root ? 'out' : 'hop',
           // the counterparty is scored high or critical (the root's own score is shown on the root): worth a look, not evidence of shared intent
@@ -231,7 +250,7 @@ export class GraphCanvas {
       cy.elements().addClass('dim');
       lit.removeClass('dim').addClass('path');
       const missing = c.hops.filter((h) => cy.getElementById(h.source).empty() || cy.getElementById(h.target).empty()).length;
-      if (missing) this.pathResult.emit(`${missing} ${missing === 1 ? 'transfer of the path goes' : 'transfers of the path go'} through wallets not drawn here.`);
+      if (missing) this.pathResult.emit(missing);
     }
   }
 

@@ -1,6 +1,7 @@
 package io.openchain.app.api;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Base64;
 import java.util.List;
 
@@ -23,7 +24,7 @@ public record CursorPage<T>(List<T> items, String nextCursor, boolean truncated)
 
     public static int limit(Integer limit) {
         if (limit == null) return DEFAULT_LIMIT;
-        if (limit < 1 || limit > MAX_LIMIT) throw ApiException.badRequest("limit must be between 1 and " + MAX_LIMIT);
+        if (limit < 1 || limit > MAX_LIMIT) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "limit", "min", 1, "max", MAX_LIMIT));
         return limit;
     }
 
@@ -41,7 +42,7 @@ public record CursorPage<T>(List<T> items, String nextCursor, boolean truncated)
             if (o < 0 || o > Integer.MAX_VALUE - MAX_LIMIT - 1) throw new IllegalArgumentException();
             return o;
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("invalid cursor");
+            throw ApiException.badRequest(ApiCode.PAGE_INVALID_CURSOR);
         }
     }
 }

@@ -29,7 +29,7 @@ const ME = 'you@example.invalid';
 
 function findAlert(id: string): Alert {
   const a = mockDb().alerts.find((x) => x.id === id);
-  if (!a) throw new ProblemError(404, 'Not found', `Alert ${id} does not exist`);
+  if (!a) throw new ProblemError(404, 'Not found', `alert ${id} does not exist`, 'alert.not_found', { id });
   return a;
 }
 function touch(a: Alert, action: string, detail: string | null = null): Alert {
@@ -62,7 +62,7 @@ function saveRule(yaml: string, existing?: Rule): Rule {
 }
 function findRule(id: string): Rule {
   const r = mockDb().rules.find((x) => x.id === id);
-  if (!r) throw new ProblemError(404, 'Not found', `Rule ${id} does not exist`);
+  if (!r) throw new ProblemError(404, 'Not found', `rule '${id}' does not exist`, 'rule.not_found', { id });
   return r;
 }
 
@@ -159,7 +159,7 @@ on('POST', '/alerts/([^/]+)/assign', (req, m) => {
 on('POST', '/alerts/([^/]+)/comments', (req, m) => {
   const a = findAlert(m[1]);
   const text = (body<{ body: string }>(req).body ?? '').trim();
-  if (!text) throw new ProblemError(400, 'Invalid request', 'Comment body must not be empty');
+  if (!text) throw new ProblemError(400, 'Invalid request', 'comment body must not be empty', 'alert.comment_empty');
   a.comments.push({ id: mockDb().nextId('cm'), author: ME, body: text, createdAt: now() });
   return touch(a, 'COMMENTED');
 });
@@ -167,8 +167,8 @@ on('POST', '/alerts/([^/]+)/comments', (req, m) => {
 on('GET', '/webhooks', () => mockDb().webhooks);
 on('POST', '/webhooks', (req) => {
   const b = body<{ type: ConnectorType; name: string; target: string }>(req);
-  if (!b.name?.trim() || !b.target?.trim()) throw Object.assign(new ProblemError(422, 'Validation failed', 'name and target are required'), { errors: [{ field: 'target', message: 'required' }] });
-  if (['WEBHOOK', 'SLACK', 'DISCORD'].includes(b.type) && !/^https:\/\//.test(b.target)) throw Object.assign(new ProblemError(422, 'Validation failed', 'Endpoints must use https'), { errors: [{ field: 'target', message: 'must start with https://' }] });
+  if (!b.name?.trim() || !b.target?.trim()) throw Object.assign(new ProblemError(422, 'Validation failed', 'name and target are required'), { errors: [{ field: 'target', code: 'field.required', params: { field: 'target' }, message: 'target is required' }] });
+  if (['WEBHOOK', 'SLACK', 'DISCORD'].includes(b.type) && !/^https:\/\//.test(b.target)) throw Object.assign(new ProblemError(422, 'Validation failed', 'Endpoints must use https'), { errors: [{ field: 'target', code: 'field.invalid_url', params: {}, message: 'must be an https URL without credentials' }] });
   const w: Webhook = { id: mockDb().nextId('wh'), type: b.type, name: b.name, target: b.target, enabled: true, createdAt: now(), lastDeliveryAt: null, lastDeliveryStatus: null };
   mockDb().webhooks.push(w);
   const secret = 'whsec_demo_' + Array.from(crypto.getRandomValues(new Uint8Array(18)), (x) => x.toString(16).padStart(2, '0')).join('');
@@ -177,9 +177,9 @@ on('POST', '/webhooks', (req) => {
 on('GET', '/watchlist', () => mockDb().watchlist);
 on('POST', '/watchlist', (req) => {
   const b = body<{ network: NetworkId; address: string; name: string | null }>(req);
-  if (!b.network || !b.address?.trim()) throw new ProblemError(400, 'Bad request', "'network' and 'address' are required");
+  if (!b.network || !b.address?.trim()) throw new ProblemError(400, 'Bad request', "'network' and 'address' are required", 'watchlist.fields_required');
   const address = b.network === 'tron' ? b.address.trim() : b.address.trim().toLowerCase();
-  if (mockDb().watchlist.some((w) => w.network === b.network && w.address === address)) throw new ProblemError(409, 'Conflict', 'this wallet is already on the watchlist');
+  if (mockDb().watchlist.some((w) => w.network === b.network && w.address === address)) throw new ProblemError(409, 'Conflict', 'this wallet is already on the watchlist', 'watchlist.duplicate');
   const e = { id: mockDb().nextId('wl'), network: b.network, address, name: b.name?.trim() || null, createdBy: 'demo', createdAt: now() };
   mockDb().watchlist.push(e);
   return e;
@@ -187,7 +187,7 @@ on('POST', '/watchlist', (req) => {
 on('DELETE', '/watchlist/([^/]+)', (_req, m) => {
   const list = mockDb().watchlist;
   const i = list.findIndex((w) => w.id === m[1]);
-  if (i < 0) throw new ProblemError(404, 'Not found', `no watchlist entry '${m[1]}'`);
+  if (i < 0) throw new ProblemError(404, 'Not found', `no watchlist entry '${m[1]}'`, 'watchlist.not_found', { id: m[1] });
   list.splice(i, 1);
   return null;
 });
@@ -210,7 +210,7 @@ on('POST', '/webhooks/([^/]+)/test', (_req, m) => {
 on('GET', '/labels/reports', (req) => page(mockDb().reports, req));
 on('POST', '/labels/reports', (req) => {
   const r = body<LabelReport>(req);
-  if (!r.address || !r.description || r.description.length < 20) throw Object.assign(new ProblemError(422, 'Validation failed', 'A report needs an address and a description of at least 20 characters'), { errors: [{ field: 'description', message: 'min 20 characters' }] });
+  if (!r.address || !r.description || r.description.length < 20) throw Object.assign(new ProblemError(422, 'Validation failed', 'A report needs an address and a description of at least 20 characters'), { errors: [{ field: 'description', code: 'field.min_length', params: { field: 'description', min: 20 }, message: 'description needs at least 20 characters' }] });
   const saved = { ...r, id: mockDb().nextId('rep'), status: 'PENDING' as const, createdAt: now() };
   mockDb().reports.unshift(saved);
   return saved;
@@ -262,7 +262,7 @@ export function handleMock(req: HttpRequest<unknown>): Observable<HttpEvent<unkn
       return of(new HttpResponse({ status: result === null ? 204 : 200, body: structuredClone(result) })).pipe(delay(latency));
     } catch (e) {
       if (!(e instanceof ProblemError)) throw e;
-      const problem = { type: 'about:blank', title: e.title, status: e.status, detail: e.detail, instance: req.url, errors: (e as ProblemError & { errors?: unknown }).errors };
+      const problem = { type: 'about:blank', title: e.title, status: e.status, detail: e.detail, ...(e.code ? { code: e.code, params: e.params } : {}), instance: req.url, errors: (e as ProblemError & { errors?: unknown }).errors };
       return throwError(() => new HttpErrorResponse({ status: e.status, statusText: e.title, error: problem, headers: problemHeaders, url: req.url }));
     }
   }

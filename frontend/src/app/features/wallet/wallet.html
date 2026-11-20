@@ -1,34 +1,34 @@
 <div class="page">
-  <oci-page-header [crumbs]="crumbs()">
+  <oci-page-header class="stack-acts" [crumbs]="crumbs()">
     <button matButton="outlined" type="button" data-testid="watch" [disabled]="watchBusy() || !watchlist.value()" (click)="toggleWatch()"
-      [matTooltip]="watched() ? 'One of your wallets: behavioural rules focus on it' : 'Add to your own wallets: behavioural rules will focus on it'">
-      {{ watched() ? 'Unwatch' : 'Watch' }}</button>
-    <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">Risk breakdown</a>
-    <button matButton="outlined" class="hide-sm" type="button" [disabled]="investigating()" (click)="investigate()" title="Run the investigation plan on this wallet and keep its report">Investigate</button>
-    <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">Trace fund flows</a>
+      [matTooltip]="i18n.t(watched() ? 'wallet.unwatchHelp' : 'wallet.watchHelp')">
+      {{ i18n.t(watched() ? 'wallet.unwatch' : 'wallet.watch') }}</button>
+    <a matButton="outlined" class="hide-sm" [routerLink]="['/risk', network(), address()]">{{ i18n.t('wallet.riskBreakdown') }}</a>
+    <button matButton="outlined" class="hide-sm" type="button" [disabled]="investigating()" (click)="investigate()" [title]="i18n.t('wallet.investigateHelp')">{{ i18n.t('wallet.investigate') }}</button>
+    <a matButton="filled" [routerLink]="['/investigation']" [queryParams]="{ address: address(), network: network() }">{{ i18n.t('wallet.trace') }}</a>
   </oci-page-header>
 
   <header class="ident sev-rail sev-rail--{{ (w.value()?.risk?.level ?? 'unknown').toLowerCase() }}">
     <div class="id-main">
-      <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
+      <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" labelKey="state.copyAddress" /></div>
       <div class="chips"><oci-net [value]="network()" />
         @if (w.value(); as a) {
-          @if (a.isContract !== null) { <span class="chip">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span> }
+          @if (a.isContract !== null) { <span class="chip">{{ i18n.t(a.isContract ? 'wallet.contract' : 'wallet.eoa') }}</span> }
           @for (l of a.labels; track l.id) {
-            <span class="label" [attr.title]="'Source ' + l.source + ', reliability ' + pct(l.reliability) + '%'"><span class="chip">{{ l.category }}</span>{{ l.name }}<oci-evidence [value]="l.evidenceLevel" /></span>
-          } @empty { <span class="small muted">No label. The absence of a label says nothing about the owner.</span> }
+            <span class="label" [attr.title]="i18n.t('wallet.labelSource', { source: l.source, reliability: pct(l.reliability) })"><span class="chip">{{ cat(l.category) }}</span>{{ l.name }}<oci-evidence [value]="l.evidenceLevel" /></span>
+          } @empty { <span class="small muted">{{ i18n.t('wallet.noLabel') }}</span> }
         }
       </div>
       @if (w.value()?.limitations?.length) {
-        <div class="note note--warn limits" data-testid="limitations"><strong>Not visible on this network:</strong>
-          @for (l of w.value()!.limitations!; track l) { <div>{{ l }}</div> }
+        <div class="note note--warn limits" data-testid="limitations"><strong>{{ i18n.t('wallet.limits') }}</strong>
+          @for (l of limitations(); track $index) { <div>{{ l }}</div> }
         </div>
       }
     </div>
     @if (w.value(); as a) {
       <div class="id-gauge">
-        @if (a.risk; as r) { <oci-gauge size="lg" [score]="r.score" [level]="r.level" label="Wallet risk score" /> }
-        @else { <oci-gauge size="lg" [score]="null" label="Wallet risk score" /> }
+        @if (a.risk; as r) { <oci-gauge size="lg" [score]="r.score" [level]="r.level" [label]="i18n.t('wallet.gauge')" /> }
+        @else { <oci-gauge size="lg" [score]="null" [label]="i18n.t('wallet.gauge')" /> }
       </div>
     }
   </header>
@@ -36,149 +36,149 @@
   @if (notEnabled()) {
     <oci-network-not-enabled [network]="network()" [address]="address()" base="wallets" searchLink="/explorer" />
   } @else {
-  <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" loadingText="Analysing the wallet">
+  <oci-state [loading]="w.loading()" [error]="w.error()" [hasData]="!!w.value()" (retry)="w.reload()" skeleton="readout" [skeletonRows]="5" [loadingText]="i18n.t('wallet.analysing')">
     @if (w.value(); as a) {
       @if (verdict(); as v) {
         <oci-verdict class="wallet-verdict" [sentence]="v.sentence" [risk]="v.risk" [lines]="v.lines" [coverage]="withSanctions(v.coverage)"
-          limit="A listing or a signal is a reason to look closer, not proof of wrongdoing." />
+          [engineCoverage]="engineCoverage(v.coverage)" [limit]="i18n.t('wallet.verdictLimit')" />
       }
       <dl class="stats" style="--stats: 5">
-        <div class="stat"><dt>Transactions</dt><dd><span class="stat-v">{{ a.txCount.toLocaleString('en-US') }}</span></dd></div>
-        <div class="stat"><dt>First seen</dt><dd><span class="stat-v">{{ ago(a.firstSeen) }}</span></dd></div>
-        <div class="stat"><dt>Last active</dt><dd><span class="stat-v">{{ ago(a.lastSeen) }}</span></dd></div>
-        <div class="stat" [class.warn]="a.signals.length > 0"><dt>Signals</dt><dd><span class="stat-v">{{ a.signals.length }}</span></dd></div>
-        <div class="stat"><dt>Counterparties</dt><dd><span class="stat-v">{{ a.counterparties.length }}</span></dd></div>
+        <div class="stat"><dt>{{ i18n.t('wallet.stat.transactions') }}</dt><dd><span class="stat-v">{{ num(a.txCount) }}</span></dd></div>
+        <div class="stat"><dt>{{ i18n.t('wallet.stat.firstSeen') }}</dt><dd><span class="stat-v">{{ ago(a.firstSeen) }}</span></dd></div>
+        <div class="stat"><dt>{{ i18n.t('wallet.stat.lastActive') }}</dt><dd><span class="stat-v">{{ ago(a.lastSeen) }}</span></dd></div>
+        <div class="stat" [class.warn]="a.signals.length > 0"><dt>{{ i18n.t('wallet.stat.signals') }}</dt><dd><span class="stat-v">{{ a.signals.length }}</span></dd></div>
+        <div class="stat"><dt>{{ i18n.t('wallet.stat.counterparties') }}</dt><dd><span class="stat-v">{{ a.counterparties.length }}</span></dd></div>
       </dl>
       @if (a.history; as h) { <oci-history-coverage class="coverage" [history]="h" /> }
 
-      <section class="tabs-wrap" aria-label="Wallet records">
-        <mat-tab-group [(selectedIndex)]="tabIndex" aria-label="Wallet records" mat-stretch-tabs="false" mat-align-tabs="start">
-          <mat-tab label="Score">
+      <section class="tabs-wrap" [attr.aria-label]="i18n.t('wallet.records')">
+        <mat-tab-group [(selectedIndex)]="tabIndex" [attr.aria-label]="i18n.t('wallet.records')" mat-stretch-tabs="false" mat-align-tabs="start">
+          <mat-tab [label]="tabs()[0].label">
             @if (a.risk; as r) {
               <div class="score-tab">
-                <p class="small muted">Each row adds or removes points; the bars stack from 0 and end at the score.@if (r.methodSummary) { {{ r.methodSummary }} } Computed {{ ago(r.computedAt) }}.</p>
-                <oci-tech label="How the score is computed"><span>Method <span class="mono">{{ r.method }}</span></span><span>Model {{ r.modelVersion }}</span></oci-tech>
+                <p class="small muted">{{ i18n.t('wallet.score.intro') }}@if (r.methodSummary) { <oci-engine-text [text]="r.methodSummary" [plainInEnglish]="true" /> } {{ i18n.t('wallet.score.computed', { ago: ago(r.computedAt) }) }}</p>
+                <oci-tech [label]="i18n.t('wallet.score.how')"><span>{{ i18n.t('wallet.score.method') }} <span class="mono">{{ r.method }}</span></span><span>{{ i18n.t('wallet.score.model', { version: r.modelVersion }) }}</span></oci-tech>
                 <oci-score-sheet [risk]="r" />
               </div>
-            } @else { <p class="muted">Not enough data to score this wallet yet.</p> }
+            } @else { <p class="muted">{{ i18n.t('wallet.score.none') }}</p> }
           </mat-tab>
           <mat-tab>
-            <ng-template mat-tab-label>Transactions<span class="count">{{ tabs()[1].count }}</span></ng-template>
-            <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="txs().length > 0" [empty]="!txPage.loading() && txs().length === 0"
-              emptyText="No transaction indexed for this wallet yet." skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
+            <ng-template mat-tab-label>{{ tabs()[1].label }}<span class="count">{{ tabs()[1].count }}</span></ng-template>
+            <oci-state [loading]="txPage.loading()" [error]="txPage.error()" [hasData]="!!txs().length" [empty]="!txPage.loading() && txs().length === 0"
+              [emptyText]="i18n.t('wallet.tx.empty')" skeleton="table" [skeletonColumns]="[60, 40, 30, 70, 50, 40]" (retry)="txPage.reload()">
               @if (knownTransfersOnly()) {
-                <p class="small muted" data-testid="known-transfers">This node cannot list an address's transactions: these are the token and native transfers known to the platform (live indexing and address history).</p>
+                <p class="small muted" data-testid="known-transfers">{{ i18n.t('wallet.tx.known') }}</p>
               }
               <div class="table-wrap"><table mat-table [dataSource]="txs()" [trackBy]="byHash">
                 <ng-container matColumnDef="hash">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Hash</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.tx.hash') }}</th>
                   <td mat-cell *matCellDef="let t" class="nowrap"><a class="mono nowrap" [routerLink]="['/explorer']" [queryParams]="{ q: t.hash, network: t.network }" [matTooltip]="t.hash">{{ short(t.hash) }}</a></td>
                 </ng-container>
                 <ng-container matColumnDef="when">
-                  <th mat-header-cell *matHeaderCellDef scope="col">When</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.tx.when') }}</th>
                   <td mat-cell *matCellDef="let t" class="nowrap small muted">{{ ago(t.timestamp) }}</td>
                 </ng-container>
                 <ng-container matColumnDef="dir">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Direction</th>
-                  <td mat-cell *matCellDef="let t"><span class="dir" [class.out]="t.from === address()">{{ t.from === address() ? 'Out' : 'In' }}</span></td>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.tx.direction') }}</th>
+                  <td mat-cell *matCellDef="let t"><span class="dir" [class.out]="t.from === address()">{{ i18n.t(t.from === address() ? 'wallet.tx.out' : 'wallet.tx.in') }}</span></td>
                 </ng-container>
                 <ng-container matColumnDef="cp">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Counterparty</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.tx.counterparty') }}</th>
                   <td mat-cell *matCellDef="let t">@let other = t.from === address() ? t.to : t.from; @if (other) { <oci-addr [address]="other" [network]="t.network" /> }</td>
                 </ng-container>
                 <ng-container matColumnDef="value">
-                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Value</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">{{ i18n.t('wallet.tx.value') }}</th>
                   <td mat-cell *matCellDef="let t" class="right nowrap">{{ units(t.value, t.nativeDecimals ?? 18, 4) }} <span class="muted">{{ t.nativeSymbol }}</span></td>
                 </ng-container>
                 <ng-container matColumnDef="status">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Status</th>
-                  <td mat-cell *matCellDef="let t">@if (t.success) { Confirmed } @else { <span class="warn">Failed</span> }</td>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.tx.status') }}</th>
+                  <td mat-cell *matCellDef="let t">@if (t.success) { {{ i18n.t('wallet.tx.confirmed') }} } @else { <span class="warn">{{ i18n.t('wallet.tx.failed') }}</span> }</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="txCols"></tr>
                 <tr mat-row *matRowDef="let t; columns: txCols" class="clickable" (click)="openTx(t)"></tr>
               </table></div>
               <!-- Cursor paging: the server returns no total, so "load more" instead of a paginator with an invented length. -->
-              @if (nextCursor()) { <div class="more"><button matButton="outlined" type="button" (click)="loadMore()" [disabled]="txPage.loading()">{{ txPage.loading() ? 'Loading' : 'Load more transactions' }}</button></div> }
+              @if (nextCursor()) { <div class="more"><button matButton="outlined" type="button" (click)="loadMore()" [disabled]="txPage.loading()">{{ i18n.t(txPage.loading() ? 'wallet.tx.loading' : 'wallet.tx.more') }}</button></div> }
             </oci-state>
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Counterparties<span class="count">{{ tabs()[2].count }}</span></ng-template>
+            <ng-template mat-tab-label>{{ tabs()[2].label }}<span class="count">{{ tabs()[2].count }}</span></ng-template>
             <mat-form-field class="filter">
-              <mat-label>Filter</mat-label>
-              <input matInput type="search" [value]="cp.filter()" (input)="cp.filter.set($any($event.target).value)" placeholder="Address, label or token" />
+              <mat-label>{{ i18n.t('wallet.cp.filter') }}</mat-label>
+              <input matInput type="search" [value]="cp.filter()" (input)="cp.filter.set($any($event.target).value)" [placeholder]="i18n.t('wallet.cp.filterHint')" />
             </mat-form-field>
             <div class="table-wrap"><table mat-table [dataSource]="cp.view()" [trackBy]="byCp" matSort matSortActive="txCount" matSortDirection="desc" matSortDisableClear (matSortChange)="cp.onSort($event)">
               <ng-container matColumnDef="address">
-                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="address" sortActionDescription="Sort by address">Address</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="address" [sortActionDescription]="i18n.t('wallet.cp.sortAddress')">{{ i18n.t('wallet.cp.address') }}</th>
                 <td mat-cell *matCellDef="let c"><oci-addr [address]="c.address" [network]="network()" />@if (c.label) { <div class="sub">{{ c.label }}</div> }</td>
               </ng-container>
               <ng-container matColumnDef="direction">
-                <th mat-header-cell *matHeaderCellDef scope="col">Direction</th>
-                <td mat-cell *matCellDef="let c">{{ sentence(c.direction) }}</td>
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.cp.direction') }}</th>
+                <td mat-cell *matCellDef="let c">{{ dir(c.direction) }}</td>
               </ng-container>
               <ng-container matColumnDef="txCount">
-                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="txCount" arrowPosition="before" sortActionDescription="Sort by transactions">Transactions</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="txCount" arrowPosition="before" [sortActionDescription]="i18n.t('wallet.cp.sortTransactions')">{{ i18n.t('wallet.cp.transactions') }}</th>
                 <td mat-cell *matCellDef="let c" class="right">{{ c.txCount }}</td>
               </ng-container>
               <ng-container matColumnDef="in">
-                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="in" arrowPosition="before" sortActionDescription="Sort by amount in">In</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="in" arrowPosition="before" [sortActionDescription]="i18n.t('wallet.cp.sortIn')">{{ i18n.t('wallet.cp.in') }}</th>
                 <td mat-cell *matCellDef="let c" class="right nowrap">{{ units(c.rawIn, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
               </ng-container>
               <ng-container matColumnDef="out">
-                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="out" arrowPosition="before" sortActionDescription="Sort by amount out">Out</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="out" arrowPosition="before" [sortActionDescription]="i18n.t('wallet.cp.sortOut')">{{ i18n.t('wallet.cp.out') }}</th>
                 <td mat-cell *matCellDef="let c" class="right nowrap">{{ units(c.rawOut, c.token.decimals, 2) }} <span class="muted">{{ c.token.symbol }}</span></td>
               </ng-container>
               <ng-container matColumnDef="risk">
-                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="risk" sortActionDescription="Sort by risk">Risk</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="risk" [sortActionDescription]="i18n.t('wallet.cp.sortRisk')">{{ i18n.t('wallet.cp.risk') }}</th>
                 <td mat-cell *matCellDef="let c"><oci-risk [value]="c.riskLevel" /></td>
               </ng-container>
               <tr mat-header-row *matHeaderRowDef="cpCols"></tr>
               <tr mat-row *matRowDef="let c; columns: cpCols" class="clickable" (click)="openWallet(c.address)"></tr>
-              <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell muted" [attr.colspan]="cpCols.length">No counterparty matches the filter. Clear it to see all.</td></tr>
+              <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell muted" [attr.colspan]="cpCols.length">{{ i18n.t('wallet.cp.none') }}</td></tr>
             </table></div>
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Exposure@if (tabs()[3].count !== undefined) { <span class="count">{{ tabs()[3].count }}</span> }</ng-template>
+            <ng-template mat-tab-label>{{ tabs()[3].label }}@if (tabs()[3].count !== undefined) { <span class="count">{{ tabs()[3].count }}</span> }</ng-template>
             <oci-state [loading]="exp.loading()" [error]="exp.error()" [hasData]="!!exp.value()" [empty]="false" skeleton="table" (retry)="exp.reload()">
               @if (exp.value()?.coverage; as cov) {
                 @if (cov.state === 'COMPLETE') {
-                  <p class="small muted">Complete coverage of blocks {{ cov.fromBlock }} to {{ cov.toBlock }} for token and native transfers (address history joined to live indexing).</p>
+                  <p class="small muted">{{ i18n.t('wallet.exp.complete', { from: cov.fromBlock!, to: cov.toBlock! }) }}</p>
                 } @else {
-                  <p class="small muted">Partial coverage{{ cov.fromBlock != null ? ' (blocks ' + cov.fromBlock + ' to ' + cov.toBlock + ')' : '' }}: {{ cov.limits[0] }}</p>
+                  <p class="small muted">{{ i18n.t('wallet.exp.partial', { range: cov.fromBlock != null ? i18n.t('wallet.exp.range', { from: cov.fromBlock, to: cov.toBlock! }) : '' }) }} <oci-engine-text [text]="cov.limits[0]" [plainInEnglish]="true" /></p>
                 }
                 @if (cov.knownGaps?.length) {
-                  <p class="small">Not indexed: @for (g of cov.knownGaps!; track g.fromBlock) {<span>blocks {{ g.fromBlock }} to {{ g.toBlock }} </span>}</p>
+                  <p class="small">{{ i18n.t('wallet.exp.notIndexed') }} @for (g of cov.knownGaps!; track g.fromBlock) {<span>{{ i18n.t('wallet.exp.gap', { from: g.fromBlock, to: g.toBlock }) }} </span>}</p>
                 }
               }
               @if (expRows().length === 0) {
                 @if (exp.value()?.coverage?.state === 'COMPLETE') {
-                  <p class="small">No exposure to listed addresses in blocks {{ exp.value()!.coverage!.fromBlock }} to {{ exp.value()!.coverage!.toBlock }}.</p>
+                  <p class="small">{{ i18n.t('wallet.exp.noneComplete', { from: exp.value()!.coverage!.fromBlock!, to: exp.value()!.coverage!.toBlock! }) }}</p>
                 } @else {
-                  <p class="small">No exposure to listed addresses was found in the data covered. This is not proof that none exists.</p>
+                  <p class="small">{{ i18n.t('wallet.exp.none') }}</p>
                 }
               } @else {
-                <p class="small muted">Exposure to addresses that a source lists in a risky category. Amounts are per token and never added across tokens. Indirect exposure (2 hops or more) is an inference: weaker evidence than direct exposure.</p>
+                <p class="small muted">{{ i18n.t('wallet.exp.intro') }}</p>
                 <div class="table-wrap"><table mat-table [dataSource]="expRows()">
                   <ng-container matColumnDef="category">
-                    <th mat-header-cell *matHeaderCellDef scope="col">Category</th>
-                    <td mat-cell *matCellDef="let x" class="strong">{{ x.category }}</td>
+                    <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.exp.category') }}</th>
+                    <td mat-cell *matCellDef="let x" class="strong">{{ cat(x.category) }}</td>
                   </ng-container>
                   <ng-container matColumnDef="hops">
-                    <th mat-header-cell *matHeaderCellDef scope="col" class="right">Hops</th>
+                    <th mat-header-cell *matHeaderCellDef scope="col" class="right">{{ i18n.t('wallet.exp.hops') }}</th>
                     <td mat-cell *matCellDef="let x" class="right">{{ x.hops }}</td>
                   </ng-container>
                   <ng-container matColumnDef="amount">
-                    <th mat-header-cell *matHeaderCellDef scope="col">Amounts</th>
-                    <td mat-cell *matCellDef="let x">{{ expAmount(x) }}@if (x.confidence != null && x.hops > 1) { <span class="small muted"> · confidence {{ x.confidence }}</span> }</td>
+                    <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.exp.amounts') }}</th>
+                    <td mat-cell *matCellDef="let x">{{ expAmount(x) }}@if (x.confidence != null && x.hops > 1) { <span class="small muted"> · {{ i18n.t('wallet.exp.confidence', { value: x.confidence }) }}</span> }</td>
                   </ng-container>
                   <ng-container matColumnDef="via">
-                    <th mat-header-cell *matHeaderCellDef scope="col">Listed address</th>
+                    <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.exp.listed') }}</th>
                     <td mat-cell *matCellDef="let x"><oci-addr [address]="x.counterparty" [network]="network()" />@if (x.source) { <span class="small muted"> {{ x.source }}</span> }</td>
                   </ng-container>
                   <ng-container matColumnDef="evidence">
-                    <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                    <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.exp.evidence') }}</th>
                     <td mat-cell *matCellDef="let x"><oci-evidence [value]="x.evidenceLevel" /></td>
                   </ng-container>
                   <tr mat-header-row *matHeaderRowDef="expCols"></tr>
@@ -186,33 +186,33 @@
                 </table></div>
               }
               @if (exp.value()?.ignored?.length) {
-                <h3 class="small strong">Ignored transfers</h3>
-                <p class="small muted">Anyone can send these to any address: they are not counted as exposure.</p>
+                <h3 class="small strong">{{ i18n.t('wallet.exp.ignored') }}</h3>
+                <p class="small muted">{{ i18n.t('wallet.exp.ignoredHelp') }}</p>
                 <ul class="small">
                   @for (i of exp.value()!.ignored!; track i.txHash + i.counterparty) {
-                    <li>{{ i.amount }} {{ i.token }} from <oci-addr [address]="i.counterparty" [network]="network()" /> ({{ i.category }}, {{ i.source }}): {{ ignoredReason(i.reason) }}</li>
+                    <li>{{ i18n.t('wallet.exp.ignoredFrom', { amount: i.amount, token: i.token }) }} <oci-addr [address]="i.counterparty" [network]="network()" /> {{ i18n.t('wallet.exp.ignoredTail', { category: cat(i.category), source: i.source, reason: ignoredReason(i.reason) }) }}</li>
                   }
                 </ul>
               }
               @if (exp.value()?.counterparties?.length) {
-                <h3 class="small strong">Other labelled counterparties</h3>
+                <h3 class="small strong">{{ i18n.t('wallet.exp.others') }}</h3>
                 <ul class="small">
                   @for (c of exp.value()!.counterparties!; track c.counterparty + c.category + c.source) {
-                    <li><oci-addr [address]="c.counterparty" [network]="network()" /> {{ c.category }} ({{ c.source }}), {{ c.transfers }} transfer(s)</li>
+                    <li><oci-addr [address]="c.counterparty" [network]="network()" /> {{ i18n.t('wallet.exp.otherLine', { category: cat(c.category), source: c.source, count: c.transfers }) }}</li>
                   }
                 </ul>
               }
-              <h3 class="small strong">Possibly related wallets</h3>
+              <h3 class="small strong">{{ i18n.t('wallet.exp.related') }}</h3>
               @if (rel.error()) {
-                <p class="small muted">Relations unavailable ({{ rel.error()!.title }}).</p>
+                <p class="small muted">{{ i18n.t('wallet.exp.relUnavailable', { reason: relError() }) }}</p>
               } @else if (rel.value(); as r) {
-                <p class="small muted">Inferred from on-chain flows (common funder, common destination, shared counterparties). Services such as exchanges never link wallets. Not proof of common ownership or control.</p>
+                <p class="small muted">{{ i18n.t('wallet.exp.relIntro') }}</p>
                 @if (r.relations.length === 0) {
-                  <p class="small">No relation found in the data covered.</p>
+                  <p class="small">{{ i18n.t('wallet.exp.relNone') }}</p>
                 } @else {
                   <ul class="small">
                     @for (x of r.relations; track x.other + x.type) {
-                      <li><oci-addr [address]="x.other" [network]="network()" />: {{ relLabel(x.type) }}@if (x.via) { via <oci-addr [address]="x.via" [network]="network()" /> }, confidence {{ x.confidence }}, {{ x.eventIds.length }} transfer(s) as evidence</li>
+                      <li><oci-addr [address]="x.other" [network]="network()" />{{ i18n.t('wallet.exp.colon') }} {{ relLabel(x.type) }}@if (x.via) { {{ i18n.t('wallet.exp.via') }} <oci-addr [address]="x.via" [network]="network()" /> }, {{ i18n.t('wallet.exp.relTail', { confidence: x.confidence, count: x.eventIds.length }) }}</li>
                     }
                   </ul>
                 }
@@ -221,34 +221,34 @@
           </mat-tab>
 
           <mat-tab>
-            <ng-template mat-tab-label>Signals<span class="count">{{ tabs()[4].count }}</span></ng-template>
+            <ng-template mat-tab-label>{{ tabs()[4].label }}<span class="count">{{ tabs()[4].count }}</span></ng-template>
             @if (a.signals.length) {
               <div class="table-wrap"><table mat-table [dataSource]="a.signals">
                 <ng-container matColumnDef="signal">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Signal</th>
-                  <td mat-cell *matCellDef="let s"><span class="strong">{{ signalTitle(s) }}</span>@if (signalSummary(s); as sm) { <div class="sub sig-summary">{{ sm }}</div> }
-                    <oci-tech><span>Type <span class="mono">{{ s.type }}</span>, detector <span class="mono">{{ s.detectorId }}</span>, confidence {{ pct(s.confidence) }}%</span>
-                      @for (e of s.evidence; track $index) { <span>{{ e.kind }}: {{ e.description }} <span class="muted">({{ e.source }})</span></span> }</oci-tech></td>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.sig.signal') }}</th>
+                  <td mat-cell *matCellDef="let s"><span class="strong">{{ signalTitle(s) }}</span>@if (signalSummary(s); as sm) { <div class="sub sig-summary"><oci-engine-text [text]="sm" [plainInEnglish]="true" /></div> }
+                    <oci-tech><span>{{ i18n.t('wallet.sig.tech', { type: s.type, detector: s.detectorId, confidence: pct(s.confidence) }) }}</span>
+                      @for (e of s.evidence; track $index) { <span>{{ e.kind }}{{ i18n.t('wallet.exp.colon') }} <oci-engine-text [text]="e.description" [plainInEnglish]="true" /> <span class="muted">({{ e.source }})</span></span> }</oci-tech></td>
                 </ng-container>
                 <ng-container matColumnDef="severity">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Severity</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.sig.severity') }}</th>
                   <td mat-cell *matCellDef="let s"><oci-severity [value]="s.severity" /></td>
                 </ng-container>
                 <ng-container matColumnDef="evidence">
-                  <th mat-header-cell *matHeaderCellDef scope="col">Evidence</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('wallet.sig.evidence') }}</th>
                   <td mat-cell *matCellDef="let s"><oci-evidence [value]="s.evidenceLevel" /></td>
                 </ng-container>
                 <ng-container matColumnDef="detected">
-                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">Detected</th>
+                  <th mat-header-cell *matHeaderCellDef scope="col" class="right">{{ i18n.t('wallet.sig.detected') }}</th>
                   <td mat-cell *matCellDef="let s" class="right small nowrap muted">{{ ago(s.detectedAt) }}</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="sigCols"></tr>
                 <tr mat-row *matRowDef="let s; columns: sigCols"></tr>
               </table></div>
-            } @else { <p class="muted">No signal on this wallet.</p> }
+            } @else { <p class="muted">{{ i18n.t('wallet.sig.none') }}</p> }
           </mat-tab>
 
-          <mat-tab label="Balances and activity">
+          <mat-tab [label]="tabs()[5].label">
             <ng-template matTabContent>
               @defer (on idle) {
                 <oci-wallet-profile [a]="a" />

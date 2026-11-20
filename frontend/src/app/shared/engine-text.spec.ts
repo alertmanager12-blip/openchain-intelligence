@@ -22,6 +22,11 @@ describe('EngineText', () => {
     expect(el.querySelector('details')).toBeNull();
   });
 
+  it('separates the label from the sentence by a space', () => {
+    TestBed.inject(I18nService).set('fr');
+    expect(render({ text: 'Received 3 transfers', mode: 'visible' }).querySelector('.engine')?.textContent).toBe('Formulation du moteur\u202f: Received 3 transfers');
+  });
+
   it('labels it in English too', () => {
     expect(render({ text: 'x' }).textContent).toContain("Engine's wording:");
   });

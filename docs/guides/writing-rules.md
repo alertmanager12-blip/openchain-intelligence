@@ -137,6 +137,24 @@ Transfers are enriched with the current risk score of both sides; dedicated `RIS
 4. **Tune**: alerts marked `FALSE_POSITIVE` are counted per rule; raise thresholds or add filters.
 5. **Version**: every `PUT` creates an immutable version; alerts reference the exact version and `compiledHash`.
 
+## Translations
+
+A rule may carry its texts in another language. The original `name`, `description` and `documentation` stay the reference; `translations` only adds wording for the console and the API.
+
+```yaml
+translations:
+  fr:
+    name: Gros transfert USDT vers une contrepartie récente
+    description: Transfert USDT unique >= 100k vers une adresse vue pour la première fois il y a moins d'un jour
+    documentation: |
+      Texte long optionnel, en Markdown.
+```
+
+- Only `fr` is accepted for now; any other language key is refused.
+- Every text is optional (a missing one falls back to the original), but a blank one is refused.
+- Same length limits as the originals: `name` 200 characters, `description` 4 096, `documentation` 64 KiB.
+- Translations never change detection: they are not part of the conditions, and changing them alone is a patch version bump ("translations only").
+
 ## Confirmations
 
 Rules see confirmed events only: the indexer emits a transfer once its block has the network's confirmation depth. A per-rule `confirmations` setting is not part of v1. Events retracted by a reorg reach the engine as `removed=true`; alerts that used them get an annotation.

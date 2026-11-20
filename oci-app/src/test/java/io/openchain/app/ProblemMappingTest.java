@@ -19,7 +19,7 @@ class ProblemMappingTest {
         GlobalExceptionHandler h = new GlobalExceptionHandler();
         Method m = GlobalExceptionHandler.class.getDeclaredMethod("api", ApiException.class, jakarta.servlet.http.HttpServletRequest.class);
         m.setAccessible(true);
-        var r = (ResponseEntity<ProblemDetail>) m.invoke(h, new ApiException.RateLimited("slow down", 42), new MockHttpServletRequest("GET", "/api/v1/graph/x"));
+        var r = (ResponseEntity<ProblemDetail>) m.invoke(h, new ApiException.RateLimited(io.openchain.app.api.ApiCode.GENERIC_TOO_MANY_REQUESTS, java.util.Map.of("reason", "slow down"), 42), new MockHttpServletRequest("GET", "/api/v1/graph/x"));
         assertThat(r.getStatusCode().value()).isEqualTo(429);
         assertThat(r.getHeaders().getFirst("Retry-After")).isEqualTo("42");
         assertThat(r.getBody().getType().toString()).isEqualTo("https://openchain.io/problems/rate-limited");

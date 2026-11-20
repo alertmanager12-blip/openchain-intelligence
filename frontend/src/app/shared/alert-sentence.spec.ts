@@ -1,6 +1,6 @@
 import { Alert } from '../core/models';
 import { fmtNumber } from '../core/i18n/format';
-import { alertSentence, ruleDisplayName } from './alert-sentence';
+import { alertSentence } from './alert-sentence';
 import { ALERT_FIELDS } from './testing/alert-fields.fixture';
 
 type A = Pick<Alert, 'ruleId' | 'ruleName' | 'summary' | 'evidenceSummary' | 'matchedEvent' | 'occurrenceCount'>;
@@ -26,7 +26,7 @@ describe('alertSentence', () => {
 
   it('large-usdt-transfer: amount, sender and recipient', () => {
     const f = real('large-usdt-transfer');
-    expect(alertSentence(alert('large-usdt-transfer', f), 'fr')).toMatch(/^Gros transfert : .+ USDT de T\w+…\w+ vers T\w+…\w+$/);
+    expect(alertSentence(alert('large-usdt-transfer', f), 'fr')).toMatch(/^Gros transfert\u202f: .+ USDT de T\w+…\w+ vers T\w+…\w+$/);
     expect(alertSentence(alert('large-usdt-transfer', f), 'en')).toMatch(/^Large transfer: .+ USDT from T\w+…\w+ to T\w+…\w+$/);
   });
 
@@ -67,24 +67,5 @@ describe('alertSentence', () => {
 
   it('keeps the rule summary for a rule it does not know', () => {
     expect(alertSentence(alert('my-custom-rule', {}, { evidenceSummary: null }), 'fr')).toBe('Rule summary');
-  });
-});
-
-describe('ruleDisplayName', () => {
-  it('translates shipped rules and keeps a custom rule name', () => {
-    expect(ruleDisplayName('wallet-draining', 'Wallet drained (>80% of balance out in 2 minutes)', 'fr')).toBe('Portefeuille vidé');
-    expect(ruleDisplayName('listed-address-exposure', 'x', 'fr')).toBe('Exposition à une adresse listée (hors sanctions)');
-    expect(ruleDisplayName('my-custom-rule', 'My rule', 'fr')).toBe('My rule');
-  });
-  it('reads correctly for every listed category, in both languages', () => {
-    for (const c of ['sanctioned', 'mixer', 'scam', 'phishing', 'ransomware', 'stolen-funds', 'darknet-market', 'flagged-community', 'issuer-frozen']) {
-      for (const type of ['INDIRECT_EXPOSURE', 'FLAGGED_EXPOSURE']) {
-        const f = { 'signal.type': type, 'signal.listed_category': c };
-        const fr = alertSentence(alert('listed-address-exposure', f), 'fr'), en = alertSentence(alert('listed-address-exposure', f), 'en');
-        expect(fr, c).toMatch(/une adresse listée comme \S/);
-        expect(en, c).toMatch(/an address listed as \S/);
-        expect(fr + en, c).not.toMatch(/adresse (un|une|de) |address (a|an) /);
-      }
-    }
   });
 });

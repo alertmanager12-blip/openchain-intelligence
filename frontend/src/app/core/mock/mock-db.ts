@@ -146,8 +146,17 @@ const METHOD_SUMMARY = 'Each factor counts according to its confidence, its seve
   + 'Factors combine so that several independent reasons raise the score more than any single one, without ever exceeding 100.';
 const METHOD = 'noisy-or saturating aggregation: score=100*(1-prod_f(1-p_f)), p_f=w_f*(1-prod_i(1-q_i)), q_i=confidence*severity*0.5^(age/halfLife); dedup by evidence per factor; halfLife=30d';
 
+/** French names of the demo rules, as the server sends them in `translations` (the demo rules are not shipped rules). */
+const MOCK_FR: Record<string, string> = {
+  'large-stablecoin-transfer': 'Gros transfert de stablecoin',
+  'mixer-exposure': "Fonds reçus d'une adresse étiquetée mixeur",
+  'structuring-burst': 'Fractionnement (nombreux transferts de moins de 10\u202fk)',
+  'risky-approval': 'Autorisation illimitée à un contrat récent',
+};
+
+/** A problem+json the mock answers with; `code` and `params` are the server's stable code (docs/api/codes.json). */
 export class ProblemError {
-  constructor(readonly status: number, readonly title: string, readonly detail: string) {}
+  constructor(readonly status: number, readonly title: string, readonly detail: string, readonly code?: string, readonly params: Record<string, unknown> = {}) {}
 }
 
 // ---------------------------------------------------------------- the store
@@ -226,7 +235,8 @@ export class MockDb {
       { ...emptyRule(), id: 'risky-approval', name: 'Unlimited approval to new contract', severity: 'LOW', enabled: false, eventTypes: ['APPROVAL'],
         when: newGroup('all', [newCondition('approval.unlimited', 'eq', true), newCondition('approval.spender_age_days', 'lt', 7)]) },
     ];
-    drafts.forEach((d, i) => this.rules.push({ id: d.id, name: d.name, enabled: d.enabled, severity: d.severity, yaml: ruleToYaml(d), version: i + 1, updatedAt: iso((i + 1) * D) }));
+    drafts.forEach((d, i) => this.rules.push({ id: d.id, name: d.name, enabled: d.enabled, severity: d.severity, yaml: ruleToYaml(d), version: i + 1, updatedAt: iso((i + 1) * D),
+      ...(MOCK_FR[d.id] ? { translations: { fr: { name: MOCK_FR[d.id] } } } : {}) }));
   }
 
   private seedAlerts(rng: Rng): void {
@@ -242,7 +252,7 @@ export class MockDb {
       const history: Alert['history'] = [{ at: iso(created), actor: 'system', action: 'CREATED', detail: `Rule ${rule.id} v${rule.version} matched` }];
       if (status !== 'OPEN') history.push({ at: iso(created - 20 * 60_000), actor: 'analyst@example.invalid', action: status, detail: null });
       this.alerts.push({
-        id: `al_${String(i + 1).padStart(4, '0')}`, ruleId: rule.id, ruleName: rule.name, severity: sev, status, network: n, address, txHash: fakeTxHash(n, rng),
+        id: `al_${String(i + 1).padStart(4, '0')}`, ruleId: rule.id, ruleName: rule.name, ...(rule.translations ? { ruleTranslations: rule.translations } : {}), severity: sev, status, network: n, address, txHash: fakeTxHash(n, rng),
         counterparty: null, blockNumber: null, evidenceSummary: null,
         summary: `${rule.name}: ${tok.symbol} transfer from ${address.slice(0, 12)}…`, evidenceLevel: rule.id === 'mixer-exposure' ? 'RISK_SIGNAL' : 'ANOMALY',
         assignee: status === 'INVESTIGATING' ? 'analyst@example.invalid' : null, createdAt: iso(created), updatedAt: iso(created - 20 * 60_000),
@@ -345,8 +355,8 @@ export class MockDb {
     // Same answer as the backend (InvestigationService.network): 422 problem+json with a /network field error, for a
     // disabled network or one without any provider adapter (bitcoin, solana).
     if (MockDb.DISABLED.includes(network) || !NETWORKS.includes(network))
-      throw Object.assign(new ProblemError(422, 'Request validation failed', `network '${network}' is not enabled on this instance`),
-        { errors: [{ pointer: '/network', path: '/network', code: 'unsupported_network', message: 'network not enabled' }] });
+      throw Object.assign(new ProblemError(422, 'Request validation failed', `network '${network}' is not enabled on this instance`, 'network.not_enabled', { network }),
+        { errors: [{ pointer: '/network', path: '/network', code: 'field.unsupported_network', params: {}, message: 'network not enabled' }] });
     if (address?.toLowerCase() === MockDb.OUTAGE_ADDRESS)
       throw new ProblemError(503, 'Provider unavailable', 'The provider is currently failing. Results are temporarily unavailable; retry in a minute.');
   }
@@ -574,8 +584,8 @@ export class MockDb {
           || Date.parse(y.createdAt) - Date.parse(x.createdAt)).slice(0, 5),
         last24h: (() => {
           const recent = this.alerts.filter((a) => Date.parse(a.createdAt) > NOW - D);
-          const by = new Map<string, { ruleId: string; ruleName: string; count: number }>();
-          for (const a of recent) by.set(a.ruleId, { ruleId: a.ruleId, ruleName: a.ruleName, count: (by.get(a.ruleId)?.count ?? 0) + 1 });
+          const by = new Map<string, { ruleId: string; ruleName: string; translations?: Alert['ruleTranslations']; count: number }>();
+          for (const a of recent) by.set(a.ruleId, { ruleId: a.ruleId, ruleName: a.ruleName, translations: a.ruleTranslations, count: (by.get(a.ruleId)?.count ?? 0) + 1 });
           return { total: recent.length, byRule: [...by.values()].sort((x, y) => y.count - x.count) };
         })(),
       },

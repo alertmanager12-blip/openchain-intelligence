@@ -14,6 +14,7 @@ import io.openchain.intelligence.label.LabelCategory;
 import java.net.URI;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Base64;
@@ -68,7 +69,7 @@ public class InvestigationController {
             try {
                 providerCursor = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
             } catch (IllegalArgumentException e) {
-                throw ApiException.badRequest("invalid cursor");
+                throw ApiException.badRequest(ApiCode.PAGE_INVALID_CURSOR);
             }
         }
         if (providerCursor != null && providerCursor.startsWith(KNOWN_PREFIX)) return knownTransfers(a, providerCursor, l);
@@ -76,7 +77,7 @@ public class InvestigationController {
         try {
             p = chains.provider(n).orElseThrow().getAddressTransactions(a, providerCursor, l);
         } catch (NumberFormatException e) {
-            throw ApiException.badRequest("invalid cursor");
+            throw ApiException.badRequest(ApiCode.PAGE_INVALID_CURSOR);
         } catch (io.openchain.core.provider.ProviderException e) {
             // standard EVM JSON-RPC cannot list an address's transactions: serve the transfers the platform knows
             // (live indexing + on-demand address history) instead of failing the page; transient errors still fail
@@ -97,7 +98,7 @@ public class InvestigationController {
             try {
                 offset = Math.max(0, Integer.parseInt(cursor.substring(KNOWN_PREFIX.length())));
             } catch (NumberFormatException e) {
-                throw ApiException.badRequest("invalid cursor");
+                throw ApiException.badRequest(ApiCode.PAGE_INVALID_CURSOR);
             }
         }
         java.util.List<io.openchain.intelligence.flow.ValueFlow> all = new java.util.ArrayList<>(investigation.knownFlows(a));
@@ -126,7 +127,7 @@ public class InvestigationController {
     @GetMapping("/wallets/{address}/exposure")
     public Dto.ExposureDto exposure(@PathVariable String address, @RequestParam String network,
                                     @RequestParam(defaultValue = "3") int depth) {
-        if (depth < 1 || depth > 3) throw ApiException.badRequest("depth must be between 1 and 3");
+        if (depth < 1 || depth > 3) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "depth", "min", 1, "max", 3));
         Network n = investigation.network(network);
         return investigation.exposure(investigation.address(n, address), depth);
     }
@@ -142,7 +143,7 @@ public class InvestigationController {
     public Dto.GraphPathDto graphPath(@PathVariable String address, @RequestParam String network, @RequestParam String target,
                                       @RequestParam(required = false) String token, @RequestParam(required = false) String since,
                                       @RequestParam(required = false) String until, @RequestParam(defaultValue = "6") int maxHops) {
-        if (maxHops < 1 || maxHops > 8) throw ApiException.badRequest("maxHops must be between 1 and 8");
+        if (maxHops < 1 || maxHops > 8) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "maxHops", "min", 1, "max", 8));
         Network n = investigation.network(network);
         return investigation.graphPath(investigation.address(n, address), investigation.address(n, target), token,
                 instant(since, "since"), instant(until, "until"), maxHops);
@@ -151,9 +152,9 @@ public class InvestigationController {
     /** Which transfers of a displayed graph are no longer held (at most 1,000 ids). */
     @org.springframework.web.bind.annotation.PostMapping("/graph/verify")
     public Dto.VerifyDto verifyGraph(@org.springframework.web.bind.annotation.RequestBody Dto.VerifyRequest req) {
-        if (req == null || req.eventIds() == null || req.eventIds().isEmpty()) throw ApiException.badRequest("eventIds is required");
-        if (req.eventIds().size() > 1_000) throw ApiException.badRequest("at most 1000 eventIds");
-        if (req.eventIds().stream().anyMatch(id -> id == null || id.length() > 256)) throw ApiException.badRequest("invalid eventId");
+        if (req == null || req.eventIds() == null || req.eventIds().isEmpty()) throw ApiException.badRequest(ApiCode.GRAPH_EVENT_IDS_REQUIRED);
+        if (req.eventIds().size() > 1_000) throw ApiException.badRequest(ApiCode.GRAPH_TOO_MANY_EVENT_IDS, Map.of("max", 1000));
+        if (req.eventIds().stream().anyMatch(id -> id == null || id.length() > 256)) throw ApiException.badRequest(ApiCode.GRAPH_INVALID_EVENT_ID);
         return investigation.verifyGraph(investigation.network(req.network()), req.eventIds());
     }
 
@@ -162,15 +163,15 @@ public class InvestigationController {
                               @RequestParam(required = false) String token, @RequestParam(required = false) String from,
                               @RequestParam(required = false) String to, @RequestParam(defaultValue = "80") int limit,
                               @RequestParam(required = false) String direction) {
-        if (depth < 1 || depth > 3) throw ApiException.badRequest("depth must be between 1 and 3");
-        if (limit < 2 || limit > 500) throw ApiException.badRequest("limit must be between 2 and 500");
+        if (depth < 1 || depth > 3) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "depth", "min", 1, "max", 3));
+        if (limit < 2 || limit > 500) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "limit", "min", 2, "max", 500));
         Network n = investigation.network(network);
         Address a = investigation.address(n, address);
         if (direction == null) {
             // deprecated: any flow, either way, no time order (Fund Flow Trace P0-C); removed at the next major API version
             return investigation.graph(a, depth, token, instant(from, "from"), instant(to, "to"), limit);
         }
-        if (!java.util.Set.of("out", "in", "both").contains(direction)) throw ApiException.badRequest("direction must be out, in or both");
+        if (!java.util.Set.of("out", "in", "both").contains(direction)) throw ApiException.badRequest(ApiCode.PARAM_DIRECTION_INVALID);
         return investigation.graphDirected(a, depth, token, instant(from, "from"), instant(to, "to"), limit, direction);
     }
 
@@ -183,7 +184,7 @@ public class InvestigationController {
             var rt = chains.runtime(n);
             if (rt.isEmpty()) {
                 if (all) out.add(new Dto.NetworkDto(n.id(), false, 0, 0, false, null, 0, null, "not enabled on this instance", -1, 0L, false,
-                        List.of(), null));
+                        List.of(), List.of(), null));
                 continue;
             }
             NetworkStatus s = chains.status(rt.get());
@@ -192,7 +193,7 @@ public class InvestigationController {
             out.add(new Dto.NetworkDto(n.id(), true, s.headBlock(), s.finalizedBlock(), s.healthy() && rt.get().lastError() == null,
                     s.providerId(), s.latencyMillis(), s.checkedAt(), detail, indexed,
                     io.openchain.app.chain.ChainIngestionService.indexerLag(s, indexed).stream().boxed().findFirst().orElse(null),
-                    rt.get().simulator().isPresent(), investigation.limitations(n), rt.get().lastIndexedBlockTime()));
+                    rt.get().simulator().isPresent(), investigation.limitations(n), investigation.limitationCodes(n), rt.get().lastIndexedBlockTime()));
         }
         return out;
     }
@@ -217,7 +218,7 @@ public class InvestigationController {
         LabelCategory c = category == null || category.isBlank() ? null : ApiMapper.category(category);
         List<AddressLabel> src;
         if (address != null && !address.isBlank()) {
-            if (n == null) throw ApiException.badRequest("'network' is required with 'address'");
+            if (n == null) throw ApiException.badRequest(ApiCode.NETWORK_REQUIRED_WITH_ADDRESS);
             src = labels.findByAddress(new Address(n, address.trim()));
         } else {
             src = labels.all();
@@ -234,11 +235,11 @@ public class InvestigationController {
     @ResponseStatus(HttpStatus.CREATED)
     public Dto.LabelReportDto report(@RequestBody LabelReportRequest r, Authentication auth) {
         List<ApiException.FieldError> errors = new ArrayList<>();
-        if (r.network() == null || r.network().isBlank()) errors.add(new ApiException.FieldError("/network", "required", "network is required"));
-        if (r.address() == null || r.address().isBlank()) errors.add(new ApiException.FieldError("/address", "required", "address is required"));
-        if (r.category() == null || r.category().isBlank()) errors.add(new ApiException.FieldError("/category", "required", "category is required"));
+        if (r.network() == null || r.network().isBlank()) errors.add(FE("/network", ApiCode.FIELD_REQUIRED, Map.of("field", "network")));
+        if (r.address() == null || r.address().isBlank()) errors.add(FE("/address", ApiCode.FIELD_REQUIRED, Map.of("field", "address")));
+        if (r.category() == null || r.category().isBlank()) errors.add(FE("/category", ApiCode.FIELD_REQUIRED, Map.of("field", "category")));
         if (r.description() == null || r.description().strip().length() < 20)
-            errors.add(new ApiException.FieldError("/description", "min_length", "description needs at least 20 characters"));
+            errors.add(FE("/description", ApiCode.FIELD_MIN_LENGTH, Map.of("field", "description", "min", 20)));
         List<String> urls = new ArrayList<>(r.evidenceUrls() == null ? List.of() : r.evidenceUrls());
         if (r.reference() != null && !r.reference().isBlank()) urls.add(r.reference());
         for (int i = 0; i < urls.size(); i++) {
@@ -246,10 +247,10 @@ public class InvestigationController {
                 URI u = URI.create(urls.get(i));
                 if (!"https".equalsIgnoreCase(u.getScheme()) && !"http".equalsIgnoreCase(u.getScheme())) throw new IllegalArgumentException();
             } catch (IllegalArgumentException e) {
-                errors.add(new ApiException.FieldError("/evidenceUrls/" + i, "invalid_url", "must be an http(s) URL"));
+                errors.add(FE("/evidenceUrls/" + i, ApiCode.FIELD_INVALID_HTTP_URL, Map.of()));
             }
         }
-        if (!errors.isEmpty()) throw ApiException.validation("label report is invalid", errors);
+        if (!errors.isEmpty()) throw ApiException.validation(ApiCode.LABEL_REPORT_INVALID, errors);
         Network n = parseNetwork(r.network());
         String category = ApiMapper.category(r.category()).name();
         var saved = reports.submit(n.id(), r.address().trim(), category, r.description().strip(), urls, auth.getName());
@@ -272,7 +273,7 @@ public class InvestigationController {
         try {
             return Network.fromId(id.trim());
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("unknown network '" + id + "'");
+            throw ApiException.badRequest(ApiCode.NETWORK_UNKNOWN, Map.of("network", id));
         }
     }
 
@@ -281,7 +282,15 @@ public class InvestigationController {
         try {
             return Instant.parse(v.trim());
         } catch (DateTimeParseException e) {
-            throw ApiException.badRequest("'" + name + "' must be an RFC 3339 timestamp");
+            throw ApiException.badRequest(ApiCode.PARAM_INVALID_TIMESTAMP, Map.of("name", name));
         }
+    }
+
+    private static ApiException.FieldError FE(String pointer, ApiCode code, java.util.Map<String, Object> params) {
+        return ApiException.FieldError.of(pointer, code, params);
+    }
+
+    private static ApiException.FieldError FE(String pointer, ApiCode code, java.util.Map<String, Object> params, String message) {
+        return ApiException.FieldError.of(pointer, code, params, message);
     }
 }

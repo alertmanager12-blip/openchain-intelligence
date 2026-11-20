@@ -3,11 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { MatButton } from '@angular/material/button';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { Observable } from 'rxjs';
-import { ApiError } from '../../core/api-error';
+import { ApiError, apiErrorText } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { fmtNumber } from '../../core/i18n/format';
 import { RuleValidationError } from '../../core/models';
 import { emptyRule } from '../../core/rules/rule-model';
-import { ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
+import { ruleErrorText, ruleErrorWhere, ruleToYaml, yamlToRule } from '../../core/rules/rule-yaml';
 import { Toasts } from '../../core/toasts';
 import { PageHeader } from '../../shared/page-header';
 import { StoredRules } from './stored-rules';
@@ -19,34 +21,34 @@ import { StoredRules } from './stored-rules';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
-      <oci-page-header heading="Rules as code" lede="Version rules next to your code. The YAML is plain data, with no anchors, tags or expressions, and the server validates it before storing it.">
-        <button matButton="outlined" type="button" (click)="fileInput.click()">Import a file</button>
-        <input #fileInput type="file" accept=".yaml,.yml,text/yaml" class="sr-only" (change)="importFile($event)" aria-label="Import YAML file" />
-        <button matButton="outlined" type="button" (click)="exportAll()" [disabled]="busy()">Export all rules</button>
+      <oci-page-header class="stack-acts" [heading]="i18n.t('rules.code.title')" [lede]="i18n.t('rules.code.lede')">
+        <button matButton="outlined" type="button" (click)="fileInput.click()">{{ i18n.t('rules.code.import') }}</button>
+        <input #fileInput type="file" accept=".yaml,.yml,text/yaml" class="sr-only" (change)="importFile($event)" [attr.aria-label]="i18n.t('rules.code.importAria')" />
+        <button matButton="outlined" type="button" (click)="exportAll()" [disabled]="busy()">{{ i18n.t('rules.code.exportAll') }}</button>
       </oci-page-header>
 
       <section class="panel-raised readout-panel" aria-labelledby="h-val">
-        <div class="card-head"><h2 id="h-val">Validation</h2>
+        <div class="card-head"><h2 id="h-val">{{ i18n.t('rules.code.validation') }}</h2>
           <div class="row act">
-            <button matButton="filled" type="button" (click)="validate()" [disabled]="busy()">Validate on server</button>
-            <button matButton="outlined" type="button" (click)="importText()" [disabled]="busy() || local().errors.length > 0">Save to server</button>
+            <button matButton="filled" type="button" (click)="validate()" [disabled]="busy()">{{ i18n.t('rules.code.validate') }}</button>
+            <button matButton="outlined" type="button" (click)="importText()" [disabled]="busy() || local().errors.length > 0">{{ i18n.t('rules.code.save') }}</button>
           </div></div>
         <p class="status-line">
-          <span id="yaml-status" aria-live="polite" [class.bad]="local().errors.length > 0">Local check <strong>{{ local().errors.length === 0 ? 'no issue' : local().errors.length + (local().errors.length === 1 ? ' issue' : ' issues') }}</strong></span>
-          <span [class.bad]="server() && !server()!.valid">Server validation <strong>@if (server(); as r) { {{ r.valid ? 'valid' : r.errors.length + (r.errors.length === 1 ? ' error' : ' errors') }} } @else { not run yet }</strong></span>
-          <span><strong>{{ local().docs }}</strong> {{ local().docs === 1 ? 'rule' : 'rules' }} in this file, <strong>{{ lineCount() }}</strong> lines</span>
+          <span id="yaml-status" aria-live="polite" [class.bad]="local().errors.length > 0">{{ i18n.t('rules.code.localCheck') }} <strong>{{ local().errors.length === 0 ? i18n.t('rules.code.noIssue') : i18n.t('rules.builder.issues', { n: local().errors.length }) }}</strong></span>
+          <span [class.bad]="server() && !server()!.valid">{{ i18n.t('rules.code.serverValidation') }} <strong>@if (server(); as r) { {{ r.valid ? i18n.t('rules.code.valid') : i18n.t('rules.code.errors', { n: r.errors.length }) }} } @else { {{ i18n.t('rules.code.notRun') }} }</strong></span>
+          <span><strong>{{ num(local().docs) }}</strong> {{ i18n.t('rules.code.inFile', { n: local().docs }) }} <strong>{{ num(lineCount()) }}</strong> {{ i18n.t('rules.code.lines', { n: lineCount() }) }}</span>
         </p>
-        @if (busy()) { <mat-progress-bar mode="indeterminate" aria-label="Waiting for the server" /> }
+        @if (busy()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="i18n.t('rules.code.waiting')" /> }
         @if (shownErrors().length) {
-          <ul class="errs">@for (e of shownErrors(); track $index) { <li><span class="mono">{{ where(e) }}</span> {{ e.message }}</li> }</ul>
+          <ul class="errs">@for (e of shownErrors(); track $index) { <li><span class="mono">{{ where(e) }}</span> {{ errText(e) }}</li> }</ul>
         }
-        @if (error(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p>
-          @for (f of e.fieldErrors; track $index) { <p class="field-error mono">{{ f.field }}: {{ f.message }}</p> } }
+        @if (error(); as e) { <p class="field-error" role="alert">{{ apiError(e) }}</p> }
+        @if (tooLarge()) { <p class="field-error" role="alert">{{ i18n.t('rules.code.tooLarge') }}</p> }
       </section>
 
       <div class="split">
-        <section class="card editor-card" aria-label="Editor">
-          <label for="yaml-editor" class="sr-only">Rule YAML</label>
+        <section class="card editor-card" [attr.aria-label]="i18n.t('rules.code.editor')">
+          <label for="yaml-editor" class="sr-only">{{ i18n.t('rules.code.yamlLabel') }}</label>
           <div class="editor">
             <pre class="gutter" aria-hidden="true">{{ gutter() }}</pre>
             <textarea id="yaml-editor" class="code" spellcheck="false" autocapitalize="off" autocomplete="off" [ngModel]="text()" (ngModelChange)="setText($event)"
@@ -54,10 +56,10 @@ import { StoredRules } from './stored-rules';
           </div>
         </section>
         <aside class="card small ref" aria-labelledby="h-ref">
-          <h2 id="h-ref">Reference</h2>
-          <p>Groups: <span class="mono">all:</span> (and) or <span class="mono">any:</span> (or), nestable four levels.</p>
-          <p>Condition: <span class="mono">field</span>, <span class="mono">op</span>, <span class="mono">value</span>. Amounts are exact decimals in quotes: <span class="mono">"100000.50"</span>.</p>
-          <p>Durations: <span class="mono">30s 15m 1h 7d</span>. Separate several rules in one file with <span class="mono">---</span>.</p>
+          <h2 id="h-ref">{{ i18n.t('rules.code.reference') }}</h2>
+          <p>{{ i18n.t('rules.code.refGroups') }}</p>
+          <p>{{ i18n.t('rules.code.refCondition', { example: '"100000.50"' }) }}</p>
+          <p>{{ i18n.t('rules.code.refDurations', { durations: '30s 15m 1h 7d', separator: '---' }) }}</p>
         </aside>
       </div>
 
@@ -80,10 +82,11 @@ import { StoredRules } from './stored-rules';
 export class RuleCodePage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
   readonly text = signal(ruleToYaml({ ...emptyRule(), id: 'my-first-rule', name: 'My first rule' }));
   readonly local = computed(() => {
     const docs = this.text().split(/^---\s*$/m).filter((s) => s.trim());
-    return { docs: docs.length, errors: docs.flatMap((d, i) => yamlToRule(d).errors.map((e) => (docs.length > 1 ? { ...e, path: `doc ${i + 1} ${e.path}` } : e))) };
+    return { docs: docs.length, errors: docs.flatMap((d, i) => yamlToRule(d).errors.map((e) => (docs.length > 1 ? { ...e, doc: i + 1 } : e))) };
   });
   readonly lineCount = computed(() => this.text().split('\n').length);
   readonly gutter = computed(() => Array.from({ length: this.lineCount() }, (_, i) => i + 1).join('\n'));
@@ -93,10 +96,12 @@ export class RuleCodePage {
   readonly busy = signal(false);
   private readonly stored = viewChild(StoredRules);
   readonly error = signal<ApiError | null>(null);
+  readonly tooLarge = signal(false);
 
-  where(e: RuleValidationError): string {
-    return e.line ? `line ${e.line}` : e.path || '(document)';
-  }
+  protected num(n: number): string { return fmtNumber(n, this.i18n.lang()); }
+  protected where(e: RuleValidationError): string { return ruleErrorWhere(e, this.i18n.lang()); }
+  protected errText(e: RuleValidationError): string { return ruleErrorText(e, this.i18n.lang()); }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
 
   setText(t: string): void {
     this.text.set(t);
@@ -105,7 +110,7 @@ export class RuleCodePage {
 
   loadYaml(yaml: string): void {
     this.setText(yaml);
-    this.toasts.success('YAML loaded into the editor');
+    this.toasts.success(this.i18n.t('rules.code.toast.loaded'));
   }
 
   indent(ev: Event): void {
@@ -118,6 +123,7 @@ export class RuleCodePage {
   private call<T>(obs: Observable<T>, next: (v: T) => void): void {
     this.busy.set(true);
     this.error.set(null);
+    this.tooLarge.set(false);
     obs.subscribe({
       next: (v) => {
         this.busy.set(false);
@@ -133,13 +139,13 @@ export class RuleCodePage {
   validate(): void {
     this.call(this.api.validateRule(this.text()), (r) => {
       this.server.set({ valid: r.valid, errors: r.errors });
-      if (r.valid) this.toasts.success('Rule is valid', 'The server accepted the YAML.');
+      if (r.valid) this.toasts.success(this.i18n.t('rules.code.toast.valid'), this.i18n.t('rules.code.toast.validDetail'));
     });
   }
 
   importText(): void {
     this.call(this.api.importRules(this.text()), (rules) => {
-      this.toasts.success(rules.length === 1 ? 'Rule saved' : `${rules.length} rules saved`, rules.map((r) => `${r.id} v${r.version}`).join(', '));
+      this.toasts.success(this.i18n.t('rules.code.toast.saved', { n: rules.length }), rules.map((r) => `${r.id} v${r.version}`).join(', '));
       this.stored()?.reload();
     });
   }
@@ -149,13 +155,14 @@ export class RuleCodePage {
     const file = input.files?.[0];
     if (!file) return;
     if (file.size > 512 * 1024) {
-      this.error.set(new ApiError(0, 'File too large', 'Rule files are limited to 512 KB.'));
+      this.tooLarge.set(true);
       return;
     }
     void file.text().then((t) => {
+      this.tooLarge.set(false);
       this.setText(t);
       input.value = '';
-      this.toasts.success('File imported', `${file.name} is in the editor. Validate it, then save it to the server.`);
+      this.toasts.success(this.i18n.t('rules.code.toast.imported'), this.i18n.t('rules.code.toast.importedDetail', { name: file.name }));
     });
   }
 
@@ -167,7 +174,7 @@ export class RuleCodePage {
       a.download = `openchain-rules-${new Date().toISOString().slice(0, 10)}.yaml`;
       a.click();
       URL.revokeObjectURL(url);
-      this.toasts.success('Rules exported', a.download);
+      this.toasts.success(this.i18n.t('rules.code.toast.exported'), a.download);
     });
   }
 }

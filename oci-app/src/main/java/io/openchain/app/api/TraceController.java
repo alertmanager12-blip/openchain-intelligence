@@ -59,7 +59,7 @@ public class TraceController {
                               String error, String createdBy, Instant createdAt, Instant completedAt, int frozenFlows,
                               @JsonRawValue String request, @JsonRawValue String result, @JsonRawValue String diff) {}
 
-    private static final String NOT_FOUND = "no such trace";
+    private static final ApiCode NOT_FOUND = ApiCode.TRACE_NOT_FOUND;
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -69,7 +69,7 @@ public class TraceController {
 
     @GetMapping
     public List<TraceSummary> list(@RequestParam(defaultValue = "50") int limit, Authentication auth) {
-        if (limit < 1 || limit > 200) throw ApiException.badRequest("limit must be between 1 and 200");
+        if (limit < 1 || limit > 200) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "limit", "min", 1, "max", 200));
         return traces.list(ClientScope.of(auth), limit).stream().map(TraceController::summary).toList();
     }
 
@@ -116,27 +116,27 @@ public class TraceController {
         try {
             return s.get();
         } catch (TraceArtifactService.BudgetExceeded e) {
-            throw new ApiException(429, "too-many-requests", "Too many requests", e.getMessage(), null);
+            throw ApiException.tooManyRequests(ApiCode.GENERIC_TOO_MANY_REQUESTS, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 
     private Trace.Request request(TraceRequest r) {
-        if (r == null) throw ApiException.badRequest("body is required");
+        if (r == null) throw ApiException.badRequest(ApiCode.BODY_REQUIRED);
         Network n = investigation.network(r.network());
         Address seed = investigation.address(n, r.seed());
         Trace.Direction d = switch (r.direction() == null ? "" : r.direction()) {
             case "out" -> Trace.Direction.FORWARD;
             case "in" -> Trace.Direction.BACKWARD;
-            default -> throw ApiException.badRequest("direction must be out or in");
+            default -> throw ApiException.badRequest(ApiCode.TRACE_DIRECTION_INVALID);
         };
         int depth = r.depth() == null ? 3 : r.depth(), nodes = r.maxNodes() == null ? 500 : r.maxNodes();
-        if (depth < 1 || depth > Trace.Limits.DEPTH_CAP) throw ApiException.badRequest("depth must be between 1 and " + Trace.Limits.DEPTH_CAP);
-        if (nodes < 2 || nodes > Trace.Limits.NODES_CAP) throw ApiException.badRequest("maxNodes must be between 2 and " + Trace.Limits.NODES_CAP);
+        if (depth < 1 || depth > Trace.Limits.DEPTH_CAP) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "depth", "min", 1, "max", Trace.Limits.DEPTH_CAP));
+        if (nodes < 2 || nodes > Trace.Limits.NODES_CAP) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "maxNodes", "min", 2, "max", Trace.Limits.NODES_CAP));
         Trace.Method m;
         try {
             m = r.method() == null ? Trace.Method.PROPORTIONAL : Trace.Method.valueOf(r.method().trim().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("method must be PROPORTIONAL or FIFO");
+            throw ApiException.badRequest(ApiCode.TRACE_METHOD_INVALID);
         }
         Instant from = InvestigationController.instant(r.from(), "from"), to = InvestigationController.instant(r.to(), "to");
         return new Trace.Request(n, seed, d, new Trace.Window(from, to), r.token() == null || r.token().isBlank() ? null : r.token().trim(), m,

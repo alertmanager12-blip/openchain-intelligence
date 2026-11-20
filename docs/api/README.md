@@ -47,10 +47,17 @@ Roles: `VIEWER` (all `*:read`), `ANALYST` (+ `alerts:write`, `labels:report`, `w
   "instance": "/api/v1/rules/validate",
   "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
   "errors": [
-    { "pointer": "/spec/window/size", "code": "max_exceeded", "message": "window size must be <= 7d" }
+    { "pointer": "/spec/window/size", "code": "field.max_exceeded", "message": "window size must be <= 7d",
+      "params": { "max": "7d" } }
   ]
 }
 ```
+
+Machine-readable, language-neutral fields (additive): the problem has a top-level `code` and `params` (values to
+interpolate in a message); each `errors[]` item has `code` and `params`. `title`, `detail` and `message` stay English
+engine wording; clients (the console among them) translate from `code` + `params`. **Renamed codes**: field codes are
+now `field.*` and rule-validation codes `rule.*`; the former bare codes (`required`, `unsupported`, `max_exceeded`, ...) are gone, so
+external clients matching on `errors[].code` must update. All codes are listed in [codes.json](codes.json) (206 codes).
 
 | Status | `type` suffix | When |
 |---|---|---|
@@ -216,6 +223,11 @@ history never raises alerts.
 | POST | `/rules/import` | rules:write | Import one or many YAML documents (`---` separated), `Content-Type: application/yaml` |
 | GET | `/rules/{id}/export` | rules:read | YAML source of current version (`?version=` for older) |
 
+Language-neutral additions (additive): rule objects carry `unreachableCodes` (codes + params parallel to
+`unreachableReasons`) and `translations` (`{ "fr": { "name", "description", "documentation" } }`, only the texts the
+rule defines; see [writing rules](../guides/writing-rules.md)); network and wallet objects carry `limitationCodes`
+(parallel to the English limitation texts). Clients fall back to the English text when a code is unknown.
+
 ### Alerts
 
 | Method | Path | Scope | Description |
@@ -226,6 +238,9 @@ history never raises alerts.
 | POST | `/alerts/{id}/status` | alerts:write | `{ "status": "IN_PROGRESS\|RESOLVED\|FALSE_POSITIVE\|OPEN", "reason": "..." }` (validated transitions) |
 | POST | `/alerts/{id}/assign` | alerts:write | `{ "assigneeId": "uuid" \| null }` |
 | POST | `/alerts/{id}/comments` | alerts:write | `{ "body": "markdown text" }` (rendered as plain text/sanitised) |
+
+Alert objects also carry `ruleTranslations` (the rule's `translations`, so the alert can be shown in the rule's
+French wording); `GET /dashboard` has `alerts.last24h.byRule[].translations` likewise.
 
 Rule field `wallet.balance` (see `GET /rules/fields`): on real chains, the provider-reported balance of the sender at
 the end of the previous block; **absent** when unavailable (error, rate limit, TRON), so balance conditions do not match.

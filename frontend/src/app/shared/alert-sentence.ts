@@ -7,24 +7,6 @@ import { shortHash } from './format';
 type AlertLike = Pick<Alert, 'ruleId' | 'ruleName' | 'summary' | 'evidenceSummary' | 'matchedEvent' | 'occurrenceCount'>;
 type Fields = Record<string, unknown>;
 
-const NAMES: Record<string, Record<Lang, string>> = {
-  'wallet-draining': { en: 'Wallet drained', fr: 'Portefeuille vidé' },
-  'large-usdt-transfer': { en: 'Large USDT transfer', fr: 'Gros transfert USDT' },
-  'fund-splitting': { en: 'Fund splitting', fr: 'Fractionnement de fonds' },
-  'issuer-freeze-counterparty': { en: 'Stablecoin issuer froze a known counterparty', fr: "Gel par l'émetteur d'une contrepartie connue" },
-  'sanctioned-exposure-signal': { en: 'Exposure to a sanctioned address', fr: 'Exposition à une adresse sanctionnée' },
-  'listed-address-exposure': { en: 'Exposure to a listed address (not a sanction)', fr: 'Exposition à une adresse listée (hors sanctions)' },
-  'suspicious-wallet': { en: 'High USDT volume from a newly active wallet', fr: "Gros volume USDT d'un portefeuille récent" },
-  'contract-exploit': { en: 'Admin change followed by a large contract outflow', fr: "Changement d'administrateur suivi d'une sortie massive" },
-  'dormant-wallet-reactivation': { en: 'Dormant wallet reactivated', fr: 'Portefeuille dormant réactivé' },
-  'suspicious-approval': { en: 'Unlimited approval to a young or unverified contract', fr: 'Autorisation illimitée à un contrat récent ou non vérifié' },
-};
-
-/** Name of a shipped rule in the console's language; any other rule keeps its own name. */
-export function ruleDisplayName(ruleId: string, fallback: string, lang: Lang): string {
-  return NAMES[ruleId]?.[lang] ?? fallback;
-}
-
 const str = (f: Fields, k: string): string | null => (typeof f[k] === 'string' && f[k] !== '' ? (f[k] as string) : null);
 const num = (f: Fields, k: string): number | null => {
   const v = f[k];
@@ -53,20 +35,20 @@ const BUILDERS: Record<string, Builder> = {
     const a = num(f, 'transaction.amount'), b = num(f, 'wallet.balance'), t = str(f, 'transaction.token.symbol'), to = str(f, 'counterparty.address');
     if (a === null || b === null || !t || !to) return null;
     return lang === 'fr'
-      ? `Portefeuille vidé : ${amt(a, lang)} ${t} sortis sur un solde de ${amt(b, lang)} ${t}, vers ${addr(to)}`
+      ? `Portefeuille vidé : ${amt(a, lang)} ${t} sortis sur un solde de ${amt(b, lang)} ${t}, vers ${addr(to)}`
       : `Wallet drained: ${amt(a, lang)} ${t} sent out of a balance of ${amt(b, lang)} ${t}, to ${addr(to)}`;
   },
   'large-usdt-transfer': (f, lang) => {
     const a = num(f, 'transaction.amount'), t = str(f, 'transaction.token.symbol'), from = str(f, 'transaction.from'), to = str(f, 'transaction.to');
     if (a === null || !t || !from || !to) return null;
-    return lang === 'fr' ? `Gros transfert : ${amt(a, lang)} ${t} de ${addr(from)} vers ${addr(to)}`
+    return lang === 'fr' ? `Gros transfert : ${amt(a, lang)} ${t} de ${addr(from)} vers ${addr(to)}`
       : `Large transfer: ${amt(a, lang)} ${t} from ${addr(from)} to ${addr(to)}`;
   },
   'fund-splitting': (f, lang) => {
     const from = str(f, 'transaction.from'), a = num(f, 'transaction.amount'), t = str(f, 'transaction.token.symbol'), to = str(f, 'transaction.to');
     if (!from || a === null || !t || !to) return null;
     return lang === 'fr'
-      ? `Fractionnement : ${addr(from)} a envoyé des fonds à de nombreux destinataires distincts en peu de temps (dernier : ${amt(a, lang)} ${t} vers ${addr(to)})`
+      ? `Répartition de fonds : ${addr(from)} a envoyé des fonds à de nombreux destinataires distincts en peu de temps (dernier : ${amt(a, lang)} ${t} vers ${addr(to)})`
       : `Fund splitting: ${addr(from)} sent funds to many distinct recipients within a short time (last: ${amt(a, lang)} ${t} to ${addr(to)})`;
   },
   'issuer-freeze-counterparty': (f, lang) => {

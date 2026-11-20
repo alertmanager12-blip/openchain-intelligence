@@ -21,6 +21,10 @@ rules/
   rules are network-agnostic.
 * Every rule must ship `documentation`, at least one `example` and one `test`. CI (`RulesRepositoryTest`)
   loads every file, validates it and runs its embedded examples and tests.
+* Every shipped rule carries `translations.fr` (`name`, `description`, `documentation`): the console shows these
+  texts in French, and the rule file is their only source. Same facts and same hedging as the English, French
+  typography (narrow no-break space U+202F before `? ! ; :` and inside « »). Translations never change detection;
+  a change that only touches them is a patch version bump.
 
 ## Anatomy
 
@@ -61,6 +65,12 @@ actions:
   - { type: WEBHOOK, connectorId: default-webhook, params: {} }
 documentation: |
   Why this pattern matters, known false positives, required enrichments.
+translations:                           # optional; fr only for now; each text optional (falls back to English)
+  fr:
+    name: "Répartition de fonds"
+    description: "..."
+    documentation: |
+      Même contenu que documentation, phrase pour phrase.
 expectedConfidence: 0.4
 examples:                               # single events vs the stateless filter (scope + conditions)
   - name: ...
@@ -109,7 +119,7 @@ lowercase literals or `ignoreCase: true`. Binary floating point is never used fo
 ## Evidence levels — wording matters
 
 Rules describe **behaviour**, never people. Never name a rule or write documentation that labels an address as
-criminal. Use `ANOMALY` for statistical outliers, `RISK_SIGNAL` for patterns associated with risk, and
+criminal (in any language: CI bans accusatory words in English and in French). Use `ANOMALY` for statistical outliers, `RISK_SIGNAL` for patterns associated with risk, and
 `CONFIRMED_BY_SOURCE` only when the rule tests a source-backed field (e.g. `wallet.sanctioned` from an official
 list) — the validator enforces this. Every notification carries a disclaimer.
 

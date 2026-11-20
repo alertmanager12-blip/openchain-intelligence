@@ -3,28 +3,30 @@ import { sentence } from './format';
 import { hasKey, translate, type Lang } from '../core/i18n/i18n.service';
 
 /** Plain-language name of a signal type ("RAPID_DRAIN" -> "Rapid drain"). */
-export function signalTypeTitle(type: string): string {
-  return signalTypeName(type, 'en') ?? sentence(type);
+export function signalTypeTitle(type: string, lang: Lang = 'en'): string {
+  return signalTypeName(type, lang) ?? sentence(type);
 }
 
 /** Plain-language name of a label category factor ("SANCTIONED" -> "Listed as sanctioned"). */
-export function labelTitle(category: string): string {
+export function labelTitle(category: string, lang: Lang = 'en'): string {
   const key = category.toUpperCase();
-  if (key === 'ISSUER_FROZEN') return translate('en', 'enum.factor.ISSUER_FROZEN');
-  return translate('en', 'enum.factor.listedAs', { name: categoryName(key, 'en') });
+  if (key === 'ISSUER_FROZEN') return translate(lang, 'enum.factor.ISSUER_FROZEN');
+  return translate(lang, 'enum.factor.listedAs', { name: categoryName(key, lang) });
 }
 
 /** Name of a risk factor key: "signal:RAPID_DRAIN", "label:SANCTIONED" or a bare key. */
-export function factorTitle(factor: string): string {
+export function factorTitle(factor: string, lang: Lang = 'en'): string {
   const i = factor.indexOf(':');
   const kind = i >= 0 ? factor.slice(0, i) : '';
   const key = i >= 0 ? factor.slice(i + 1) : factor;
-  if (kind === 'label') return labelTitle(key);
-  return signalTypeTitle(key);
+  if (kind === 'label') return labelTitle(key, lang);
+  return signalTypeTitle(key, lang);
 }
 
-export function contributionTitle(c: Pick<RiskContribution, 'factor' | 'title'>): string {
-  return c.title?.trim() || factorTitle(c.factor);
+/** The server's title (English), unless the console is in another language and knows the factor: then its own name. */
+export function contributionTitle(c: Pick<RiskContribution, 'factor' | 'title'>, lang: Lang = 'en'): string {
+  if (lang !== 'en' && (c.factor.startsWith('label:') || signalTypeName(c.factor.replace(/^signal:/, ''), lang))) return factorTitle(c.factor, lang);
+  return c.title?.trim() || factorTitle(c.factor, lang);
 }
 
 /** The plain sentence of a contribution, or null when the server sent none (the explanation then stays technical). */
@@ -32,8 +34,9 @@ export function contributionSummary(c: Pick<RiskContribution, 'summary'>): strin
   return c.summary?.trim() || null;
 }
 
-export function signalTitle(s: Pick<Signal, 'type' | 'title'>): string {
-  return s.title?.trim() || signalTypeTitle(s.type);
+export function signalTitle(s: Pick<Signal, 'type' | 'title'>, lang: Lang = 'en'): string {
+  if (lang !== 'en' && signalTypeName(s.type, lang)) return signalTypeTitle(s.type, lang);
+  return s.title?.trim() || signalTypeTitle(s.type, lang);
 }
 
 /** Server summary, else the first evidence description (older payloads). */

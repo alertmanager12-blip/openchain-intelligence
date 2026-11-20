@@ -92,7 +92,7 @@ public final class TelegramMessage {
         String id = n.ruleId() == null ? "" : n.ruleId();
         return switch (id) {
             case "wallet-draining" -> "Portefeuille vidé";
-            case "fund-splitting" -> "Fractionnement de fonds";
+            case "fund-splitting" -> "Répartition de fonds";
             case "large-usdt-transfer" -> "Gros transfert USDT";
             case "suspicious-wallet" -> "Portefeuille au comportement suspect";
             case "issuer-freeze-counterparty" -> "Contrepartie d'une adresse gelée par l'émetteur";
