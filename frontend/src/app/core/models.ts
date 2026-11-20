@@ -31,6 +31,19 @@ export interface Token {
   decimals: number;
 }
 
+/** A stable server code with the values of its placeholders; the console translates it (error.<code>). */
+export interface Coded {
+  code: string;
+  params?: Record<string, unknown>;
+}
+
+/** A rule's texts in another language; an absent text means "use the rule's own". */
+export interface RuleTranslation {
+  name?: string;
+  description?: string;
+  documentation?: string;
+}
+
 export interface NetworkStatus {
   network: NetworkId;
   headBlock: number;
@@ -49,6 +62,8 @@ export interface NetworkStatus {
   simulated?: boolean;
   /** What this instance cannot see or detect on this network (data-source limits). */
   limitations?: string[];
+  /** The same limits as stable codes, in the same order (translated by the console). */
+  limitationCodes?: Coded[];
   /** Timestamp of the last indexed block; null until known (just after a start). Delay as time = now - this. */
   lastIndexedBlockTime?: string | null;
 }
@@ -181,6 +196,7 @@ export interface WalletAnalysis {
   history: HistoryCoverage | null;
   /** What this instance cannot see or detect on this network (data-source limits). */
   limitations?: string[];
+  limitationCodes?: Coded[];
 }
 
 export type HistoryStatus = 'NOT_CONFIGURED' | 'PENDING' | 'RUNNING' | 'COMPLETE' | 'TRUNCATED' | 'FAILED';
@@ -529,6 +545,8 @@ export interface Alert {
   /** Version of the rule that matched (AlertDto.ruleVersion). */
   ruleVersion?: string | null;
   ruleName: string;
+  /** The rule's texts by language (AlertDto.ruleTranslations); empty or absent = English only. */
+  ruleTranslations?: Record<string, RuleTranslation>;
   severity: Severity;
   status: AlertStatus;
   network: NetworkId;
@@ -594,6 +612,12 @@ export interface Rule {
   updatedAt: string;
   /** Why the rule can never fire on this instance (fields or event types never produced); absent/empty = it may fire. */
   unreachableReasons?: string[];
+  /** The same reasons as stable codes, in the same order. */
+  unreachableCodes?: Coded[];
+  description?: string | null;
+  documentation?: string | null;
+  /** The rule's texts by language, from its source; absent texts are left out. */
+  translations?: Record<string, RuleTranslation>;
 }
 
 export interface RuleValidationError {
@@ -729,7 +753,7 @@ export interface Dashboard {
     /** The 5 most severe open alerts, newest first within a severity (spec 2026-11-19 §3). */
     attention?: Alert[];
     /** Alerts created in the last 24 hours, split by rule, largest first. */
-    last24h?: { total: number; byRule: { ruleId: string; ruleName: string; count: number }[] };
+    last24h?: { total: number; byRule: { ruleId: string; ruleName: string; translations?: Record<string, RuleTranslation>; count: number }[] };
   } | null;
   recentSignals: Signal[] | null;
   omittedSections: string[];

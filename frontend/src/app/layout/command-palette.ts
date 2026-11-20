@@ -9,6 +9,7 @@ import { apiResource } from '../shared/api-resource';
 import { shortHash } from '../shared/format';
 import { NAV_ITEMS } from './navigation';
 import { I18nService } from '../core/i18n/i18n.service';
+import { ruleName } from '../shared/rule-text';
 
 export interface PaletteOption {
   id: string;
@@ -137,8 +138,9 @@ export class CommandPalette {
       }
     }
     for (const a of this.alerts.value()?.items ?? []) {
-      if (!t || `${a.ruleName} ${a.id} ${a.address ?? ''}`.toLowerCase().includes(t)) {
-        out.push({ id: `po-al-${a.id}`, group: 'Recent alerts', label: a.ruleName, hint: a.id, severity: a.severity, run: () => this.router.navigate(['/alerts'], { queryParams: { id: a.id } }) });
+      const name = ruleName(a, this.i18n.lang());
+      if (!t || `${name} ${a.ruleName} ${a.id} ${a.address ?? ''}`.toLowerCase().includes(t)) {
+        out.push({ id: `po-al-${a.id}`, group: 'Recent alerts', label: name, hint: a.id, severity: a.severity, run: () => this.router.navigate(['/alerts'], { queryParams: { id: a.id } }) });
       }
     }
     return out;

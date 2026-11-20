@@ -7,6 +7,8 @@ import { apiResource } from '../../shared/api-resource';
 import { netLabel, shortHash, timeAgo } from '../../shared/format';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { Crumb, PageHeader } from '../../shared/page-header';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { ruleName } from '../../shared/rule-text';
 import { TableState } from '../../shared/table-state';
 import { UI, sentence } from '../../shared/ui';
 import { AlertDetail } from './alert-detail';
@@ -31,6 +33,7 @@ export class AlertsPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly shell = inject(Shell);
+  protected readonly i18n = inject(I18nService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** Query params (deep links from Overview and the command palette). */
   readonly statusParam = input<AlertStatus | ''>('', { alias: 'status' });
@@ -65,11 +68,13 @@ export class AlertsPage {
   readonly ago = (iso: string) => timeAgo(iso).replace(' ago', '');
   readonly short = (a: string) => shortHash(a, 6, 4);
   readonly sentence = sentence;
+  /** Rule name in the console's language, from the translations the alert carries. */
+  readonly ruleName = (a: Alert) => ruleName(a, this.i18n.lang());
   readonly netLabel = netLabel;
   readonly t = new TableState<Alert>(
     computed(() => this.list.value()?.items ?? []),
     { severity: (a) => SEV_RANK[a.severity], created: (a) => a.createdAt },
-    (a) => `${a.id} ${a.ruleName} ${a.ruleId} ${a.address ?? ''} ${a.txHash ?? ''} ${a.assignee ?? ''}`,
+    (a) => `${a.id} ${a.ruleName} ${Object.values(a.ruleTranslations ?? {}).map((x) => x.name ?? '').join(' ')} ${a.ruleId} ${a.address ?? ''} ${a.txHash ?? ''} ${a.assignee ?? ''}`,
     { key: 'created', dir: 'desc' },
   );
   /** Highlighted row (keyboard cursor); follows the selection. */

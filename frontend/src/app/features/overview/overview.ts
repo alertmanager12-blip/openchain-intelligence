@@ -5,7 +5,7 @@ import { I18nService, Key, Params } from '../../core/i18n/i18n.service';
 import { fmtDuration, fmtNumber, fmtRelative } from '../../core/i18n/format';
 import { NetworkId, NetworkStatus } from '../../core/models';
 import { apiResource } from '../../shared/api-resource';
-import { ruleDisplayName } from '../../shared/alert-sentence';
+import { ruleText } from '../../shared/rule-text';
 import { networkCoverageSentence } from '../../shared/coverage-text';
 import { netLabel } from '../../shared/format';
 import { MAT_BUTTONS } from '../../shared/material';
@@ -46,7 +46,7 @@ export class OverviewPage {
     const l = this.dash.value()?.alerts?.last24h;
     if (!l) return null;
     const max = Math.max(1, ...l.byRule.map((r) => r.count));
-    return { total: l.total, rules: l.byRule.map((r) => ({ ...r, name: ruleDisplayName(r.ruleId, r.ruleName, this.i18n.lang()), pct: (r.count / max) * 100 })) };
+    return { total: l.total, rules: l.byRule.map((r) => ({ ...r, name: ruleText({ name: r.ruleName, translations: r.translations }, this.i18n.lang()).name, pct: (r.count / max) * 100 })) };
   });
   readonly nets = computed(() => (this.dash.value()?.networks ?? []).filter((n) => n.enabled !== false));
 

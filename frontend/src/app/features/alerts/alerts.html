@@ -42,7 +42,7 @@
               <span class="sev-dot {{ a.severity }}" [attr.title]="sentence(a.severity)"></span>
               <span class="sr-only">{{ sentence(a.severity) }},</span>
               <div class="it-main">
-                <div class="it-title" [attr.title]="a.ruleName">{{ a.ruleName }}</div>
+                <div class="it-title" [attr.title]="ruleName(a)">{{ ruleName(a) }}</div>
                 @if (a.evidenceSummary) { <div class="it-why" [attr.title]="a.evidenceSummary">{{ a.evidenceSummary }}</div> }
                 <div class="it-meta">@if (a.severity === 'CRITICAL' || a.severity === 'HIGH') { <span class="badge sev-{{ a.severity.toLowerCase() }}" aria-hidden="true">{{ sentence(a.severity) }}</span> }<span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.evidenceState === 'WITHDRAWN') { <span class="badge sev-critical" title="Every transaction behind this alert left the canonical chain">No valid evidence</span> } @else if (a.evidenceState === 'PARTIALLY_WITHDRAWN') { <span class="badge sev-medium" title="Some matched events left the canonical chain">Evidence partly withdrawn</span> }
                   @if (a.address) { <span class="mono it-wallet" [attr.title]="a.address"><span class="sr-only">Wallet </span>{{ short(a.address) }}</span> } @else { <span class="muted">No wallet</span> }<span>{{ netLabel(a.network) }}</span></div>

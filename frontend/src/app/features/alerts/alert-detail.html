@@ -15,7 +15,7 @@
       <button matButton="outlined" type="button" [attr.aria-expanded]="assigning()" aria-controls="assign-form" (click)="assigning.set(!assigning())">Assign</button>
     </div>
   </div>
-  <h2 id="pane-title">{{ a.ruleName }}</h2>
+  <h2 id="pane-title">{{ title() }}</h2>
   @for (l of lines(); track $index) { <oci-evidence-line class="finding" [level]="l.level" [text]="l.text" [detail]="l.detail ?? null" /> }
   <div class="meta">
     <oci-severity [value]="a.severity" /><span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span><oci-evidence [value]="a.evidenceLevel" />

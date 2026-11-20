@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ApiError, toApiError } from './api-error';
+import { ApiError, errorText, fieldErrorText, toApiError } from './api-error';
 import { ApiService } from './api.service';
 import { authInterceptor, errorInterceptor } from './interceptors';
 import { SettingsService } from './settings.service';
@@ -96,5 +96,42 @@ describe('ApiService over HTTP', () => {
     const g = http.expectOne((r) => r.url === '/api/v1/graph/a%2Fb');
     expect(g.request.params.get('depth')).toBe('2');
     expect(g.request.params.has('token')).toBe(false);
+  });
+});
+
+describe('errorText', () => {
+  const problem = (extra: Record<string, unknown>) => toApiError(new HttpErrorResponse({
+    status: 422, headers: problemHeaders, error: { title: 'Request validation failed', status: 422, detail: 'server english', ...extra },
+  }));
+
+  it('translates a known code with its params, in either language', () => {
+    const e = problem({ code: 'network.not_enabled', params: { network: 'solana' } });
+    expect(errorText(e, 'en')).toBe("network 'solana' is not enabled on this instance");
+    expect(errorText(e, 'fr')).toBe('le réseau «\u202fsolana\u202f» n\'est pas activé sur cette instance');
+  });
+
+  it('shows the server detail, never a raw key, for a code this console does not know', () => {
+    const e = problem({ code: 'brand.new_code', params: {} });
+    expect(errorText(e, 'fr')).toBe('server english');
+    expect(errorText(e, 'fr')).not.toContain('error.');
+  });
+
+  it('falls back to the title without code or detail', () => {
+    expect(errorText(new ApiError(500, 'Server error', null), 'fr')).toBe('Server error');
+  });
+
+  it('translates field errors by their code and keeps the message otherwise', () => {
+    const e = problem({ errors: [
+      { pointer: '/network', code: 'field.unsupported_network', params: {}, message: 'network not enabled' },
+      { pointer: '/x', code: 'field.future', params: {}, message: 'future english' },
+      { pointer: '/y', message: 'plain' },
+    ] });
+    expect(e.fieldErrors.map((f) => fieldErrorText(f, 'fr'))).toEqual(['réseau non activé', 'future english', 'plain']);
+    expect(fieldErrorText(e.fieldErrors[0], 'en')).toBe('network not enabled');
+  });
+
+  it('renders list and number params as text', () => {
+    const e = problem({ code: 'param.out_of_range', params: { param: 'limit', min: 1, max: 1000 } });
+    expect(errorText(e, 'fr')).toBe('limit doit être compris entre 1 et 1\u202f000');
   });
 });

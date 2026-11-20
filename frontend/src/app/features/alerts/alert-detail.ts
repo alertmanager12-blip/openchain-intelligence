@@ -8,7 +8,9 @@ import { Observable, firstValueFrom } from 'rxjs';
 import { ApiError, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { Alert, AlertStatus } from '../../core/models';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { Toasts } from '../../core/toasts';
+import { ruleName } from '../../shared/rule-text';
 import { timeAgo } from '../../shared/format';
 import { MAT_FORM } from '../../shared/material';
 import { UI, sentence } from '../../shared/ui';
@@ -42,7 +44,10 @@ import { alertLines } from './alert-lines';
 export class AlertDetail {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  private readonly i18n = inject(I18nService);
   readonly alert = input.required<Alert>();
+  /** Rule name in the console's language. */
+  readonly title = computed(() => ruleName(this.alert(), this.i18n.lang()));
   /** The finding of the alert with its level of proof (spec 2026-11-18). */
   readonly lines = computed(() => alertLines(this.alert()));
   readonly updated = output<Alert>();

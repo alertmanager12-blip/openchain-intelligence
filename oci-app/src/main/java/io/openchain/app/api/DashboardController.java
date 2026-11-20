@@ -209,6 +209,7 @@ public class DashboardController {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("ruleId", r.ruleId());
             m.put("ruleName", rules.find(r.ruleId()).map(s -> s.current().rule().name()).orElse(r.ruleId()));
+            m.put("translations", rules.find(r.ruleId()).map(s -> s.current().rule().translations()).orElse(Map.of()));
             m.put("count", r.createdSince());
             byRule.add(m);
             total += r.createdSince();

@@ -1,9 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { Lang, Params, hasKey, translate } from './i18n/i18n.service';
+import type { Coded } from './models';
 
 export interface FieldError {
   /** JSON pointer or field name the error refers to, when the server provided one. */
   field: string;
   message: string;
+  /** Stable code (`field.*` or `rule.*`) and its placeholder values, when the server sent them. */
+  code?: string;
+  params?: Record<string, unknown>;
 }
 
 /** Normalised API error, built from an RFC 9457 problem+json response when available. */
@@ -15,6 +20,9 @@ export class ApiError extends Error {
     readonly type: string = 'about:blank',
     readonly instance: string | null = null,
     readonly fieldErrors: FieldError[] = [],
+    /** Stable problem code (api/codes.json) and its placeholder values; null for an older server or a client-side error. */
+    readonly code: string | null = null,
+    readonly params: Record<string, unknown> = {},
   ) {
     super(detail ? `${title}: ${detail}` : title);
     this.name = 'ApiError';
@@ -58,16 +66,24 @@ function parseBody(body: unknown): Record<string, unknown> | null {
   return null;
 }
 
+function paramsOf(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 /** Problem extensions commonly used for field errors: `errors` (array or map) or `invalid-params`. */
 function fieldErrorsOf(p: Record<string, unknown>): FieldError[] {
   const raw = p['errors'] ?? p['invalid-params'] ?? p['invalidParams'];
   if (Array.isArray(raw)) {
     return raw
       .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
-      .map((e) => ({
-        field: str(e['pointer']) ?? str(e['field']) ?? str(e['name']) ?? str(e['path']) ?? '',
-        message: str(e['detail']) ?? str(e['message']) ?? str(e['reason']) ?? 'Invalid value',
-      }));
+      .map((e) => {
+        const code = str(e['code']);
+        return {
+          field: str(e['pointer']) ?? str(e['field']) ?? str(e['name']) ?? str(e['path']) ?? '',
+          message: str(e['detail']) ?? str(e['message']) ?? str(e['reason']) ?? 'Invalid value',
+          ...(code ? { code, params: paramsOf(e['params']) } : {}),
+        };
+      });
   }
   if (raw && typeof raw === 'object') {
     return Object.entries(raw as Record<string, unknown>).map(([field, m]) => ({ field, message: String(m) }));
@@ -90,6 +106,8 @@ export function toApiError(err: unknown): ApiError {
         str(p['type']) ?? 'about:blank',
         str(p['instance']),
         fieldErrorsOf(p),
+        str(p['code']),
+        paramsOf(p['params']),
       );
     }
     const detail = status === 0 ? 'The API could not be reached. Check your connection or the backend URL.' : (p && str(p['message'])) ?? null;
@@ -97,4 +115,37 @@ export function toApiError(err: unknown): ApiError {
   }
   if (err instanceof Error) return new ApiError(-1, 'Unexpected error', err.message);
   return new ApiError(-1, 'Unexpected error', String(err));
+}
+
+/** Placeholder values as the dictionary takes them: numbers stay numbers, lists and sets read as text. */
+function textParams(params: Record<string, unknown> | undefined): Params {
+  const out: Params = {};
+  for (const [k, v] of Object.entries(params ?? {})) {
+    out[k] = typeof v === 'number' || typeof v === 'string' ? v : Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '' : String(v);
+  }
+  return out;
+}
+
+/**
+ * Text of a server code in the console's language, or null when this console does not know the code (a newer server):
+ * the caller then shows the server's own English wording, never the raw key.
+ */
+export function codeText(code: string | null | undefined, params: Record<string, unknown> | undefined, lang: Lang): string | null {
+  const key = `error.${code}`;
+  return code && hasKey(key) ? translate(lang, key, textParams(params)) : null;
+}
+
+/** Text of a coded item (a limitation, an unreachable reason) in the console's language, else the fallback. */
+export function codedText(c: Coded, lang: Lang, fallback: string): string {
+  return codeText(c.code, c.params, lang) ?? fallback;
+}
+
+/** Message of an API error in the console's language: by its code, else the server's detail, else its title. */
+export function errorText(e: ApiError, lang: Lang): string {
+  return codeText(e.code, e.params, lang) ?? e.detail ?? e.title;
+}
+
+/** Message of one field error in the console's language: by its code, else the server's message. */
+export function fieldErrorText(f: FieldError, lang: Lang): string {
+  return codeText(f.code, f.params, lang) ?? f.message;
 }

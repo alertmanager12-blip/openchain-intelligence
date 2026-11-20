@@ -73,7 +73,9 @@ describe('dictionaries', () => {
   it('leaves no parameter unfilled once rendered', () => {
     for (const k of keys) {
       for (const lang of ['en', 'fr'] as const) {
-        const filled = translate(lang, k, sample);
+        // server codes carry their own placeholders (error.*): fill whatever the English template names
+        const own = Object.fromEntries((typeof en[k] === 'string' ? (en[k].match(/\{(\w+)\}/g) ?? []) : []).map((m) => [m.slice(1, -1), 'x']));
+        const filled = translate(lang, k, { ...own, ...sample });
         expect(filled, `${lang} ${k}`).not.toMatch(/\{\w+\}/);
       }
     }
