@@ -38,17 +38,16 @@ public class BackfillController {
             try {
                 n = Network.fromId(network.strip());
             } catch (IllegalArgumentException e) {
-                throw ApiException.validation("unknown network", List.of(new ApiException.FieldError("network", "invalid_value",
-                        "unknown network '" + network + "'")));
+                throw ApiException.validation(ApiCode.BACKFILL_UNKNOWN_NETWORK, List.of(ApiException.FieldError.of("network", ApiCode.FIELD_UNKNOWN_NETWORK,
+                        Map.of("network", network))));
             }
             if (!backfills.registered(n)) {
-                throw ApiException.notFound("no freeze backfill configured for " + n.id()
-                        + " (needs a real provider and oci.chains." + n.id() + ".freeze-backfill.from-block)");
+                throw ApiException.notFound(ApiCode.BACKFILL_NOT_CONFIGURED_FOR, Map.of("network", n.id()));
             }
             out = List.of(backfills.trigger(n));
         } else {
             out = backfills.statuses().stream().map(s -> backfills.trigger(Network.fromId(s.network()))).toList();
-            if (out.isEmpty()) throw ApiException.conflict("no freeze backfill is configured (oci.chains.<network>.freeze-backfill.from-block)");
+            if (out.isEmpty()) throw ApiException.conflict(ApiCode.BACKFILL_NONE_CONFIGURED);
         }
         ApiKeyService.AUDIT.info("backfill.freezes.trigger networks={} actor={}", out.stream().map(FreezeBackfillService.Status::network).toList(),
                 auth.getName());

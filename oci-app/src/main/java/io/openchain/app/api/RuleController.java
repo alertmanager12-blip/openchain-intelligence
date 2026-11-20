@@ -83,7 +83,7 @@ public class RuleController {
      */
     @GetMapping("/noise")
     public List<Map<String, Object>> noise(@RequestParam(defaultValue = "24") int hours) {
-        if (hours < 1 || hours > 24 * 90) throw ApiException.badRequest("hours must be between 1 and 2160");
+        if (hours < 1 || hours > 24 * 90) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "hours", "min", 1, "max", 2160));
         java.time.Instant since = clock.instant().minus(java.time.Duration.ofHours(hours));
         return alertService.repository().statsByRule(since).stream().map(s -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -136,7 +136,7 @@ public class RuleController {
     public ResponseEntity<String> export(@PathVariable String id, @RequestParam(required = false) Integer version) {
         RuleRegistry.StoredRule r = registry.get(id);
         RuleRegistry.Version v = version == null ? r.current()
-                : r.version(version).orElseThrow(() -> ApiException.notFound("rule " + id + " has no version " + version));
+                : r.version(version).orElseThrow(() -> ApiException.notFound(ApiCode.RULE_VERSION_NOT_FOUND, Map.of("id", id, "version", version)));
         MediaType type = v.format() == Format.JSON ? MediaType.APPLICATION_JSON : YAML;
         return ResponseEntity.ok().contentType(type)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + id + (v.format() == Format.JSON ? ".json" : ".yaml") + "\"")
@@ -183,7 +183,7 @@ public class RuleController {
                                         @RequestHeader(value = HttpHeaders.CONTENT_TYPE, required = false) String contentType) {
         Source s = source(body, contentType);
         RuleLoader.LoadResult r = registry.validate(s.text(), s.format());
-        if (!r.valid()) throw ApiException.validation("Rule source is invalid", RuleErrors.of(r.errors(), ""));
+        if (!r.valid()) throw ApiException.validation(ApiCode.RULE_SOURCE_INVALID, RuleErrors.of(r.errors(), ""));
         CompiledRule c = r.rule();
         EmbeddedTestReport embedded = tester.runEmbeddedTests(c);
         Map<String, Object> out = new LinkedHashMap<>();
@@ -252,16 +252,16 @@ public class RuleController {
                                          Authentication auth) {
         String text = body;
         if (contentType != null && contentType.toLowerCase(Locale.ROOT).contains("json")) text = source(body, contentType).text();
-        if (text == null || text.isBlank()) throw ApiException.badRequest("empty import");
+        if (text == null || text.isBlank()) throw ApiException.badRequest(ApiCode.RULE_IMPORT_EMPTY);
         List<String> docs = new ArrayList<>();
         for (String d : DOC_SEPARATOR.split(text)) if (!d.isBlank()) docs.add(d.strip() + "\n");
-        if (docs.size() > 200) throw ApiException.badRequest("at most 200 rules per import");
+        if (docs.size() > 200) throw ApiException.badRequest(ApiCode.RULE_IMPORT_TOO_MANY, Map.of("max", 200));
         List<ApiException.FieldError> errors = new ArrayList<>();
         for (int i = 0; i < docs.size(); i++) {
             RuleLoader.LoadResult r = registry.validate(docs.get(i), Format.YAML);
             if (!r.valid()) errors.addAll(RuleErrors.of(r.errors(), "/documents/" + i));
         }
-        if (!errors.isEmpty()) throw ApiException.validation("import rejected: invalid document(s), nothing was imported", errors);
+        if (!errors.isEmpty()) throw ApiException.validation(ApiCode.RULE_IMPORT_REJECTED, errors);
         List<Dto.RuleDto> out = new ArrayList<>();
         for (String d : docs) {
             RuleRegistry.StoredRule r = registry.upsert(d, Format.YAML);
@@ -287,7 +287,7 @@ public class RuleController {
     @PostMapping("/test")
     public Map<String, Object> testUnsaved(@RequestBody(required = false) TestRequest req) {
         String src = req == null ? null : req.source() != null ? req.source() : req.yaml();
-        if (src == null || src.isBlank()) throw ApiException.badRequest("'source' (or 'yaml') is required");
+        if (src == null || src.isBlank()) throw ApiException.badRequest(ApiCode.RULE_SOURCE_REQUIRED);
         return dryRun(registry.compile(src, Format.YAML), req);
     }
 
@@ -301,14 +301,14 @@ public class RuleController {
     @PostMapping("/{id}/simulate")
     public Map<String, Object> simulate(@PathVariable String id, @RequestBody(required = false) SimulateRequest req) {
         RuleRegistry.StoredRule stored = registry.get(id);
-        if (req == null || req.source() == null || req.source().isBlank()) throw ApiException.badRequest("'source' (the proposed rule) is required");
+        if (req == null || req.source() == null || req.source().isBlank()) throw ApiException.badRequest(ApiCode.RULE_PROPOSED_SOURCE_REQUIRED);
         CompiledRule current = stored.current().compiled();
         CompiledRule proposed = registry.compile(req.source(), Format.YAML);
-        if (!proposed.id().equals(current.id())) throw ApiException.badRequest("the proposed source must keep the rule id '" + current.id() + "'");
+        if (!proposed.id().equals(current.id())) throw ApiException.badRequest(ApiCode.RULE_ID_MISMATCH, Map.of("id", current.id()));
         Instant to = InvestigationController.instant(req.to(), "to");
         Instant from = InvestigationController.instant(req.from(), "from");
         if (to == null) to = clock.instant();
-        if (from != null && from.isAfter(to)) throw ApiException.badRequest("'from' must be before 'to'");
+        if (from != null && from.isAfter(to)) throw ApiException.badRequest(ApiCode.PARAM_FROM_AFTER_TO);
         Network n = req.network() == null || req.network().isBlank() ? null : InvestigationController.parseNetwork(req.network());
         List<ChainEvent> events = history.range(from, to, n, props.getRules().getMaxDryRunEvents());
 
@@ -356,12 +356,12 @@ public class RuleController {
 
     private Map<String, Object> dryRun(CompiledRule rule, TestRequest req) {
         if (req != null && req.mode() != null && !req.mode().equalsIgnoreCase("DRY_RUN"))
-            throw ApiException.badRequest("only mode DRY_RUN is supported");
+            throw ApiException.badRequest(ApiCode.RULE_MODE_UNSUPPORTED);
         Instant to = req == null ? null : InvestigationController.instant(req.to(), "to");
         Instant from = req == null ? null : InvestigationController.instant(req.from(), "from");
         if (to == null) to = clock.instant();
         if (from == null) from = to.minus(Duration.ofDays(1));
-        if (from.isAfter(to)) throw ApiException.badRequest("'from' must be before 'to'");
+        if (from.isAfter(to)) throw ApiException.badRequest(ApiCode.PARAM_FROM_AFTER_TO);
         Network n = req == null || req.network() == null || req.network().isBlank() ? null : InvestigationController.parseNetwork(req.network());
         List<ChainEvent> events = history.range(from, to, n, props.getRules().getMaxDryRunEvents());
         DryRunReport rep = tester.dryRun(registry.executable(rule), events, DryRunOptions.defaults());
@@ -409,16 +409,16 @@ public class RuleController {
     // ---- helpers ------------------------------------------------------------------------------------------------
 
     private Source source(String body, String contentType) {
-        if (body == null || body.isBlank()) throw ApiException.badRequest("request body is required");
+        if (body == null || body.isBlank()) throw ApiException.badRequest(ApiCode.BODY_REQUEST_REQUIRED);
         String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
         if (ct.contains("yaml") || ct.startsWith("text/plain")) return new Source(body, Format.YAML, null);
         JsonNode root;
         try {
             root = json.readTree(body);
         } catch (JacksonException e) {
-            throw ApiException.badRequest("malformed JSON body");
+            throw ApiException.badRequest(ApiCode.BODY_MALFORMED_JSON);
         }
-        if (root == null || !root.isObject()) throw ApiException.badRequest("JSON body must be an object");
+        if (root == null || !root.isObject()) throw ApiException.badRequest(ApiCode.BODY_NOT_OBJECT);
         for (String k : List.of("source", "yaml")) {
             JsonNode v = root.get(k);
             if (v != null && v.isString()) {
@@ -428,7 +428,8 @@ public class RuleController {
             }
         }
         if (root.has("apiVersion")) return new Source(body, Format.JSON, root);
-        throw ApiException.badRequest("expected {\"source\": \"<yaml>\"}, {\"yaml\": \"<yaml>\"} or a JSON rule document");
+        throw ApiException.badRequest(ApiCode.RULE_BODY_SHAPE,
+                Map.of("source", "{\"source\": \"<yaml>\"}", "yaml", "{\"yaml\": \"<yaml>\"}"));
     }
 
     static Dto.RuleDto dto(RuleRegistry.StoredRule r) {

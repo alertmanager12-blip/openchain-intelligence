@@ -138,7 +138,7 @@ class AlertAndWebhookApiTest extends ApiTestSupport {
         // a Slack connector refuses a non-Slack host
         mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"type\":\"SLACK\",\"name\":\"x\",\"target\":\"https://evil.example/services/x\"}"))
-                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.errors[0].code").value("invalid_target"));
+                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.errors[0].code").value("field.invalid_target"));
     }
 
     @Test
@@ -147,11 +147,11 @@ class AlertAndWebhookApiTest extends ApiTestSupport {
                         .content("{\"type\":\"EMAIL\",\"name\":\"mail\",\"target\":\"soc@example.com\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].pointer").value("/type"))
-                .andExpect(jsonPath("$.errors[0].code").value("unsupported"));
+                .andExpect(jsonPath("$.errors[0].code").value("field.email_unavailable"));
         // no OCI_TELEGRAM_BOT_TOKEN in the test profile
         mvc.perform(post("/api/v1/webhooks").header("X-API-Key", ADMIN).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"type\":\"TELEGRAM\",\"name\":\"tg\",\"target\":\"-1001234567890\"}"))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.errors[0].code").value("not_configured"));
+                .andExpect(jsonPath("$.errors[0].code").value("field.not_configured"));
     }
 }

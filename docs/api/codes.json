@@ -1,0 +1,402 @@
+[
+  {
+    "code": "alert.already_in_status",
+    "template": "alert is already {status}"
+  },
+  {
+    "code": "alert.assignee_too_long",
+    "template": "assignee too long"
+  },
+  {
+    "code": "alert.comment_empty",
+    "template": "comment body must not be empty"
+  },
+  {
+    "code": "alert.comment_too_long",
+    "template": "comment body is limited to {max} characters"
+  },
+  {
+    "code": "alert.not_found",
+    "template": "alert {id} does not exist"
+  },
+  {
+    "code": "alert.reopen_unsupported",
+    "template": "re-opening alerts is not supported: RESOLVED and FALSE_POSITIVE are terminal; a new trigger opens a new alert"
+  },
+  {
+    "code": "alert.status_required",
+    "template": "status is required"
+  },
+  {
+    "code": "alert.status_unknown",
+    "template": "unknown status '{status}'"
+  },
+  {
+    "code": "auth.bearer_unsupported",
+    "template": "bearer tokens other than API keys require OIDC, which is not configured"
+  },
+  {
+    "code": "auth.credentials_in_url",
+    "template": "credentials must not be sent in the URL; use the X-API-Key or Authorization header"
+  },
+  {
+    "code": "auth.invalid_bearer",
+    "template": "invalid bearer token"
+  },
+  {
+    "code": "auth.invalid_key",
+    "template": "invalid, expired or revoked API key"
+  },
+  {
+    "code": "auth.missing_credentials",
+    "template": "missing or invalid credentials"
+  },
+  {
+    "code": "auth.missing_permission",
+    "template": "missing permission for this operation"
+  },
+  {
+    "code": "auth.missing_scope",
+    "template": "missing scope or role"
+  },
+  {
+    "code": "backfill.none_configured",
+    "template": "no freeze backfill is configured (oci.chains.<network>.freeze-backfill.from-block)"
+  },
+  {
+    "code": "backfill.not_configured_for",
+    "template": "no freeze backfill configured for {network} (needs a real provider and oci.chains.{network}.freeze-backfill.from-block)"
+  },
+  {
+    "code": "backfill.unknown_network",
+    "template": "unknown network"
+  },
+  {
+    "code": "body.malformed_json",
+    "template": "malformed JSON body"
+  },
+  {
+    "code": "body.not_object",
+    "template": "JSON body must be an object"
+  },
+  {
+    "code": "body.request_required",
+    "template": "request body is required"
+  },
+  {
+    "code": "body.required",
+    "template": "body is required"
+  },
+  {
+    "code": "connector.invalid",
+    "template": "connector is invalid"
+  },
+  {
+    "code": "error.unexpected",
+    "template": "An unexpected error occurred."
+  },
+  {
+    "code": "field.email_unavailable",
+    "template": "EMAIL connectors are not available: no mail transport is configured in this version"
+  },
+  {
+    "code": "field.exceeds_creator",
+    "template": "you do not hold {permission}"
+  },
+  {
+    "code": "field.in_past",
+    "template": "expiry must be in the future"
+  },
+  {
+    "code": "field.invalid_http_url",
+    "template": "must be an http(s) URL"
+  },
+  {
+    "code": "field.invalid_role",
+    "template": "role must be one of {roles}"
+  },
+  {
+    "code": "field.invalid_target",
+    "template": "{reason}"
+  },
+  {
+    "code": "field.invalid_url",
+    "template": "must be an https URL without credentials"
+  },
+  {
+    "code": "field.malformed_url",
+    "template": "malformed URL"
+  },
+  {
+    "code": "field.max_exceeded",
+    "template": "expiry must be <= {days} days"
+  },
+  {
+    "code": "field.min_length",
+    "template": "{field} needs at least {min} characters"
+  },
+  {
+    "code": "field.not_configured",
+    "template": "TELEGRAM requires OCI_TELEGRAM_BOT_TOKEN on the server"
+  },
+  {
+    "code": "field.required",
+    "template": "{field} is required"
+  },
+  {
+    "code": "field.too_long",
+    "template": "{field} is too long (max {max} characters)"
+  },
+  {
+    "code": "field.unknown_event",
+    "template": "unknown event {event}"
+  },
+  {
+    "code": "field.unknown_network",
+    "template": "unknown network '{network}'"
+  },
+  {
+    "code": "field.unknown_permission",
+    "template": "{reason}"
+  },
+  {
+    "code": "field.unsupported_network",
+    "template": "network not enabled"
+  },
+  {
+    "code": "field.unsupported_type",
+    "template": "supported types: {types}"
+  },
+  {
+    "code": "generic.bad_request",
+    "template": "{reason}"
+  },
+  {
+    "code": "generic.conflict",
+    "template": "{reason}"
+  },
+  {
+    "code": "generic.forbidden",
+    "template": "{reason}"
+  },
+  {
+    "code": "generic.not_found",
+    "template": "{reason}"
+  },
+  {
+    "code": "generic.too_many_requests",
+    "template": "{reason}"
+  },
+  {
+    "code": "graph.event_ids_required",
+    "template": "eventIds is required"
+  },
+  {
+    "code": "graph.invalid_event_id",
+    "template": "invalid eventId"
+  },
+  {
+    "code": "graph.too_many_event_ids",
+    "template": "at most {max} eventIds"
+  },
+  {
+    "code": "http.error",
+    "template": "{reason}"
+  },
+  {
+    "code": "http.malformed_body",
+    "template": "malformed request body"
+  },
+  {
+    "code": "http.no_endpoint",
+    "template": "no endpoint {method} {uri}"
+  },
+  {
+    "code": "investigation.not_finished",
+    "template": "the investigation has not finished"
+  },
+  {
+    "code": "investigation.not_found",
+    "template": "no such investigation"
+  },
+  {
+    "code": "key.not_found",
+    "template": "API key {id} does not exist"
+  },
+  {
+    "code": "key.request_invalid",
+    "template": "API key request is invalid"
+  },
+  {
+    "code": "label.report_invalid",
+    "template": "label report is invalid"
+  },
+  {
+    "code": "label.unknown_category",
+    "template": "unknown label category '{category}'"
+  },
+  {
+    "code": "network.not_enabled",
+    "template": "network '{network}' is not enabled on this instance"
+  },
+  {
+    "code": "network.not_enabled_generic",
+    "template": "network not enabled"
+  },
+  {
+    "code": "network.required",
+    "template": "query parameter 'network' is required"
+  },
+  {
+    "code": "network.required_with_address",
+    "template": "'network' is required with 'address'"
+  },
+  {
+    "code": "network.unknown",
+    "template": "unknown network '{network}'"
+  },
+  {
+    "code": "page.invalid_cursor",
+    "template": "invalid cursor"
+  },
+  {
+    "code": "param.direction_invalid",
+    "template": "direction must be out, in or both"
+  },
+  {
+    "code": "param.from_after_to",
+    "template": "'from' must be before 'to'"
+  },
+  {
+    "code": "param.invalid_timestamp",
+    "template": "'{name}' must be an RFC 3339 timestamp"
+  },
+  {
+    "code": "param.out_of_range",
+    "template": "{param} must be between {min} and {max}"
+  },
+  {
+    "code": "prediction.outcome_invalid",
+    "template": "outcome must be OPEN, REALISED, NOT_REALISED or UNDETERMINED"
+  },
+  {
+    "code": "review.decision_invalid",
+    "template": "decision must be ACCEPTED, REJECTED or NEEDS_EVIDENCE"
+  },
+  {
+    "code": "review.decision_required",
+    "template": "decision is required"
+  },
+  {
+    "code": "rule.body_shape",
+    "template": "expected {source}, {yaml} or a JSON rule document"
+  },
+  {
+    "code": "rule.id_mismatch",
+    "template": "the proposed source must keep the rule id '{id}'"
+  },
+  {
+    "code": "rule.import_empty",
+    "template": "empty import"
+  },
+  {
+    "code": "rule.import_rejected",
+    "template": "import rejected: invalid document(s), nothing was imported"
+  },
+  {
+    "code": "rule.import_too_many",
+    "template": "at most {max} rules per import"
+  },
+  {
+    "code": "rule.invalid",
+    "template": "{reason}"
+  },
+  {
+    "code": "rule.mode_unsupported",
+    "template": "only mode DRY_RUN is supported"
+  },
+  {
+    "code": "rule.not_found",
+    "template": "rule '{id}' does not exist"
+  },
+  {
+    "code": "rule.proposed_source_required",
+    "template": "'source' (the proposed rule) is required"
+  },
+  {
+    "code": "rule.source_invalid",
+    "template": "Rule source is invalid"
+  },
+  {
+    "code": "rule.source_required",
+    "template": "'source' (or 'yaml') is required"
+  },
+  {
+    "code": "rule.version_not_found",
+    "template": "rule {id} has no version {version}"
+  },
+  {
+    "code": "simulation.no_exposure",
+    "template": "category {category} creates no exposure"
+  },
+  {
+    "code": "summary.provider_required",
+    "template": "provider is required"
+  },
+  {
+    "code": "trace.direction_invalid",
+    "template": "direction must be out or in"
+  },
+  {
+    "code": "trace.method_invalid",
+    "template": "method must be PROPORTIONAL or FIFO"
+  },
+  {
+    "code": "trace.not_found",
+    "template": "no such trace"
+  },
+  {
+    "code": "tx.invalid_hash",
+    "template": "invalid transaction hash"
+  },
+  {
+    "code": "tx.not_found",
+    "template": "transaction {hash} not found on {network}"
+  },
+  {
+    "code": "upstream.provider_unavailable",
+    "template": "chain provider unavailable: {reason}"
+  },
+  {
+    "code": "user.not_found",
+    "template": "user {id} does not exist"
+  },
+  {
+    "code": "user.unknown_role",
+    "template": "unknown role"
+  },
+  {
+    "code": "wallet.invalid_address",
+    "template": "invalid address"
+  },
+  {
+    "code": "watchlist.duplicate",
+    "template": "this wallet is already on the watchlist"
+  },
+  {
+    "code": "watchlist.fields_required",
+    "template": "'network' and 'address' are required"
+  },
+  {
+    "code": "watchlist.name_too_long",
+    "template": "'name' is limited to {max} characters"
+  },
+  {
+    "code": "watchlist.not_found",
+    "template": "no watchlist entry '{id}'"
+  },
+  {
+    "code": "webhook.not_found",
+    "template": "webhook {id} does not exist"
+  }
+]

@@ -6,6 +6,7 @@ import io.openchain.core.model.Address;
 import io.openchain.core.model.Network;
 import io.openchain.intelligence.label.LabelCategory;
 import io.openchain.intelligence.simulation.WhatIf;
+import java.util.Map;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,11 +39,11 @@ public class SimulationController {
     @GetMapping("/exposure")
     public WhatIfDto exposure(@RequestParam String network, @RequestParam String address, @RequestParam String category,
                               @RequestParam(defaultValue = "2") int depth) {
-        if (depth < 1 || depth > 4) throw ApiException.badRequest("depth must be between 1 and 4");
+        if (depth < 1 || depth > 4) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "depth", "min", 1, "max", 4));
         Network n = investigation.network(network);
         Address x = investigation.address(n, address);
         LabelCategory c = ApiMapper.category(category);
-        if (!c.risky()) throw ApiException.badRequest("category " + c + " creates no exposure");
+        if (!c.risky()) throw ApiException.badRequest(ApiCode.SIMULATION_NO_EXPOSURE, Map.of("category", c));
         WhatIf.Result r = investigation.whatIf(x, c, depth);
         AddressCoverage.Result cov = investigation.addressCoverage(x);
         String statement = r.exposed().isEmpty()

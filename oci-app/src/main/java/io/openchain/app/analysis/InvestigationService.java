@@ -1,5 +1,6 @@
 package io.openchain.app.analysis;
 
+import io.openchain.app.api.ApiCode;
 import io.openchain.app.api.ApiException;
 import io.openchain.app.api.ApiMapper;
 import io.openchain.app.api.Dto;
@@ -113,32 +114,32 @@ public class InvestigationService {
 
     /** Parses {@code network}; 400 when unknown, 422 when known but not enabled on this instance. */
     public Network network(String id) {
-        if (id == null || id.isBlank()) throw ApiException.badRequest("query parameter 'network' is required");
+        if (id == null || id.isBlank()) throw ApiException.badRequest(ApiCode.NETWORK_REQUIRED);
         Network n;
         try {
             n = Network.fromId(id.trim());
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("unknown network '" + id + "'");
+            throw ApiException.badRequest(ApiCode.NETWORK_UNKNOWN, Map.of("network", id));
         }
         if (chains.runtime(n).isEmpty()) {
-            throw ApiException.validation("network '" + n.id() + "' is not enabled on this instance",
-                    List.of(new ApiException.FieldError("/network", "unsupported_network", "network not enabled")));
+            throw ApiException.validation(ApiCode.NETWORK_NOT_ENABLED, Map.of("network", n.id()),
+                    List.of(ApiException.FieldError.of("/network", ApiCode.FIELD_UNSUPPORTED_NETWORK, Map.of())));
         }
         return n;
     }
 
     public Address address(Network n, String value) {
-        if (value == null || !ADDRESS.matcher(value).matches()) throw ApiException.badRequest("invalid address");
+        if (value == null || !ADDRESS.matcher(value).matches()) throw ApiException.badRequest(ApiCode.WALLET_INVALID_ADDRESS);
         return new Address(n, value);
     }
 
     public String txHash(String value) {
-        if (value == null || !HASH.matcher(value).matches()) throw ApiException.badRequest("invalid transaction hash");
+        if (value == null || !HASH.matcher(value).matches()) throw ApiException.badRequest(ApiCode.TX_INVALID_HASH);
         return value;
     }
 
     private BlockchainProvider provider(Network n) {
-        return chains.provider(n).orElseThrow(() -> ApiException.validation("network not enabled", List.of()));
+        return chains.provider(n).orElseThrow(() -> ApiException.validation(ApiCode.NETWORK_NOT_ENABLED_GENERIC, List.of()));
     }
 
     // ---- risk / labels ------------------------------------------------------------------------------------------
@@ -423,7 +424,7 @@ public class InvestigationService {
     public Dto.TxAnalysisDto transaction(Network n, String hash) {
         BlockchainProvider p = provider(n);
         BlockchainProvider.TransactionReceipt r = p.getTransactionReceipt(hash)
-                .orElseThrow(() -> ApiException.notFound("transaction " + hash + " not found on " + n.id()));
+                .orElseThrow(() -> ApiException.notFound(ApiCode.TX_NOT_FOUND, Map.of("hash", hash, "network", n.id())));
         long head = chains.runtime(n).map(chains::status).map(s -> s.headBlock()).orElse(r.transaction().blockNumber());
         long confirmations = Math.max(0, head - r.transaction().blockNumber());
         Set<Address> parties = new java.util.LinkedHashSet<>();

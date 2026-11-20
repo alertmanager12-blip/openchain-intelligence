@@ -3,6 +3,7 @@ package io.openchain.app.api;
 import io.openchain.app.webhooks.WebhookRegistry;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -38,40 +39,41 @@ public class WebhookController {
         List<ApiException.FieldError> errors = new ArrayList<>();
         String type = req.type() == null || req.type().isBlank() ? "WEBHOOK" : req.type().trim().toUpperCase(java.util.Locale.ROOT);
         if (!WebhookRegistry.TYPES.contains(type)) {
-            errors.add(new ApiException.FieldError("/type", "unsupported",
-                    "EMAIL".equals(type) ? "EMAIL connectors are not available: no mail transport is configured in this version"
-                            : "supported types: " + String.join(", ", WebhookRegistry.TYPES)));
+            errors.add("EMAIL".equals(type) ? ApiException.FieldError.of("/type", ApiCode.FIELD_EMAIL_UNAVAILABLE, Map.of())
+                    : ApiException.FieldError.of("/type", ApiCode.FIELD_UNSUPPORTED_TYPE, Map.of("types", String.join(", ", WebhookRegistry.TYPES))));
         } else if (type.equals("TELEGRAM") && !webhooks.telegramConfigured()) {
-            errors.add(new ApiException.FieldError("/type", "not_configured", "TELEGRAM requires OCI_TELEGRAM_BOT_TOKEN on the server"));
+            errors.add(ApiException.FieldError.of("/type", ApiCode.FIELD_NOT_CONFIGURED, Map.of()));
         }
         String name = req.name() == null ? "" : req.name().strip();
-        if (name.isEmpty() || name.length() > 100) errors.add(new ApiException.FieldError("/name", "required", "name is required (max 100 chars)"));
+        if (name.isEmpty()) errors.add(ApiException.FieldError.of("/name", ApiCode.FIELD_REQUIRED, Map.of("field", "name"), "name is required (max 100 chars)"));
+        else if (name.length() > 100) errors.add(ApiException.FieldError.of("/name", ApiCode.FIELD_TOO_LONG, Map.of("field", "name", "max", 100), "name is required (max 100 chars)"));
         String raw = req.url() != null ? req.url() : req.target();
         String ptr = req.url() != null ? "/url" : "/target";
         String target = raw == null ? "" : raw.strip();
         if (target.isEmpty()) {
-            errors.add(new ApiException.FieldError(ptr, "required", type.equals("TELEGRAM") ? "chat id is required" : "url is required"));
+            errors.add(ApiException.FieldError.of(ptr, ApiCode.FIELD_REQUIRED, Map.of("field", type.equals("TELEGRAM") ? "chat id" : "url")));
         } else if (!type.equals("TELEGRAM")) {
             try {
                 URI uri = new URI(target);
                 if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null)
-                    errors.add(new ApiException.FieldError(ptr, "invalid_url", "must be an https URL without credentials"));
+                    errors.add(ApiException.FieldError.of(ptr, ApiCode.FIELD_INVALID_URL, Map.of()));
             } catch (URISyntaxException e) {
-                errors.add(new ApiException.FieldError(ptr, "invalid_url", "malformed URL"));
+                errors.add(ApiException.FieldError.of(ptr, ApiCode.FIELD_MALFORMED_URL, Map.of()));
             }
         }
         List<String> events = req.events() == null ? List.of() : req.events();
         for (int i = 0; i < events.size(); i++) {
             if (!WebhookRegistry.EVENTS.contains(events.get(i)))
-                errors.add(new ApiException.FieldError("/events/" + i, "unknown_event", "unknown event " + events.get(i)));
+                errors.add(ApiException.FieldError.of("/events/" + i, ApiCode.FIELD_UNKNOWN_EVENT, Map.of("event", String.valueOf(events.get(i)))));
         }
-        if (!errors.isEmpty()) throw ApiException.validation("connector is invalid", errors);
+        if (!errors.isEmpty()) throw ApiException.validation(ApiCode.CONNECTOR_INVALID, errors);
         WebhookRegistry.Created c;
         try {
             c = webhooks.create(type, name, target, events, auth.getName());
         } catch (IllegalArgumentException e) {
             // the connector's own target validation (e.g. Slack host, Telegram chat id format)
-            throw ApiException.validation("connector is invalid", List.of(new ApiException.FieldError(ptr, "invalid_target", e.getMessage())));
+            throw ApiException.validation(ApiCode.CONNECTOR_INVALID, List.of(ApiException.FieldError.of(ptr, ApiCode.FIELD_INVALID_TARGET,
+                    Map.of("reason", String.valueOf(e.getMessage())))));
         }
         return dto(c.webhook(), c.secret());
     }
@@ -81,14 +83,14 @@ public class WebhookController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String id, Authentication auth) {
-        if (!webhooks.delete(id, auth.getName())) throw ApiException.notFound("webhook " + id + " does not exist");
+        if (!webhooks.delete(id, auth.getName())) throw ApiException.notFound(ApiCode.WEBHOOK_NOT_FOUND, Map.of("id", id));
         return ResponseEntity.noContent().build();
     }
 
     /** Sends a signed test notification through the real connector: {@code {delivered, statusCode, message}}. */
     @PostMapping("/{id}/test")
     public WebhookRegistry.TestResult test(@PathVariable String id, Authentication auth) {
-        webhooks.find(id).orElseThrow(() -> ApiException.notFound("webhook " + id + " does not exist"));
+        webhooks.find(id).orElseThrow(() -> ApiException.notFound(ApiCode.WEBHOOK_NOT_FOUND, Map.of("id", id)));
         return webhooks.test(id, auth.getName());
     }
 

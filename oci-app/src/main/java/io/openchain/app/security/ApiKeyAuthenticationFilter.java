@@ -1,5 +1,6 @@
 package io.openchain.app.security;
 
+import io.openchain.app.api.ApiCode;
 import io.openchain.app.api.Problems;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -66,7 +67,7 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
         if (credentialInQuery(req.getQueryString())) {
             Problems.write(req, res, json, HttpStatus.BAD_REQUEST, "bad-request", "Bad request",
-                    "credentials must not be sent in the URL; use the X-API-Key or Authorization header");
+                    ApiCode.AUTH_CREDENTIALS_IN_URL);
             return;
         }
         String apiKey = req.getHeader(API_KEY_HEADER);
@@ -78,7 +79,7 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             Optional<ApiKeyService.KeyPrincipal> p = keys.verify(presented);
             if (p.isEmpty()) {
                 Problems.write(req, res, json, HttpStatus.UNAUTHORIZED, "unauthenticated", "Authentication required",
-                        "invalid, expired or revoked API key");
+                        ApiCode.AUTH_INVALID_KEY);
                 return;
             }
             ApiKeyService.KeyPrincipal k = p.get();
@@ -87,7 +88,7 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.setContext(ctx);
         } else if (bearer != null && !oidcEnabled) {
             Problems.write(req, res, json, HttpStatus.UNAUTHORIZED, "unauthenticated", "Authentication required",
-                    "bearer tokens other than API keys require OIDC, which is not configured");
+                    ApiCode.AUTH_BEARER_UNSUPPORTED);
             return;
         }
         chain.doFilter(req, res);

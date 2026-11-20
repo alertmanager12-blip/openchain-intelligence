@@ -63,7 +63,7 @@ public final class ApiMapper {
         try {
             return LabelCategory.valueOf(s.trim().toUpperCase().replace('-', '_'));
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("unknown label category '" + s + "'");
+            throw ApiException.badRequest(ApiCode.LABEL_UNKNOWN_CATEGORY, Map.of("category", s));
         }
     }
 

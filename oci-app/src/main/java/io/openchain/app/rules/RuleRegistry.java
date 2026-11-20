@@ -71,7 +71,9 @@ public class RuleRegistry {
     }
 
     public static final class UnknownRuleException extends RuntimeException {
-        public UnknownRuleException(String id) { super("rule '" + id + "' does not exist"); }
+        private final String id;
+        public UnknownRuleException(String id) { super("rule '" + id + "' does not exist"); this.id = id; }
+        public String id() { return id; }
     }
 
     private final RuleLoader loader;

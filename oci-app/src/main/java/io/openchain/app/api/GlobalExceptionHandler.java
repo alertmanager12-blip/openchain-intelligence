@@ -7,6 +7,7 @@ import io.openchain.app.rules.RuleRegistry;
 import io.openchain.core.provider.ProviderException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -28,14 +29,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    private static ResponseEntity<ProblemDetail> of(HttpServletRequest req, int status, String type, String title, String detail,
-                                                    List<ApiException.FieldError> errors) {
-        return Problems.entity(Problems.problem(status, type, title, detail, req.getRequestURI(), errors));
+    private static ResponseEntity<ProblemDetail> of(HttpServletRequest req, int status, String type, String title, ApiCode code,
+                                                    Map<String, Object> params, List<ApiException.FieldError> errors) {
+        return Problems.entity(Problems.problem(status, type, title, code, params, req.getRequestURI(), errors));
     }
+
+    private static Map<String, Object> reason(Throwable e) { return Map.of("reason", String.valueOf(e.getMessage())); }
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> api(ApiException e, HttpServletRequest req) {
-        ResponseEntity<ProblemDetail> r = of(req, e.status(), e.type(), e.title(), e.getMessage(), e.errors());
+        ResponseEntity<ProblemDetail> r = of(req, e.status(), e.type(), e.title(), e.code(), e.params(), e.errors());
         if (e instanceof ApiException.RateLimited rl) {
             return ResponseEntity.status(429).headers(r.getHeaders()).header("Retry-After", Long.toString(rl.retryAfterSeconds())).body(r.getBody());
         }
@@ -44,32 +47,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(RuleRegistry.InvalidRuleException.class)
     ResponseEntity<ProblemDetail> invalidRule(RuleRegistry.InvalidRuleException e, HttpServletRequest req) {
-        return of(req, 422, "validation-error", "Request validation failed", e.getMessage(), RuleErrors.of(e.errors(), ""));
+        return of(req, 422, "validation-error", "Request validation failed", ApiCode.RULE_INVALID, reason(e), RuleErrors.of(e.errors(), ""));
     }
 
     @ExceptionHandler(RuleRegistry.UnknownRuleException.class)
     ResponseEntity<ProblemDetail> unknownRule(RuleRegistry.UnknownRuleException e, HttpServletRequest req) {
-        return of(req, 404, "not-found", "Resource not found", e.getMessage(), null);
+        return of(req, 404, "not-found", "Resource not found", ApiCode.RULE_NOT_FOUND, Map.of("id", e.id()), null);
     }
 
     @ExceptionHandler(RuleRegistry.RuleConflictException.class)
     ResponseEntity<ProblemDetail> ruleConflict(RuleRegistry.RuleConflictException e, HttpServletRequest req) {
-        return of(req, 409, "conflict", "Conflict", e.getMessage(), null);
+        return of(req, 409, "conflict", "Conflict", ApiCode.GENERIC_CONFLICT, reason(e), null);
     }
 
     @ExceptionHandler({OptimisticLockException.class, ConcurrentAlertModificationException.class})
     ResponseEntity<ProblemDetail> concurrentModification(RuntimeException e, HttpServletRequest req) {
-        return of(req, 409, "conflict", "Conflict", e.getMessage(), null);
+        return of(req, 409, "conflict", "Conflict", ApiCode.GENERIC_CONFLICT, reason(e), null);
     }
 
     @ExceptionHandler(IllegalAlertTransitionException.class)
     ResponseEntity<ProblemDetail> transition(IllegalAlertTransitionException e, HttpServletRequest req) {
-        return of(req, 409, "conflict", "Illegal alert transition", e.getMessage(), null);
+        return of(req, 409, "conflict", "Illegal alert transition", ApiCode.GENERIC_CONFLICT, reason(e), null);
     }
 
     @ExceptionHandler(ProviderException.class)
     ResponseEntity<ProblemDetail> provider(ProviderException e, HttpServletRequest req) {
-        return of(req, 503, "upstream-unavailable", "Upstream unavailable", "chain provider unavailable: " + e.getMessage(), null);
+        return of(req, 503, "upstream-unavailable", "Upstream unavailable", ApiCode.UPSTREAM_PROVIDER_UNAVAILABLE, reason(e), null);
     }
 
     /**
@@ -82,14 +85,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         int status = statusCode.value();
         String uri = request instanceof ServletWebRequest sw ? sw.getRequest().getRequestURI() : null;
         String method = request instanceof ServletWebRequest sw ? sw.getRequest().getMethod() : "";
-        String detail;
-        if (status == 404) detail = "no endpoint " + method + " " + uri;
-        else if (ex instanceof HttpMessageNotReadableException) detail = "malformed request body";
-        else if (status >= 500) detail = "An unexpected error occurred.";
-        else if (body instanceof ProblemDetail pd && pd.getDetail() != null) detail = pd.getDetail();
-        else detail = ex.getMessage();
+        ApiCode code;
+        Map<String, Object> params;
+        if (status == 404) { code = ApiCode.HTTP_NO_ENDPOINT; params = Map.of("method", method, "uri", String.valueOf(uri)); }
+        else if (ex instanceof HttpMessageNotReadableException) { code = ApiCode.HTTP_MALFORMED_BODY; params = Map.of(); }
+        else if (status >= 500) { code = ApiCode.ERROR_UNEXPECTED; params = Map.of(); }
+        else {
+            code = ApiCode.HTTP_ERROR;
+            params = Map.of("reason", String.valueOf(body instanceof ProblemDetail pd && pd.getDetail() != null ? pd.getDetail() : ex.getMessage()));
+        }
         if (status >= 500) log.error("MVC error on {} {}", method, uri, ex);
-        ProblemDetail p = Problems.problem(status, typeFor(status), titleFor(status), detail, uri, null);
+        ProblemDetail p = Problems.problem(status, typeFor(status), titleFor(status), code, params, uri, null);
         HttpHeaders h = new HttpHeaders();
         if (headers != null) h.putAll(headers);
         h.setContentType(MediaType.APPLICATION_PROBLEM_JSON);
@@ -135,13 +141,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ProblemDetail> denied(AccessDeniedException e, HttpServletRequest req) {
-        return of(req, 403, "forbidden", "Forbidden", "missing scope or role", null);
+        return of(req, 403, "forbidden", "Forbidden", ApiCode.AUTH_MISSING_SCOPE, Map.of(), null);
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> unexpected(Exception e, HttpServletRequest req) {
         // full details in the server log only; the body is generic (no exception message, no stack trace)
-        ProblemDetail p = Problems.problem(500, "internal-error", "Internal server error", "An unexpected error occurred.",
+        ProblemDetail p = Problems.problem(500, "internal-error", "Internal server error", ApiCode.ERROR_UNEXPECTED, Map.of(),
                 req.getRequestURI(), null);
         log.error("unhandled error on {} {} (traceId {})", req.getMethod(), req.getRequestURI(), p.getProperties().get("traceId"), e);
         return Problems.entity(p);
