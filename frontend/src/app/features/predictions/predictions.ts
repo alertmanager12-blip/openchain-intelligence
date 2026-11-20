@@ -131,8 +131,10 @@ export class PredictionsPage {
 
 /** The measured rate with its counts; never presented as established below the threshold. */
 export function rateLine(r: PredictionRate, lang: Lang = 'en'): string {
+  const tk = `predictions.type.${r.type}`;
+  const type = hasKey(tk) ? translate(lang, tk) : r.type;
   const counts = translate(lang, 'predictions.counts', { realised: r.realised, notRealised: r.notRealised, undetermined: r.undetermined });
-  if (r.rate === null) return translate(lang, 'predictions.rateNone', { type: r.type, counts });
+  if (r.rate === null) return translate(lang, 'predictions.rateNone', { type, counts });
   const pct = fmtPercent(r.rate, lang);
-  return translate(lang, r.established ? 'predictions.rateEstablished' : 'predictions.rateSoFar', { type: r.type, pct, min: r.minEvaluated, counts });
+  return translate(lang, r.established ? 'predictions.rateEstablished' : 'predictions.rateSoFar', { type, pct, min: r.minEvaluated, counts });
 }

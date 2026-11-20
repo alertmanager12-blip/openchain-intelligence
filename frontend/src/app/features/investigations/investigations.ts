@@ -380,7 +380,7 @@ export function checksLine(p: RuleProposal, lang: Lang = 'en'): string {
 /** The dry run with the window it actually covered: an empty or short history is said, never hidden. */
 export function dryRunLine(d: ProposalDryRun, lang: Lang = 'en'): string {
   if (d.totalEvents === 0 || !d.from || !d.to) return translate(lang, 'investigations.dryRunNone');
-  return translate(lang, 'investigations.dryRun', { events: String(d.totalEvents), from: utc(d.from), to: utc(d.to), scope: d.eventsInScope, triggers: d.triggers,
+  return translate(lang, 'investigations.dryRun', { events: d.totalEvents, from: utc(d.from), to: utc(d.to), scope: d.eventsInScope, triggers: d.triggers,
     perDay: fmtNumber(d.estimatedAlertsPerDay, lang, 1, 1) });
 }
 

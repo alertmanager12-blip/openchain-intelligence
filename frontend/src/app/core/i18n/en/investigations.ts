@@ -72,7 +72,7 @@ export const investigations = {
   'investigations.template.LISTED_COUNTERPARTY': 'Listed counterparty',
   'investigations.checks': 'Valid, disabled; {examples, plural, one {# example} other {# examples}} passed.',
   'investigations.checksTests': 'Valid, disabled; {examples, plural, one {# example} other {# examples}} and {tests, plural, one {# test} other {# tests}} passed.',
-  'investigations.dryRun': 'Dry run on {events} event(s) from {from} to {to}: {scope} in scope, {triggers} trigger(s), about {perDay} alert(s) per day.',
+  'investigations.dryRun': 'Dry run on {events, plural, one {# event} other {# events}} from {from} to {to}: {scope} in scope, {triggers, plural, one {# trigger} other {# triggers}}, about {perDay} alerts per day.',
   'investigations.dryRunNone': 'Dry run: no event of this network in memory, so nothing could be tested on real traffic.',
   'investigations.adopt': 'Create as disabled rule',
   'investigations.adopted': 'Created (disabled)',
