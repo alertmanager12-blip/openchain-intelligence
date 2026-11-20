@@ -8,6 +8,9 @@ import { mockBackendInterceptor } from '../../core/mock/mock-backend.interceptor
 import { SettingsService } from '../../core/settings.service';
 import { MATERIAL_DEFAULTS } from '../../material-defaults';
 import { AlertsPage } from './alerts';
+import { AlertDetail } from './alert-detail';
+import { ApiService } from '../../core/api.service';
+import { of } from 'rxjs';
 import { alertLines } from './alert-lines';
 import { isoDuration, opSymbol } from './evidence';
 
@@ -89,5 +92,38 @@ describe('Alert helpers in French', () => {
     expect(translate('fr', 'alerts.count', { count: 0 })).toBe('0 alerte');
     expect(translate('fr', 'alerts.count', { count: 2 })).toBe('2 alertes');
     expect(translate('fr', 'alerts.partial.body', { withdrawn: 1, matched: 3, count: 3 })).toContain('1 sur 3 événements correspondants ont quitté');
+  });
+});
+
+describe('Engine sentences as main content in French', () => {
+  beforeEach(() => {
+    localStorage.setItem('oci.lang', 'fr');
+    TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: ApiService, useValue: { walletRisk: () => of({ address: 'a', network: 'ethereum', score: 40, level: 'MEDIUM',
+      method: 'm', methodSummary: 'm', modelVersion: 't', computedAt: new Date().toISOString(),
+      contributions: [{ factor: 'signal:RAPID_DRAIN', signalId: null, source: 's', weight: 1, confidence: 1, ageSeconds: 1, points: 4, explanation: 'x', evidenceLevel: 'RISK_SIGNAL', title: 'T', summary: 'Engine contribution sentence' }] }) } }] });
+  });
+  afterEach(() => localStorage.removeItem('oci.lang'));
+
+  it('labels each English engine sentence with "Formulation du moteur" and marks it lang="en"', async () => {
+    const f = TestBed.createComponent(AlertDetail);
+    f.componentRef.setInput('alert', { id: 'al1', ruleId: 'x', ruleName: 'X', severity: 'HIGH', status: 'OPEN', network: 'ethereum', address: '0xabc', txHash: null,
+      counterparty: null, blockNumber: null, summary: 'Engine summary', evidenceSummary: 'Engine evidence sentence', evidenceLevel: 'RISK_SIGNAL', assignee: null,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), matchedEvent: {}, evidence: null, comments: [],
+      history: [{ at: new Date().toISOString(), actor: 'system', action: 'CREATED', detail: 'Rule x v1 matched' }] } as unknown as Alert);
+    await f.whenStable();
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    const label = 'Formulation du moteur';
+    for (const sel of ['.why-first', 'oci-evidence-line .text', '.c-summary']) {
+      const block = el.querySelector(sel)!;
+      expect(block.textContent, sel).toContain(label);
+      expect(block.querySelector('[lang="en"]')?.textContent, sel).toContain('Engine');
+    }
+    f.componentInstance.tab.set(1);
+    await f.whenStable();
+    await new Promise((r) => setTimeout(r, 50));
+    f.detectChanges();
+    expect(el.querySelector('.timeline li > .small:last-child')?.textContent).toContain(label);
+    f.destroy();
   });
 });

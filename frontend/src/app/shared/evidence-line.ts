@@ -14,7 +14,7 @@ import { Level, levelWord } from './levels';
   template: `
     <div class="line lvl-{{ level().toLowerCase() }}">
       <span class="lvl">{{ word() }}</span>
-      <span class="text" [attr.lang]="textLang()">{{ text() }}</span>
+      <span class="text">@if (textLang() === 'en') { <oci-engine-text [text]="text()" /> } @else { {{ text() }} }</span>
       @if (detail()) { <span class="detail">{{ detail() }}</span> }
       @if (original()) { <oci-engine-text class="orig" mode="collapsed" [text]="original()!" /> }
       @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }

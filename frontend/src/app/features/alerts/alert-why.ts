@@ -21,7 +21,7 @@ import { compareScale, fmtStamp, isoDuration, opSymbol, parseCondition, parseEve
   template: `
     <h3 id="h-why">{{ t('alerts.why.title') }}</h3>
     @if (alert().evidenceSummary) {
-      <p class="why-first" [attr.lang]="english() ? 'en' : null">{{ sentence() }}</p>
+      @if (english()) { <p class="why-first"><oci-engine-text [text]="sentence()" /></p> } @else { <p class="why-first">{{ sentence() }}</p> }
       @if (original(); as o) { <oci-engine-text class="small" mode="collapsed" [text]="o" /> }
     }
     <dl class="subject">
@@ -94,7 +94,7 @@ import { compareScale, fmtStamp, isoDuration, opSymbol, parseCondition, parseEve
             <caption class="sr-only">{{ t('alerts.why.contribCaption') }}</caption>
             <thead><tr><th scope="col">{{ t('alerts.why.topContrib') }}</th><th scope="col">{{ t('alerts.why.evidence') }}</th><th scope="col" class="right">{{ t('alerts.why.points') }}</th></tr></thead>
             <tbody>@for (c of top(); track c.factor) {
-              <tr><td><span class="strong">{{ cTitle(c) }}</span>@if (cSummary(c); as sm) { <div class="sub c-summary" [attr.lang]="fr() ? 'en' : null">{{ sm }}</div> }
+              <tr><td><span class="strong">{{ cTitle(c) }}</span>@if (cSummary(c); as sm) { <div class="sub c-summary">@if (fr()) { <oci-engine-text [text]="sm" /> } @else { {{ sm }} }</div> }
                 <oci-tech><span>{{ t('alerts.why.factor', { factor: c.factor, source: c.source }) }}</span>@if (c.explanation) { <span class="mono">{{ c.explanation }}</span> }</oci-tech></td>
                 <td><oci-evidence [value]="c.evidenceLevel" /></td><td class="right strong">{{ c.points > 0 ? '+' : '' }}{{ c.points }}</td></tr>
             }</tbody>

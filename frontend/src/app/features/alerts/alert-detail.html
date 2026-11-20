@@ -67,7 +67,7 @@
           @for (h of a.history; track $index) {
             <li><span class="strong">{{ action(h.action) }}</span><span class="muted">&#32;{{ i18n.t('alerts.by', { actor: h.actor }) }}</span>
               <div class="small muted"><time [attr.datetime]="h.at">{{ stamp(h.at) }} UTC</time>, {{ ago(h.at) }}</div>
-              @if (h.detail) { <div class="small" [attr.lang]="fr() && h.action === 'CREATED' ? 'en' : null">{{ h.detail }}</div> }</li>
+              @if (h.detail) { <div class="small">@if (fr() && h.action === 'CREATED') { <oci-engine-text [text]="h.detail" /> } @else { {{ h.detail }} }</div> }</li>
           }
         </ol>
       </section>
