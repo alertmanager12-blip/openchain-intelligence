@@ -34,6 +34,7 @@ export const landing = {
   'landing.foot.license': 'License: Apache-2.0',
   'landing.foot.copyright': '© {year} ChainSentinel contributors',
   'landing.foot.caveat': 'Signals are evidence for review, not proof of wrongdoing.',
+  'landing.docTitle': 'ChainSentinel – The open intelligence engine for blockchain',
   'landing.hero.pill': 'Open source blockchain intelligence',
   'landing.hero.title': 'See Beyond Blockchain Transactions.',
   'landing.hero.sub': 'Understand blockchain activity, uncover hidden relationships, detect suspicious behavior and automate investigations with an open intelligence platform.',

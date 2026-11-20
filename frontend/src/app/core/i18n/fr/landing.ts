@@ -31,6 +31,7 @@ export const landing: Record<keyof typeof en, Entry> = {
   'landing.foot.license': 'Licence : Apache-2.0',
   'landing.foot.copyright': '© {year} les contributeurs de ChainSentinel',
   'landing.foot.caveat': 'Les signaux sont des éléments à examiner, pas la preuve d’un acte répréhensible.',
+  'landing.docTitle': 'ChainSentinel – Le moteur d’intelligence ouvert pour la blockchain',
   'landing.hero.pill': 'Intelligence blockchain open source',
   'landing.hero.title': 'Voyez au-delà des transactions blockchain.',
   'landing.hero.sub': 'Comprenez l’activité des blockchains, révélez les liens cachés, détectez les comportements suspects et automatisez vos enquêtes avec une plateforme d’intelligence ouverte.',

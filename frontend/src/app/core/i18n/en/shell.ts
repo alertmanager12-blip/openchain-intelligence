@@ -4,6 +4,7 @@ import type { Entry } from '../i18n.service';
 export const prefixes = ['shell.', 'nav.', 'palette.', 'help.', 'state.'] as const;
 
 export const shell = {
+  'shell.docTitle': '{page} – ChainSentinel',
   'shell.skip': 'Skip to content',
   'shell.sidebar': 'Sidebar',
   'shell.primary': 'Primary',

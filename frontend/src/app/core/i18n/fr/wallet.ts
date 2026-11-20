@@ -3,6 +3,7 @@ import type { wallet as enWallet } from '../en/wallet';
 
 export const wallet: Record<keyof typeof enWallet, Entry> = {
   // header and identity
+  'wallet.docTitle': 'Portefeuille',
   'wallet.crumb': 'Portefeuilles',
   'wallet.watch': 'Surveiller',
   'wallet.unwatch': 'Ne plus surveiller',
