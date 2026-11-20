@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { LANDING_COPY } from './landing-content';
 
 @Component({
@@ -26,13 +27,13 @@ import { LANDING_COPY } from './landing-content';
     <section class="cs-section" aria-labelledby="problem-title">
       <div class="cs-wrap pb-grid">
         <div>
-          <h2 class="cs-h2" id="problem-title">{{ copy.title }}</h2>
-          <p class="cs-lede">{{ copy.lede }}</p>
-          <p class="answer">{{ copy.answer }}</p>
+          <h2 class="cs-h2" id="problem-title">{{ i18n.t(copy.title) }}</h2>
+          <p class="cs-lede">{{ i18n.t(copy.lede) }}</p>
+          <p class="answer">{{ i18n.t(copy.answer) }}</p>
         </div>
         <dl>
           @for (p of copy.pains; track p.title) {
-            <div class="pain"><dt>{{ p.title }}</dt><dd>{{ p.text }}</dd></div>
+            <div class="pain"><dt>{{ i18n.t(p.title) }}</dt><dd>{{ i18n.t(p.text) }}</dd></div>
           }
         </dl>
       </div>
@@ -40,5 +41,6 @@ import { LANDING_COPY } from './landing-content';
   `,
 })
 export class ProblemSection {
+  protected readonly i18n = inject(I18nService);
   protected readonly copy = LANDING_COPY.problem;
 }

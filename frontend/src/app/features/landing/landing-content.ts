@@ -1,112 +1,117 @@
+import type { Key } from '../../core/i18n/i18n.service';
+
 /**
- * Landing page copy (English). Every capability listed here was checked against the code on 2026-11-09; items marked
- * `planned` are on the roadmap (docs/strategy/FEATURE_ROADMAP.md) and are shown as such. A French version can be added as
- * another object of the same type and selected by locale.
+ * Landing page structure. The texts live in the dictionaries (core/i18n/en|fr/landing.ts, keys `landing.*`): English and
+ * French make the same claims. Every capability listed here was checked against the code on 2026-11-09; items marked
+ * `planned` are on the roadmap (docs/strategy/FEATURE_ROADMAP.md) and are shown as such.
  */
 export type Availability = 'available' | 'partial' | 'planned';
 
 export interface Capability {
-  readonly title: string;
-  readonly detail: string;
+  readonly title: Key;
+  readonly detail: Key;
   readonly status: Availability;
 }
 
 export interface Pillar {
   readonly id: string;
-  readonly verb: string;
-  readonly name: string;
-  readonly summary: string;
+  readonly verb: Key;
+  readonly name: Key;
+  readonly summary: Key;
   readonly items: readonly Capability[];
 }
 
 export interface Step {
-  readonly name: string;
-  readonly summary: string;
-  readonly detail: string;
+  readonly id: string;
+  readonly name: Key;
+  readonly summary: Key;
+  readonly detail: Key;
 }
 
 export interface UseCase {
-  readonly who: string;
-  readonly value: string;
+  readonly who: Key;
+  readonly value: Key;
 }
 
-export const LANDING_COPY = {
+export interface Pain {
+  readonly title: Key;
+  readonly text: Key;
+}
+
+export interface LandingCopy {
+  readonly problem: { readonly title: Key; readonly lede: Key; readonly answer: Key; readonly pains: readonly Pain[] };
+  readonly pillars: readonly Pillar[];
+  readonly steps: readonly Step[];
+  readonly useCases: readonly UseCase[];
+}
+
+export const LANDING_COPY: LandingCopy = {
   problem: {
-    title: "Blockchain transparency doesn’t mean transaction intelligence.",
-    lede:
-      'Every transfer is public, yet turning raw blocks into a decision still takes hours. Teams face the same obstacles:',
+    title: 'landing.problem.title',
+    lede: 'landing.problem.lede',
     pains: [
-      { title: 'Volume', text: 'Millions of transfers a day, with no context on who sent what, or why.' },
-      { title: 'Hidden links', text: 'Wallets act together through splits, relays and round trips that a block explorer does not show.' },
-      { title: 'Moving targets', text: 'Behavior changes faster than static blocklists are updated.' },
-      { title: 'Scattered signals', text: 'Evidence sits in different tools, chains and spreadsheets.' },
-      { title: 'Manual investigations', text: 'Tracing funds hop by hop is slow and hard to reproduce.' },
-      { title: 'Alerts without reasons', text: 'A score with no explanation cannot be defended to a customer or an auditor.' },
+      { title: 'landing.pain.volume.t', text: 'landing.pain.volume.d' },
+      { title: 'landing.pain.hidden.t', text: 'landing.pain.hidden.d' },
+      { title: 'landing.pain.moving.t', text: 'landing.pain.moving.d' },
+      { title: 'landing.pain.scattered.t', text: 'landing.pain.scattered.d' },
+      { title: 'landing.pain.manual.t', text: 'landing.pain.manual.d' },
+      { title: 'landing.pain.reasons.t', text: 'landing.pain.reasons.d' },
     ],
-    answer:
-      'ChainSentinel indexes the chains itself, profiles every wallet it sees, explains each risk signal with the transactions behind it, and turns your rules into alerts.',
+    answer: 'landing.problem.answer',
   },
 
   pillars: [
     {
-      id: 'understand', verb: 'Understand', name: 'Blockchain intelligence',
-      summary: 'Turn indexed transfers into wallet profiles, counterparties and an explainable risk score.',
+      id: 'understand', verb: 'landing.pillar.understand.verb', name: 'landing.pillar.understand.name', summary: 'landing.pillar.understand.summary',
       items: [
-        { title: 'Wallet analysis', detail: 'Activity, tokens, counterparties and first/last seen for any indexed address.', status: 'available' },
-        { title: 'Transaction intelligence', detail: 'Per-transaction analysis of the value flows and the parties involved.', status: 'available' },
-        { title: 'Behavioral signals', detail: 'Ten detectors, each signal carrying its evidence and evidence level.', status: 'available' },
-        { title: 'Risk assessment', detail: 'A 0–100 score with every contribution, its weight and its age, shown in plain language.', status: 'available' },
+        { title: 'landing.item.wallet.t', detail: 'landing.item.wallet.d', status: 'available' },
+        { title: 'landing.item.tx.t', detail: 'landing.item.tx.d', status: 'available' },
+        { title: 'landing.item.behavior.t', detail: 'landing.item.behavior.d', status: 'available' },
+        { title: 'landing.item.risk.t', detail: 'landing.item.risk.d', status: 'available' },
       ],
     },
     {
-      id: 'predict', verb: 'Predict', name: 'Threat detection',
-      summary: 'Early-warning signals, not verdicts: each one says what was observed and how strong the evidence is.',
+      id: 'predict', verb: 'landing.pillar.predict.verb', name: 'landing.pillar.predict.name', summary: 'landing.pillar.predict.summary',
       items: [
-        { title: 'Suspicious behavior', detail: 'Structuring, fan-out, fast forwarding and circular flows.', status: 'available' },
-        { title: 'Wallet draining', detail: 'Rapid outflows checked against real balances on EVM networks. Not on TRON yet: no historical balance there.', status: 'partial' },
-        { title: 'Anomaly detection', detail: 'Unusual amounts, unusual approvals, dormant wallets waking up, contract ownership changes.', status: 'available' },
-        { title: 'Predictive scoring', detail: 'Signals that anticipate an incident before funds move, with simulation.', status: 'planned' },
+        { title: 'landing.item.suspicious.t', detail: 'landing.item.suspicious.d', status: 'available' },
+        { title: 'landing.item.drain.t', detail: 'landing.item.drain.d', status: 'partial' },
+        { title: 'landing.item.anomaly.t', detail: 'landing.item.anomaly.d', status: 'available' },
+        { title: 'landing.item.scoring.t', detail: 'landing.item.scoring.d', status: 'planned' },
       ],
     },
     {
-      id: 'investigate', verb: 'Investigate', name: 'Graph intelligence',
-      summary: 'Follow the money across wallets and see who is connected to whom.',
+      id: 'investigate', verb: 'landing.pillar.investigate.verb', name: 'landing.pillar.investigate.name', summary: 'landing.pillar.investigate.summary',
       items: [
-        { title: 'Wallet relationships', detail: 'Counterparties and the volumes exchanged with each of them.', status: 'available' },
-        { title: 'Investigation graph', detail: 'An interactive fund-flow graph you can expand, filter by token and date, and export.', status: 'available' },
-        { title: 'Multi-hop exposure', detail: 'Indirect exposure to labeled wallets, up to three hops away.', status: 'available' },
-        { title: 'Path tracing and cases', detail: 'Shortest paths between wallets and reproducible investigation cases.', status: 'planned' },
+        { title: 'landing.item.relations.t', detail: 'landing.item.relations.d', status: 'available' },
+        { title: 'landing.item.graph.t', detail: 'landing.item.graph.d', status: 'available' },
+        { title: 'landing.item.hops.t', detail: 'landing.item.hops.d', status: 'available' },
+        { title: 'landing.item.paths.t', detail: 'landing.item.paths.d', status: 'planned' },
       ],
     },
     {
-      id: 'act', verb: 'Act', name: 'Automated response',
-      summary: 'Send the right alert to the right place, and let your own systems take it from there.',
+      id: 'act', verb: 'landing.pillar.act.verb', name: 'landing.pillar.act.name', summary: 'landing.pillar.act.summary',
       items: [
-        { title: 'Real-time alerts', detail: 'An alert inbox with acknowledgement, assignment, comments and escalation.', status: 'available' },
-        { title: 'Notifications', detail: 'Telegram, Slack, Discord and signed webhooks (HMAC-SHA256).', status: 'available' },
-        { title: 'Custom detection rules', detail: 'Rules as YAML or from a visual builder, tested on past events before you enable them.', status: 'available' },
-        { title: 'API integrations', detail: 'A REST API with scoped API keys or OIDC tokens. Email notifications are planned.', status: 'available' },
+        { title: 'landing.item.alerts.t', detail: 'landing.item.alerts.d', status: 'available' },
+        { title: 'landing.item.notify.t', detail: 'landing.item.notify.d', status: 'available' },
+        { title: 'landing.item.rules.t', detail: 'landing.item.rules.d', status: 'available' },
+        { title: 'landing.item.api.t', detail: 'landing.item.api.d', status: 'available' },
       ],
     },
-  ] satisfies readonly Pillar[],
+  ],
 
   steps: [
-    { name: 'Connect', summary: 'Plug in the chains you care about.',
-      detail: 'Point ChainSentinel at a TRON or EVM node. It indexes new blocks continuously and resumes where it stopped after a restart.' },
-    { name: 'Analyze', summary: 'Every transfer becomes a value flow.',
-      detail: 'Tokens and native coins are normalized, wallets are profiled and counterparties linked as blocks arrive.' },
-    { name: 'Detect', summary: 'Detectors and your rules run on each flow.',
-      detail: 'Signals come with their evidence. Your rules combine them with amounts, labels and the watchlist.' },
-    { name: 'Respond', summary: 'Alerts reach your team and your systems.',
-      detail: 'An alert lands in the inbox and in Telegram, Slack, Discord or a webhook, with a link back to the wallet to investigate.' },
-  ] satisfies readonly Step[],
+    { id: 'connect', name: 'landing.step.connect.name', summary: 'landing.step.connect.sum', detail: 'landing.step.connect.det' },
+    { id: 'analyze', name: 'landing.step.analyze.name', summary: 'landing.step.analyze.sum', detail: 'landing.step.analyze.det' },
+    { id: 'detect', name: 'landing.step.detect.name', summary: 'landing.step.detect.sum', detail: 'landing.step.detect.det' },
+    { id: 'respond', name: 'landing.step.respond.name', summary: 'landing.step.respond.sum', detail: 'landing.step.respond.det' },
+  ],
 
   useCases: [
-    { who: 'Crypto exchanges', value: 'Watch deposit and hot wallets, and get alerted when funds arrive from wallets showing draining or splitting patterns.' },
-    { who: 'Fintech and payment platforms', value: 'Screen stablecoin counterparties on TRON and Ethereum before crediting or paying out.' },
-    { who: 'Blockchain security teams', value: 'Spot approvals, ownership changes and rapid outflows around the contracts and wallets you protect.' },
-    { who: 'Compliance and AML teams', value: 'Document why a wallet was flagged: every score lists its signals, evidence and age. The decision stays with your analysts.' },
-    { who: 'Web3 applications', value: 'Query wallet risk from your backend through the API before you let a wallet interact with your product.' },
-    { who: 'Blockchain researchers', value: 'Run the detectors on your own infrastructure, read how each one works, and change or extend them.' },
-  ] satisfies readonly UseCase[],
-} as const;
+    { who: 'landing.use.exchange.who', value: 'landing.use.exchange.value' },
+    { who: 'landing.use.fintech.who', value: 'landing.use.fintech.value' },
+    { who: 'landing.use.security.who', value: 'landing.use.security.value' },
+    { who: 'landing.use.aml.who', value: 'landing.use.aml.value' },
+    { who: 'landing.use.web3.who', value: 'landing.use.web3.value' },
+    { who: 'landing.use.research.who', value: 'landing.use.research.value' },
+  ],
+};

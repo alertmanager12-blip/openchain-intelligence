@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 
-interface LogLine { readonly at: string; readonly text: string; readonly tag?: string; readonly delay: number; readonly risk?: boolean }
+interface LogLine { readonly at: string; readonly text: Key; readonly tag?: string; readonly delay: number; readonly risk?: boolean }
 
 /**
  * Illustrative fund-flow trace (fictional addresses and amounts, labeled as such): a wallet receives stablecoins,
@@ -50,6 +51,8 @@ interface LogLine { readonly at: string; readonly text: string; readonly tag?: s
     @keyframes appear { from { opacity: 0; transform: translateY(4px); } }
     @keyframes halo { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(2.1); } }
     @media (max-width: 560px) {
+      .head { flex-wrap: wrap; row-gap: 8px; }
+      .head .sp { display: none; }
       .lbl { font-size: 21px; }
       .lbl.minor { display: none; }
       .alert { position: static; margin: 8px; max-width: none; }
@@ -64,15 +67,15 @@ interface LogLine { readonly at: string; readonly text: string; readonly tag?: s
   template: `
     <figure class="panel" aria-labelledby="trace-caption" style="margin: 0">
       <div class="head">
-        <strong id="trace-caption">Fund flow trace</strong><span>Ethereum, USDT</span><span class="sp"></span>
-        <span class="cs-illus">Illustrative data</span>
-        <button class="replay" type="button" (click)="run.update((r) => r + 1)" aria-label="Replay the illustration">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 6a4 4 0 1 0 1.2-2.8M2 1.5v2h2"/></svg>Replay
+        <strong id="trace-caption">{{ i18n.t('landing.trace.title') }}</strong><span>Ethereum, USDT</span><span class="sp"></span>
+        <span class="cs-illus">{{ i18n.t('landing.trace.illus') }}</span>
+        <button class="replay" type="button" (click)="replay()" [attr.aria-label]="i18n.t('landing.trace.replayAria')">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 6a4 4 0 1 0 1.2-2.8M2 1.5v2h2"/></svg>{{ i18n.t('landing.trace.replay') }}
         </button>
       </div>
       @for (r of [run()]; track r) {
         <div class="stage">
-          <svg viewBox="0 0 560 360" role="img" aria-label="Illustration: one wallet splits 250,000 USDT over four wallets, which forward it to a consolidation wallet flagged high risk, then to an exchange deposit wallet.">
+          <svg viewBox="0 0 560 360" role="img" [attr.aria-label]="i18n.t('landing.trace.svgAria')">
             @for (p of fanOut; track $index) { <path class="edge" [attr.d]="p" /> }
             @for (p of fanIn; track $index) { <path class="edge" [attr.d]="p" /> }
             <path class="edge" d="M400 180 L512 180" />
@@ -88,17 +91,17 @@ interface LogLine { readonly at: string; readonly text: string; readonly tag?: s
             <circle class="node exit appear" cx="512" cy="180" r="11" style="animation-delay: 4.9s" />
 
             <text class="lbl strong" x="64" y="148" text-anchor="middle">0x7a3f…c41e</text>
-            <text class="lbl minor" x="64" y="216" text-anchor="middle">250,000 USDT in</text>
-            <text class="lbl minor appear" x="230" y="30" text-anchor="middle" style="animation-delay: 1.2s">4 wallets, 47 s</text>
+            <text class="lbl minor" x="64" y="216" text-anchor="middle">{{ i18n.t('landing.trace.in') }}</text>
+            <text class="lbl minor appear" x="230" y="30" text-anchor="middle" style="animation-delay: 1.2s">{{ i18n.t('landing.trace.hops') }}</text>
             <text class="lbl strong appear" x="400" y="142" text-anchor="middle" style="animation-delay: 2.9s">0x91b2…07da</text>
-            <text class="lbl risk appear" x="400" y="222" text-anchor="middle" style="animation-delay: 3.6s">Risk 78, high</text>
-            <text class="lbl minor appear" x="512" y="212" text-anchor="middle" style="animation-delay: 4.9s">Exchange</text>
+            <text class="lbl risk appear" x="400" y="222" text-anchor="middle" style="animation-delay: 3.6s">{{ i18n.t('landing.trace.risk') }}</text>
+            <text class="lbl minor appear" x="512" y="212" text-anchor="middle" style="animation-delay: 4.9s">{{ i18n.t('landing.trace.exchange') }}</text>
           </svg>
-          <p class="alert" role="presentation"><b>Alert raised: fund-splitting</b><span>Sent to Telegram with a link to the wallet</span></p>
+          <p class="alert" role="presentation"><b>{{ i18n.t('landing.trace.alert') }}</b><span>{{ i18n.t('landing.trace.alertSent') }}</span></p>
         </div>
-        <ol aria-label="Evidence log (illustrative)">
+        <ol [attr.aria-label]="i18n.t('landing.trace.logAria')">
           @for (l of log; track l.at) {
-            <li [class.risk]="l.risk" [style.animation-delay.s]="l.delay"><time>{{ l.at }}</time><span>{{ l.text }}</span>@if (l.tag) { <span class="tag">{{ l.tag }}</span> }</li>
+            <li [class.risk]="l.risk" [style.animation-delay.s]="l.delay"><time>{{ l.at }}</time><span>{{ i18n.t(l.text) }}</span>@if (l.tag) { <span class="tag">{{ l.tag }}</span> }</li>
           }
         </ol>
       }
@@ -106,15 +109,17 @@ interface LogLine { readonly at: string; readonly text: string; readonly tag?: s
   `,
 })
 export class HeroTrace {
+  protected readonly i18n = inject(I18nService);
   protected readonly run = signal(0);
+  protected replay(): void { this.run.update((r) => r + 1); }
   protected readonly hops = [64, 140, 220, 296];
   protected readonly fanOut = this.hops.map((y) => `M64 180 C 150 180, 140 ${y}, 230 ${y}`);
   protected readonly fanIn = this.hops.map((y) => `M230 ${y} C 320 ${y}, 310 180, 400 180`);
   protected readonly log: readonly LogLine[] = [
-    { at: '14:02:11', text: 'Received 250,000 USDT', delay: 0.3 },
-    { at: '14:02:58', text: 'Split over 4 new wallets in 47 s', tag: 'fan-out', delay: 1.3 },
-    { at: '14:05:30', text: 'Consolidated into 0x91b2…07da', delay: 2.9 },
-    { at: '14:05:52', text: '96% forwarded within 22 s', tag: 'fast-forwarding', delay: 3.7, risk: true },
-    { at: '14:06:04', text: 'Sent to an exchange deposit wallet', delay: 4.9 },
+    { at: '14:02:11', text: 'landing.trace.log1', delay: 0.3 },
+    { at: '14:02:58', text: 'landing.trace.log2', tag: 'fan-out', delay: 1.3 },
+    { at: '14:05:30', text: 'landing.trace.log3', delay: 2.9 },
+    { at: '14:05:52', text: 'landing.trace.log4', tag: 'fast-forwarding', delay: 3.7, risk: true },
+    { at: '14:06:04', text: 'landing.trace.log5', delay: 4.9 },
   ];
 }

@@ -19,6 +19,7 @@ import { integrations } from './integrations';
 import { rules } from './rules';
 import { simulator } from './simulator';
 import { settings } from './settings';
+import { landing } from './landing';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -44,4 +45,5 @@ export const fr: Dictionary = {
   ...rules,
   ...simulator,
   ...settings,
+  ...landing,
 };

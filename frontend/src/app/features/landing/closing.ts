@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 import { LANDING_COPY } from './landing-content';
 import { publicLinks } from './public-links';
 
@@ -12,7 +13,7 @@ import { publicLinks } from './public-links';
     :host { display: block; }
     .os { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 64px; align-items: start; }
     .license { display: inline-flex; align-items: baseline; gap: 10px; margin-top: 28px; padding: 12px 16px; border: 1px solid var(--cs-line-2); border-radius: 8px; }
-    .license b { font: 600 15px var(--cs-mono); color: var(--cs-accent); }
+    .license b { font: 600 15px var(--cs-mono); color: var(--cs-accent); white-space: nowrap; }
     .license span { color: var(--cs-muted); font-size: 14px; }
     .os .cs-btn { margin-top: 24px; }
     .values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--cs-line); }
@@ -54,64 +55,69 @@ import { publicLinks } from './public-links';
     <section class="cs-section" id="open-source" aria-labelledby="os-title">
       <div class="cs-wrap os">
         <div>
-          <h2 class="cs-h2" id="os-title">Open Intelligence. Transparent by Design.</h2>
-          <p class="cs-lede">A risk score you cannot inspect is a risk in itself. Every detector, weight and rule in ChainSentinel can be read, tested and changed.</p>
-          <div class="license"><b>Apache-2.0</b><span>Use it, modify it, run it commercially.</span></div>
-          @if (links.repository; as r) { <div><a class="cs-btn" [href]="r" rel="noopener" target="_blank">Explore the source code</a></div> }
+          <h2 class="cs-h2" id="os-title">{{ i18n.t('landing.os.title') }}</h2>
+          <p class="cs-lede">{{ i18n.t('landing.os.lede') }}</p>
+          <div class="license"><b>{{ license }}</b><span>{{ i18n.t('landing.os.license') }}</span></div>
+          @if (links.repository; as r) { <div><a class="cs-btn" [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.os.source') }}</a></div> }
         </div>
         <ul class="values">
-          <li><b>Open source</b><span>The whole platform, from indexers to console, under one permissive license.</span></li>
-          <li><b>Self-hosted</b><span>Runs with Docker Compose on your own server. No account, no usage quota.</span></li>
-          <li><b>Extensible architecture</b><span>Network providers, detectors and notification channels sit behind small interfaces: adding one is a contained change.</span></li>
-          <li><b>Explainable detection</b><span>Each signal carries its evidence and level; each score lists what raised it and by how much.</span></li>
-          <li><b>Community intelligence</b><span>Analysts can report labels for review; nothing is applied without moderation.</span></li>
-          <li><b>Data sovereignty</b><span>Wallets you watch and alerts you raise stay in your PostgreSQL database.</span></li>
+          @for (v of values; track v.t) { <li><b>{{ i18n.t(v.t) }}</b><span>{{ i18n.t(v.d) }}</span></li> }
         </ul>
       </div>
     </section>
 
     <section class="cs-section" id="use-cases" aria-labelledby="uc-title">
       <div class="cs-wrap">
-        <h2 class="cs-h2" id="uc-title">Built for the teams that answer for the money.</h2>
+        <h2 class="cs-h2" id="uc-title">{{ i18n.t('landing.uc.title') }}</h2>
         <ul class="uses">
-          @for (u of useCases; track u.who) { <li><b>{{ u.who }}</b><span>{{ u.value }}</span></li> }
+          @for (u of useCases; track u.who) { <li><b>{{ i18n.t(u.who) }}</b><span>{{ i18n.t(u.value) }}</span></li> }
         </ul>
-        <p class="caveat">ChainSentinel produces signals and evidence for review. It does not replace a regulated compliance program or the judgment of your analysts.</p>
+        <p class="caveat">{{ i18n.t('landing.uc.caveat') }}</p>
       </div>
     </section>
 
     <section class="cs-section" id="community" aria-labelledby="comm-title">
       <div class="cs-wrap comm">
         <div>
-          <h2 class="cs-h2" id="comm-title">Build the future of blockchain intelligence with us.</h2>
-          <p class="cs-lede">Detectors, network providers, rules and labels all get better with more eyes. Developers, investigators and researchers are welcome.</p>
+          <h2 class="cs-h2" id="comm-title">{{ i18n.t('landing.comm.title') }}</h2>
+          <p class="cs-lede">{{ i18n.t('landing.comm.lede') }}</p>
         </div>
         @if (links.repository; as r) {
-          <nav class="comm-links" aria-label="Contribute">
-            <a [href]="r" rel="noopener" target="_blank">GitHub<span>Source code</span></a>
-            <a [href]="links.contributing" rel="noopener" target="_blank">Contribution guide<span>How to propose a change</span></a>
-            <a [href]="links.docs" rel="noopener" target="_blank">Documentation<span>Guides, ADRs, API</span></a>
-            <a [href]="links.issues" rel="noopener" target="_blank">Issues<span>Bugs and ideas</span></a>
+          <nav class="comm-links" [attr.aria-label]="i18n.t('landing.comm.aria')">
+            <a [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.github') }}<span>{{ i18n.t('landing.comm.source') }}</span></a>
+            <a [href]="links.contributing" rel="noopener" target="_blank">{{ i18n.t('landing.foot.contributing') }}<span>{{ i18n.t('landing.comm.contributing') }}</span></a>
+            <a [href]="links.docs" rel="noopener" target="_blank">{{ i18n.t('landing.nav.docs') }}<span>{{ i18n.t('landing.comm.docs') }}</span></a>
+            <a [href]="links.issues" rel="noopener" target="_blank">{{ i18n.t('landing.foot.issues') }}<span>{{ i18n.t('landing.comm.issues') }}</span></a>
           </nav>
         } @else {
-          <p class="soon"><b>The public repository is being prepared.</b> Links to the source code, the contribution guide, the documentation and the issue tracker will appear here when it opens.</p>
+          <p class="soon" [innerHTML]="i18n.t('landing.comm.soon')"></p>
         }
       </div>
     </section>
 
     <section class="final" aria-labelledby="final-title">
       <div class="cs-wrap">
-        <h2 id="final-title">Make blockchain intelligence open to everyone.</h2>
-        <p>Explore ChainSentinel, discover its capabilities and help build the next generation of open blockchain intelligence.</p>
+        <h2 id="final-title">{{ i18n.t('landing.final.title') }}</h2>
+        <p>{{ i18n.t('landing.final.lede') }}</p>
         <div class="final-row">
-          <a class="cs-btn cs-btn--primary" routerLink="/overview">Get Started</a>
-          @if (links.repository; as r) { <a class="cs-btn" [href]="r" rel="noopener" target="_blank">Explore GitHub</a> }
+          <a class="cs-btn cs-btn--primary" routerLink="/overview">{{ i18n.t('landing.final.start') }}</a>
+          @if (links.repository; as r) { <a class="cs-btn" [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.final.github') }}</a> }
         </div>
       </div>
     </section>
   `,
 })
 export class ClosingSections {
+  protected readonly i18n = inject(I18nService);
+  protected readonly license = 'Apache-2.0';
+  protected readonly values: readonly { t: Key; d: Key }[] = [
+    { t: 'landing.value.open.t', d: 'landing.value.open.d' },
+    { t: 'landing.value.self.t', d: 'landing.value.self.d' },
+    { t: 'landing.value.ext.t', d: 'landing.value.ext.d' },
+    { t: 'landing.value.explain.t', d: 'landing.value.explain.d' },
+    { t: 'landing.value.community.t', d: 'landing.value.community.d' },
+    { t: 'landing.value.sovereign.t', d: 'landing.value.sovereign.d' },
+  ];
   protected readonly links = publicLinks();
   protected readonly useCases = LANDING_COPY.useCases;
 }
