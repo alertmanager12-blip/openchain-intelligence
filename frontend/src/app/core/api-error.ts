@@ -149,3 +149,13 @@ export function errorText(e: ApiError, lang: Lang): string {
 export function fieldErrorText(f: FieldError, lang: Lang): string {
   return codeText(f.code, f.params, lang) ?? f.message;
 }
+
+/** "field: message" with the colon of the language (French sets a narrow no-break space before it). */
+export function fieldLine(field: string, message: string, lang: Lang): string {
+  return `${field}${lang === 'fr' ? '\u202f' : ''}: ${message}`;
+}
+
+/** An API error as one text in the console's language: its message, then each field error as "field: message". */
+export function apiErrorText(e: ApiError, lang: Lang): string {
+  return [errorText(e, lang), ...e.fieldErrors.map((f) => fieldLine(f.field, fieldErrorText(f, lang), lang))].join(' ');
+}

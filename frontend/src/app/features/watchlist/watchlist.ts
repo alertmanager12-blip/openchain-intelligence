@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, errorText, fieldErrorText, toApiError } from '../../core/api-error';
+import { ApiError, apiErrorText, errorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EnabledNetworks } from '../../core/enabled-networks';
 import { I18nService } from '../../core/i18n/i18n.service';
@@ -114,10 +114,7 @@ export class WatchlistPage {
   readonly byId = (_: number, e: WatchlistEntry) => e.id;
   ago(iso: string): string { return timeAgo(iso, Date.now(), this.i18n.lang()); }
   protected stamp(iso: string): string { return `${fmtStamp(iso, this.i18n.lang())} UTC`; }
-  protected apiError(e: ApiError): string {
-    const lang = this.i18n.lang();
-    return [errorText(e, lang), ...e.fieldErrors.map((f) => `${f.field}: ${fieldErrorText(f, lang)}`)].join(' ');
-  }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
 
   /** Picks the network from the address format when it is unambiguous among the enabled networks. */
   onAddress(v: string): void {

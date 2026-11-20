@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormField, form, minLength, required, submit, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, errorText, fieldErrorText, toApiError } from '../../core/api-error';
+import { ApiError, apiErrorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EvidenceLevel, Label, NETWORKS, NetworkId } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
@@ -185,10 +185,7 @@ export class CommunityPage {
   /** Report categories have their own names; any other category goes through the shared category names. */
   protected catName(c: string): string { const k = `community.cat.${c}`; return hasKey(k) ? this.i18n.t(k) : categoryName(c, this.i18n.lang() as Lang); }
   protected statusText(s: string | undefined): string { const k = `community.status.${s ?? 'PENDING'}`; return hasKey(k) ? this.i18n.t(k) : (s ?? ''); }
-  protected apiError(e: ApiError): string {
-    const lang = this.i18n.lang();
-    return [errorText(e, lang), ...e.fieldErrors.map((f) => `${f.field}: ${fieldErrorText(f, lang)}`)].join(' ');
-  }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
 
   readonly labels = apiResource({ params: () => ({ network: this.net() }), stream: (p) => this.api.labels(p), keepPrevious: true });
   readonly reports = apiResource({ params: () => ({}), stream: () => this.api.labelReports() });

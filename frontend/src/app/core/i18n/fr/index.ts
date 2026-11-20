@@ -16,6 +16,8 @@ import { predictions } from './predictions';
 import { community } from './community';
 import { watchlist } from './watchlist';
 import { integrations } from './integrations';
+import { rules } from './rules';
+import { simulator } from './simulator';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -38,4 +40,6 @@ export const fr: Dictionary = {
   ...community,
   ...watchlist,
   ...integrations,
+  ...rules,
+  ...simulator,
 };

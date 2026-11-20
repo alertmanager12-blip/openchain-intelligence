@@ -3,7 +3,7 @@ import { FormField, form, required, submit, validate } from '@angular/forms/sign
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, errorText, fieldErrorText, toApiError } from '../../core/api-error';
+import { ApiError, apiErrorText, errorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { I18nService, hasKey, type Key } from '../../core/i18n/i18n.service';
 import { ConnectorType, Webhook } from '../../core/models';
@@ -65,10 +65,7 @@ export class IntegrationsPage {
   readonly lastTest = signal<{ id: string; ok: boolean; message: string; status: number | null; fromServer: boolean } | null>(null);
   protected ago(iso: string | null | undefined): string { return timeAgo(iso, Date.now(), this.i18n.lang()); }
   protected errText(m: { message?: string } | undefined): string { return m?.message && hasKey(m.message) ? this.i18n.t(m.message) : this.i18n.t('integrations.err.invalid'); }
-  protected apiError(e: ApiError): string {
-    const lang = this.i18n.lang();
-    return [errorText(e, lang), ...e.fieldErrors.map((f) => `${f.field}: ${fieldErrorText(f, lang)}`)].join(' ');
-  }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
   readonly mask = maskTarget;
 
   readonly stats = computed(() => {

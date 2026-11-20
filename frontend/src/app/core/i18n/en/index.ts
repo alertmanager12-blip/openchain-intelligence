@@ -16,6 +16,8 @@ import { predictions } from './predictions';
 import { community } from './community';
 import { watchlist } from './watchlist';
 import { integrations } from './integrations';
+import { rules } from './rules';
+import { simulator } from './simulator';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -37,4 +39,6 @@ export const en = {
   ...community,
   ...watchlist,
   ...integrations,
+  ...rules,
+  ...simulator,
 } as const;
