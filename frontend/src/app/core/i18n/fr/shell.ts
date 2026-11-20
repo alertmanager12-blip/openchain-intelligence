@@ -2,6 +2,7 @@ import type { Entry } from '../i18n.service';
 import type { shell as enShell } from '../en/shell';
 
 export const shell: Record<keyof typeof enShell, Entry> = {
+  'shell.docTitle': '{page} – ChainSentinel',
   'shell.skip': 'Aller au contenu',
   'shell.sidebar': 'Barre latérale',
   'shell.primary': 'Navigation principale',

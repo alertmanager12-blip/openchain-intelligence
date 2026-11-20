@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { EventTypeDef, NETWORKS, NetworkId, RuleValidationError, SEVERITIES } from '../../core/models';
+import { I18nService, hasKey } from '../../core/i18n/i18n.service';
+import { EventTypeDef, EvidenceLevel, NETWORKS, NetworkId, RuleValidationError, SEVERITIES } from '../../core/models';
 import { EVIDENCE_LEVELS, RuleDraft } from '../../core/rules/rule-model';
-import { netLabel } from '../../shared/format';
+import { ruleErrorText } from '../../core/rules/rule-yaml';
+import { evidenceDetail } from '../../shared/levels';
+import { netLabel, sentence, severityName } from '../../shared/format';
 import { MAT_FORM } from '../../shared/material';
-import { sentence } from '../../shared/ui';
 
 /** Step 1: identity of the rule and what it watches (networks, event types). */
 @Component({
@@ -15,52 +17,52 @@ import { sentence } from '../../shared/ui';
   template: `
     <div class="grid meta">
       <mat-form-field class="wide">
-        <mat-label>Name</mat-label>
+        <mat-label>{{ i18n.t('rules.scope.name') }}</mat-label>
         <input matInput name="name" [ngModel]="draft().name" (ngModelChange)="patch.emit({ name: $event })" required [ociInvalid]="!!err('name')" />
-        @if (err('name'); as m) { <mat-error>{{ m }}</mat-error> }
+        @if (err('name'); as m) { <mat-error>{{ errText(m) }}</mat-error> }
       </mat-form-field>
       <mat-form-field>
-        <mat-label>Identifier</mat-label>
+        <mat-label>{{ i18n.t('rules.scope.id') }}</mat-label>
         <input matInput name="id" class="mono" [ngModel]="draft().id" (ngModelChange)="patch.emit({ id: $event })" [disabled]="idLocked()" [ociInvalid]="!!err('id')" />
-        @if (err('id'); as m) { <mat-error>{{ m }}</mat-error> } @else if (idLocked()) { <mat-hint>A stored rule keeps its identifier.</mat-hint> }
+        @if (err('id'); as m) { <mat-error>{{ errText(m) }}</mat-error> } @else if (idLocked()) { <mat-hint>{{ i18n.t('rules.scope.idLocked') }}</mat-hint> }
       </mat-form-field>
       <mat-form-field>
-        <mat-label>Severity</mat-label>
-        <mat-select [value]="draft().severity" (valueChange)="patch.emit({ severity: $event })">@for (s of severities; track s) { <mat-option [value]="s">{{ sentence(s) }}</mat-option> }</mat-select>
+        <mat-label>{{ i18n.t('rules.scope.severity') }}</mat-label>
+        <mat-select [value]="draft().severity" (valueChange)="patch.emit({ severity: $event })">@for (s of severities; track s) { <mat-option [value]="s">{{ severityText(s) }}</mat-option> }</mat-select>
       </mat-form-field>
       <mat-form-field>
-        <mat-label>Evidence level</mat-label>
-        <mat-select [value]="draft().evidenceLevel" (valueChange)="patch.emit({ evidenceLevel: $event })">@for (e of evidenceLevels; track e) { <mat-option [value]="e">{{ sentence(e) }}</mat-option> }</mat-select>
+        <mat-label>{{ i18n.t('rules.scope.evidence') }}</mat-label>
+        <mat-select [value]="draft().evidenceLevel" (valueChange)="patch.emit({ evidenceLevel: $event })">@for (e of evidenceLevels; track e) { <mat-option [value]="e">{{ evidenceText(e) }}</mat-option> }</mat-select>
       </mat-form-field>
       <mat-form-field>
-        <mat-label>Version</mat-label>
+        <mat-label>{{ i18n.t('rules.scope.version') }}</mat-label>
         <input matInput name="ver" [ngModel]="draft().version" (ngModelChange)="patch.emit({ version: $event })" placeholder="1.0.0" [ociInvalid]="!!err('version')" />
-        @if (err('version'); as m) { <mat-error>{{ m }}</mat-error> }
+        @if (err('version'); as m) { <mat-error>{{ errText(m) }}</mat-error> }
       </mat-form-field>
       <mat-form-field>
-        <mat-label>Author</mat-label>
+        <mat-label>{{ i18n.t('rules.scope.author') }}</mat-label>
         <input matInput name="author" [ngModel]="draft().author" (ngModelChange)="patch.emit({ author: $event })" [ociInvalid]="!!err('author')" />
-        @if (err('author'); as m) { <mat-error>{{ m }}</mat-error> }
+        @if (err('author'); as m) { <mat-error>{{ errText(m) }}</mat-error> }
       </mat-form-field>
     </div>
     <mat-form-field>
-      <mat-label>Description</mat-label>
-      <input matInput name="desc" [ngModel]="draft().description" (ngModelChange)="patch.emit({ description: $event })" placeholder="What this rule is for, for the analyst who receives the alert" />
+      <mat-label>{{ i18n.t('rules.scope.description') }}</mat-label>
+      <input matInput name="desc" [ngModel]="draft().description" (ngModelChange)="patch.emit({ description: $event })" [placeholder]="i18n.t('rules.scope.descriptionPlaceholder')" />
     </mat-form-field>
-    <fieldset><legend>Networks</legend>
+    <fieldset><legend>{{ i18n.t('rules.scope.networks') }}</legend>
       <div class="opts">@for (n of networks; track n) {
         <mat-checkbox [checked]="draft().networks.includes(n)" (change)="toggleNetwork(n)" [aria-describedby]="noSource.includes(n) ? 'net-nosource' : ''">{{ netLabel(n) }}
-          @if (noSource.includes(n)) { <span class="nd">no data source yet</span> }</mat-checkbox>
+          @if (noSource.includes(n)) { <span class="nd">{{ i18n.t('rules.scope.noSource') }}</span> }</mat-checkbox>
       }</div>
-      <p class="hint" id="net-nosource">Bitcoin and Solana are accepted in rules, but this version has no data source for them yet, so a rule scoped only to them never fires.</p>
-      @if (onlyNoSource()) { <p class="note note--warn">This rule only watches networks without a data source. It will not fire until one is added.</p> }
-      @if (errUnder('networks'); as m) { <span class="field-error">{{ m }}</span> }
+      <p class="hint" id="net-nosource">{{ i18n.t('rules.scope.noSourceHint') }}</p>
+      @if (onlyNoSource()) { <p class="note note--warn">{{ i18n.t('rules.scope.onlyNoSource') }}</p> }
+      @if (errUnder('networks'); as m) { <span class="field-error">{{ errText(m) }}</span> }
     </fieldset>
-    <fieldset><legend>Event types</legend>
+    <fieldset><legend>{{ i18n.t('rules.scope.eventTypes') }}</legend>
       <div class="opts">@for (t of eventTypes(); track t.type) {
-        <mat-checkbox [checked]="draft().eventTypes.includes(t.type)" (change)="toggleEvent(t.type)" [class.na]="!t.available">{{ sentence(t.type) }}@if (!t.available) { <span class="nd">not produced yet</span> }</mat-checkbox>
+        <mat-checkbox [checked]="draft().eventTypes.includes(t.type)" (change)="toggleEvent(t.type)" [class.na]="!t.available">{{ eventTypeText(t.type) }}@if (!t.available) { <span class="nd">{{ i18n.t('rules.scope.notProduced') }}</span> }</mat-checkbox>
       }</div>
-      @if (errUnder('event_types'); as m) { <span class="field-error">{{ m }}</span> }
+      @if (errUnder('event_types'); as m) { <span class="field-error">{{ errText(m) }}</span> }
     </fieldset>
   `,
   styles: `
@@ -88,13 +90,17 @@ export class ScopeStep {
   readonly onlyNoSource = computed(() => this.draft().networks.length > 0 && this.draft().networks.every((n) => this.noSource.includes(n)));
   readonly severities = SEVERITIES;
   readonly evidenceLevels = EVIDENCE_LEVELS;
-  readonly sentence = sentence;
+  protected readonly i18n = inject(I18nService);
+  protected severityText(s: string): string { return severityName(s, this.i18n.lang()); }
+  protected evidenceText(e: EvidenceLevel): string { const t = evidenceDetail(e, this.i18n.lang()); return t.charAt(0).toUpperCase() + t.slice(1); }
+  protected eventTypeText(t: string): string { const k = `rules.eventType.${t}`; return hasKey(k) ? this.i18n.t(k) : sentence(t); }
+  protected errText(e: RuleValidationError): string { return ruleErrorText(e, this.i18n.lang()); }
 
-  err(path: string): string | null {
-    return this.errors().find((e) => e.path === path)?.message ?? null;
+  err(path: string): RuleValidationError | null {
+    return this.errors().find((e) => e.path === path) ?? null;
   }
-  errUnder(prefix: string): string | null {
-    return this.errors().find((e) => e.path === prefix || e.path.startsWith(prefix + '['))?.message ?? null;
+  errUnder(prefix: string): RuleValidationError | null {
+    return this.errors().find((e) => e.path === prefix || e.path.startsWith(prefix + '[')) ?? null;
   }
   toggleNetwork(n: NetworkId): void {
     const s = this.draft().networks;

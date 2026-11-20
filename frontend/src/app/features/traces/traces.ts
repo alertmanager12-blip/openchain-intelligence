@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { ApiError, errorText } from '../../core/api-error';
+import { ApiError, errorText, statusTitle } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { LOCALE } from '../../core/i18n/format';
 import { hasKey, I18nService, Lang } from '../../core/i18n/i18n.service';
@@ -157,19 +157,19 @@ export class TracesPage {
         if (d.status === 'PENDING' || d.status === 'RUNNING') this.timer = setTimeout(() => this.load(id), 2000);
         else this.list.reload();
       },
-      error: (e: ApiError) => { this.detail.set(null); this.toasts.error(e.title, errorText(e, this.i18n.lang())); },
+      error: (e: ApiError) => { this.detail.set(null); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 
   rerun(d: TraceDetail): void {
     this.api.rerunTrace(d.id).subscribe({
       next: (n) => { this.list.reload(); this.load(n.id); this.toasts.success(this.i18n.t('traces.toast.rerun'), this.i18n.t('traces.toast.rerunBody', { version: n.version })); },
-      error: (e: ApiError) => this.toasts.error(e.title, errorText(e, this.i18n.lang())),
+      error: (e: ApiError) => this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())),
     });
   }
 
   cancel(d: TraceDetail): void {
-    this.api.cancelTrace(d.id).subscribe({ next: () => this.load(d.id), error: (e: ApiError) => this.toasts.error(e.title, errorText(e, this.i18n.lang())) });
+    this.api.cancelTrace(d.id).subscribe({ next: () => this.load(d.id), error: (e: ApiError) => this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())) });
   }
 
   export(d: TraceDetail): void {
@@ -182,7 +182,7 @@ export class TracesPage {
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       },
-      error: (e: ApiError) => this.toasts.error(e.title, errorText(e, this.i18n.lang())),
+      error: (e: ApiError) => this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())),
     });
   }
 

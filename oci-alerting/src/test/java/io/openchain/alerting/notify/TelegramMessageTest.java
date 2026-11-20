@@ -37,6 +37,17 @@ class TelegramMessageTest {
                 Map.of("transaction.amount", new BigDecimal("11.4"), "transaction.token.symbol", "ETH", "wallet.address", WALLET));
     }
 
+    /** Final review: « fractionnement » is kept for structuring; fund-splitting is a « répartition de fonds ». */
+    @Test void fundSplittingIsNotCalledStructuring() {
+        Notification n = drain(null);
+        Alert a = Alert.builder().id("al-9").ruleId("fund-splitting").ruleVersion("1.3.2").title("Fund splitting")
+                .severity(n.severity()).priority(n.priority()).evidenceLevel(n.evidenceLevel()).network(n.network())
+                .groupKey(n.groupKey()).dedupKey("fund-splitting:x").firstSeen(T0).lastSeen(T0).occurrenceCount(1)
+                .addEventIds(List.of("e1")).createdAt(T0).updatedAt(T0).evidence(Map.of()).build();
+        String title = TelegramMessage.title(Notification.of("d-9", ActionType.TELEGRAM, "tg", Map.of(), a, T0));
+        assertThat(title).isEqualTo("Répartition de fonds").doesNotContainIgnoringCase("fractionn");
+    }
+
     /** Code review I4: a retraction or a reinstatement says so first; it must not read as a new alert. */
     @Test void retractionAndReinstatementAreNotMistakenForANewAlert() {
         Notification opened = drain(null);

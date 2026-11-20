@@ -1,3 +1,5 @@
+import { Key, Params, translate } from '../i18n/i18n.service';
+
 /**
  * Minimal YAML subset (block maps, block lists, flow lists of scalars, quoted/plain scalars, comments).
  * It covers the rule format exactly and nothing more: no anchors, tags, multi-documents or custom types,
@@ -6,8 +8,9 @@
 export type YamlValue = string | number | boolean | null | YamlValue[] | { [k: string]: YamlValue };
 
 export class YamlError extends Error {
-  constructor(readonly line: number, message: string) {
-    super(`line ${line}: ${message}`);
+  /** `key` is a dictionary key (rules.yaml.*): the screens show the error in the console's language; the message stays English. */
+  constructor(readonly line: number, readonly key: Key, readonly params: Params = {}) {
+    super(`line ${line}: ${translate('en', key, params)}`);
     this.name = 'YamlError';
   }
 }
@@ -93,21 +96,21 @@ const KEY_LINE = /^([A-Za-z_][\w.-]*)\s*:(?:\s+(.*))?$/;
 export function parseScalar(raw: string, line: number): YamlValue {
   const s = raw.trim();
   if (s.startsWith('"')) {
-    if (!s.endsWith('"') || s.length < 2) throw new YamlError(line, 'unterminated double-quoted string');
+    if (!s.endsWith('"') || s.length < 2) throw new YamlError(line, 'rules.yaml.unterminatedDouble');
     try {
       return JSON.parse(s) as string;
     } catch {
-      throw new YamlError(line, 'invalid escape in double-quoted string');
+      throw new YamlError(line, 'rules.yaml.invalidEscape');
     }
   }
   if (s.startsWith("'")) {
-    if (!s.endsWith("'") || s.length < 2) throw new YamlError(line, 'unterminated single-quoted string');
+    if (!s.endsWith("'") || s.length < 2) throw new YamlError(line, 'rules.yaml.unterminatedSingle');
     return s.slice(1, -1).replace(/''/g, "'");
   }
   if (s.startsWith('[')) return parseFlowList(s, line);
   if (s === '{}') return {};
-  if (s.startsWith('{')) throw new YamlError(line, 'flow mappings are not supported; use block style');
-  if (/^[&*!|>]/.test(s)) throw new YamlError(line, `unsupported YAML feature "${s[0]}"`);
+  if (s.startsWith('{')) throw new YamlError(line, 'rules.yaml.flowMapping');
+  if (/^[&*!|>]/.test(s)) throw new YamlError(line, 'rules.yaml.unsupportedFeature', { char: s[0] });
   if (s === 'true') return true;
   if (s === 'false') return false;
   if (s === 'null' || s === '~' || s === '') return null;
@@ -120,7 +123,7 @@ export function parseScalar(raw: string, line: number): YamlValue {
 }
 
 function parseFlowList(s: string, line: number): YamlValue[] {
-  if (!s.endsWith(']')) throw new YamlError(line, 'unterminated flow list');
+  if (!s.endsWith(']')) throw new YamlError(line, 'rules.yaml.unterminatedList');
   const body = s.slice(1, -1).trim();
   if (!body) return [];
   const parts: string[] = [];
@@ -135,16 +138,16 @@ function parseFlowList(s: string, line: number): YamlValue[] {
     } else if (c === '"' || c === "'") {
       quote = c;
       cur += c;
-    } else if (c === '[' || c === '{') throw new YamlError(line, 'nested flow collections are not supported');
+    } else if (c === '[' || c === '{') throw new YamlError(line, 'rules.yaml.nestedFlow');
     else if (c === ',') {
       parts.push(cur);
       cur = '';
     } else cur += c;
   }
-  if (quote) throw new YamlError(line, 'unterminated string in flow list');
+  if (quote) throw new YamlError(line, 'rules.yaml.unterminatedListString');
   parts.push(cur);
   return parts.map((p) => {
-    if (!p.trim()) throw new YamlError(line, 'empty item in flow list');
+    if (!p.trim()) throw new YamlError(line, 'rules.yaml.emptyListItem');
     return parseScalar(p, line);
   });
 }
@@ -156,9 +159,9 @@ class Parser {
   parseDocument(): YamlValue {
     if (this.lines.length === 0) return null;
     const first = this.lines[0];
-    if (first.indent !== 0) throw new YamlError(first.no, 'document must start at column 0');
+    if (first.indent !== 0) throw new YamlError(first.no, 'rules.yaml.column0');
     const v = this.block(0);
-    if (this.i < this.lines.length) throw new YamlError(this.lines[this.i].no, 'unexpected indentation');
+    if (this.i < this.lines.length) throw new YamlError(this.lines[this.i].no, 'rules.yaml.indentation');
     return v;
   }
 
@@ -178,7 +181,7 @@ class Parser {
       this.i++;
       return parseScalar(l.text, l.no);
     }
-    throw new YamlError(l.no, `expected "key: value" or "- item", got "${l.text}"`);
+    throw new YamlError(l.no, 'rules.yaml.expectedKeyOrItem', { text: l.text });
   }
 
   private nested(parentIndent: number, allowSameIndentList: boolean): YamlValue {
@@ -193,15 +196,15 @@ class Parser {
     const out: { [k: string]: YamlValue } = {};
     for (let l = this.peek(); l && l.indent === indent && !this.isItem(l); l = this.peek()) {
       const m = KEY_LINE.exec(l.text);
-      if (!m) throw new YamlError(l.no, `expected "key: value", got "${l.text}"`);
+      if (!m) throw new YamlError(l.no, 'rules.yaml.expectedKey', { text: l.text });
       const [, key, rest] = m;
-      if (Object.prototype.hasOwnProperty.call(out, key)) throw new YamlError(l.no, `duplicate key "${key}"`);
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new YamlError(l.no, `forbidden key "${key}"`);
+      if (Object.prototype.hasOwnProperty.call(out, key)) throw new YamlError(l.no, 'rules.yaml.duplicateKey', { key });
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new YamlError(l.no, 'rules.yaml.forbiddenKey', { key });
       this.i++;
       out[key] = rest === undefined || rest.trim() === '' ? this.nested(indent, true) : parseScalar(rest, l.no);
     }
     const l = this.peek();
-    if (l && l.indent > indent) throw new YamlError(l.no, 'unexpected indentation');
+    if (l && l.indent > indent) throw new YamlError(l.no, 'rules.yaml.indentation');
     return out;
   }
 
@@ -223,7 +226,7 @@ class Parser {
       }
     }
     const l = this.peek();
-    if (l && l.indent > indent) throw new YamlError(l.no, 'unexpected indentation');
+    if (l && l.indent > indent) throw new YamlError(l.no, 'rules.yaml.indentation');
     return out;
   }
 }
@@ -233,7 +236,7 @@ export function parse(text: string): YamlValue {
   text.replace(/\r\n?/g, '\n').split('\n').forEach((raw, idx) => {
     const no = idx + 1;
     const lead = /^[ \t]*/.exec(raw)![0];
-    if (lead.includes('\t')) throw new YamlError(no, 'tabs are not allowed for indentation');
+    if (lead.includes('\t')) throw new YamlError(no, 'rules.yaml.tabs');
     const body = stripComment(raw).trimEnd();
     if (!body.trim()) return;
     if (no === 1 && body.trim() === '---') return;

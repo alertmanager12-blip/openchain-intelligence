@@ -26,7 +26,7 @@ describe('alertSentence', () => {
 
   it('large-usdt-transfer: amount, sender and recipient', () => {
     const f = real('large-usdt-transfer');
-    expect(alertSentence(alert('large-usdt-transfer', f), 'fr')).toMatch(/^Gros transfert : .+ USDT de T\w+…\w+ vers T\w+…\w+$/);
+    expect(alertSentence(alert('large-usdt-transfer', f), 'fr')).toMatch(/^Gros transfert\u202f: .+ USDT de T\w+…\w+ vers T\w+…\w+$/);
     expect(alertSentence(alert('large-usdt-transfer', f), 'en')).toMatch(/^Large transfer: .+ USDT from T\w+…\w+ to T\w+…\w+$/);
   });
 

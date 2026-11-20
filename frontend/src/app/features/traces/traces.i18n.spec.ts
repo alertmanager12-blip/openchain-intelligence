@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { NEVER, of } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
+import { ApiError } from '../../core/api-error';
+import { Toasts } from '../../core/toasts';
 import { ApiService } from '../../core/api.service';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { TracesPage } from './traces';
@@ -50,6 +52,18 @@ describe('Stored traces screen in French', () => {
     expect(el.textContent).toContain('3 frozen transfers');
     expect(el.textContent).toContain('History is missing before block 5');
     expect(el.querySelector('.grid [lang="en"]')).toBeNull();
+    f.destroy();
+  });
+
+  it('titles an error toast in French by its status', async () => {
+    TestBed.overrideProvider(ApiService, { useValue: new Proxy({ traces: () => of([summary]), trace: () => throwError(() => new ApiError(404, 'Resource not found', 'server english')) } as Record<string, unknown>,
+      { get: (t, k) => (k in t ? t[k as string] : () => NEVER) }) });
+    const f = TestBed.createComponent(TracesPage);
+    f.componentRef.setInput('id', 't1');
+    await settle(f);
+    const toast = TestBed.inject(Toasts).items().at(-1);
+    expect(toast?.message).toBe('Introuvable');
+    expect(toast?.detail).toBe('server english');
     f.destroy();
   });
 });

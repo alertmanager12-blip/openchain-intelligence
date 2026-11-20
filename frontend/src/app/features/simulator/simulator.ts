@@ -4,17 +4,22 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { ApiError } from '../../core/api-error';
+import { ApiError, errorText } from '../../core/api-error';
+import { fmtNumber, fmtStamp } from '../../core/i18n/format';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { Rule, RuleSimulation, RuleTestRequest } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
+import { EngineText } from '../../shared/engine-text';
 import { shortHash, timeAgo } from '../../shared/format';
+import { levelWord } from '../../shared/levels';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
+import { ruleText } from '../../shared/rule-text';
 import { NetworkChip, StateComponent } from '../../shared/ui';
 
 const DRAFT = '__draft__';
-const PERIODS = [{ v: 1, l: 'Last 24 hours' }, { v: 7, l: 'Last 7 days' }, { v: 30, l: 'Last 30 days' }];
+const PERIODS = [1, 7, 30] as const;
 
 function readDraft(): string | null {
   try {
@@ -26,47 +31,47 @@ function readDraft(): string | null {
 
 @Component({
   selector: 'oci-simulator',
-  imports: [RouterLink, KeyValuePipe, PageHeader, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, NetworkChip, StateComponent],
+  imports: [RouterLink, KeyValuePipe, PageHeader, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, NetworkChip, StateComponent, EngineText],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
-      <oci-page-header heading="Rule simulator" lede="Replay a rule over past events as a dry run: nothing is alerted or sent. Use it to estimate noise before you enable a rule." />
+      <oci-page-header [heading]="i18n.t('simulator.title')" [lede]="i18n.t('simulator.lede')" />
 
       <section class="panel-raised run" aria-labelledby="h-run">
-        <h2 id="h-run" class="sr-only">Dry run</h2>
+        <h2 id="h-run" class="sr-only">{{ i18n.t('simulator.dryRun') }}</h2>
         <form class="fields" (submit)="$event.preventDefault(); run()">
           <mat-form-field class="grow">
-            <mat-label>Rule</mat-label>
+            <mat-label>{{ i18n.t('simulator.rule') }}</mat-label>
             <mat-select [value]="ruleId()" (valueChange)="ruleId.set($event)">
-              @if (draftYaml) { <mat-option [value]="draftKey">Unsaved draft from the builder</mat-option> }
-              @for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ r.name }} <span class="muted">({{ r.enabled ? 'enabled' : 'disabled' }})</span></mat-option> }
+              @if (draftYaml) { <mat-option [value]="draftKey">{{ i18n.t('simulator.draft') }}</mat-option> }
+              @for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ ruleLabel(r) }} <span class="muted">({{ i18n.t(r.enabled ? 'simulator.enabled' : 'simulator.disabled') }})</span></mat-option> }
             </mat-select>
           </mat-form-field>
           <mat-form-field>
-            <mat-label>Period</mat-label>
-            <mat-select [value]="days()" (valueChange)="days.set($event)">@for (p of periods; track p.v) { <mat-option [value]="p.v">{{ p.l }}</mat-option> }</mat-select>
+            <mat-label>{{ i18n.t('simulator.period') }}</mat-label>
+            <mat-select [value]="days()" (valueChange)="days.set($event)">@for (p of periods; track p) { <mat-option [value]="p">{{ periodLabel(p) }}</mat-option> }</mat-select>
           </mat-form-field>
-          <button matButton="filled" type="submit" [disabled]="!ruleId() || res.loading()">{{ res.loading() ? 'Running…' : 'Run dry run' }}</button>
+          <button matButton="filled" type="submit" [disabled]="!ruleId() || res.loading()">{{ i18n.t(res.loading() ? 'simulator.running' : 'simulator.run') }}</button>
         </form>
-        @if (res.loading()) { <mat-progress-bar mode="indeterminate" aria-label="Replaying events" /> }
+        @if (res.loading()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="i18n.t('simulator.replaying')" /> }
 
         @if (res.status() === 'idle') {
-          <p class="empty-run">Choose a rule and a period, then run it to see how many events it would have matched and how many alerts it would have raised.</p>
+          <p class="empty-run">{{ i18n.t('simulator.idle') }}</p>
         } @else {
-          <oci-state [loading]="res.loading()" [error]="res.error()" [hasData]="!!res.value()" skeleton="readout" [skeletonRows]="4" loadingText="Replaying events" (retry)="res.reload()">
+          <oci-state [loading]="res.loading()" [error]="res.error()" [hasData]="!!res.value()" skeleton="readout" [skeletonRows]="4" [loadingText]="i18n.t('simulator.replaying')" (retry)="res.reload()">
             @if (res.value(); as r) {
-              <dl class="well instrument" aria-label="Dry run results">
-                <div class="readout"><dt>Events evaluated</dt><dd>{{ n(r.evaluatedEvents) }}</dd></div>
-                <div class="readout"><dt>Matches</dt><dd>{{ n(r.matchCount) }}</dd></div>
-                <div class="readout"><dt>Alerts per day, after cooldown</dt><dd [class.warn]="r.permissive">{{ r.estimatedTriggersPerDay }}<span class="unit">estimated</span></dd></div>
-                <div class="readout"><dt>Match rate</dt><dd [class.warn]="r.permissive">{{ rate() }}</dd></div>
+              <dl class="well instrument" [attr.aria-label]="i18n.t('simulator.results')">
+                <div class="readout"><dt>{{ i18n.t('simulator.evaluated') }}</dt><dd>{{ n(r.evaluatedEvents) }}</dd></div>
+                <div class="readout"><dt>{{ i18n.t('simulator.matches') }}</dt><dd>{{ n(r.matchCount) }}</dd></div>
+                <div class="readout"><dt>{{ i18n.t('simulator.perDay') }}</dt><dd [class.warn]="r.permissive">{{ n(r.estimatedTriggersPerDay) }}<span class="unit">{{ i18n.t('simulator.estimated') }}</span></dd></div>
+                <div class="readout"><dt>{{ i18n.t('simulator.rate') }}</dt><dd [class.warn]="r.permissive">{{ rate() }}</dd></div>
               </dl>
               @if (r.permissive) {
-                <div class="note note--warn" role="alert"><strong>This rule looks too permissive.</strong>
-                  @for (w of r.warnings; track $index) { <div>{{ w }}</div> }
-                  <a routerLink="/rules/builder">Tighten the conditions in the rule builder</a></div>
+                <div class="note note--warn" role="alert"><strong>{{ i18n.t('simulator.permissive') }}</strong>
+                  @for (w of r.warnings; track $index) { <div><oci-engine-text [text]="w" [plainInEnglish]="true" /></div> }
+                  <a routerLink="/rules/builder">{{ i18n.t('simulator.tighten') }}</a></div>
               } @else if (r.warnings.length) {
-                <div class="note">@for (w of r.warnings; track $index) { <div>{{ w }}</div> }</div>
+                <div class="note">@for (w of r.warnings; track $index) { <div><oci-engine-text [text]="w" [plainInEnglish]="true" /></div> }</div>
               }
             }
           </oci-state>
@@ -75,53 +80,53 @@ function readDraft(): string | null {
 
       @if (ruleId() && ruleId() !== draftKey) {
         <section class="panel-raised run" aria-labelledby="h-cmp">
-          <h2 id="h-cmp" class="small strong">Compare a change <span class="muted">(SIMULATED)</span></h2>
-          <p class="muted small">Run the stored version and your edited copy side by side on the same events. Nothing is alerted, sent or saved.</p>
+          <h2 id="h-cmp" class="small strong">{{ i18n.t('simulator.compare') }} <span class="muted">({{ simulated() }})</span></h2>
+          <p class="muted small">{{ i18n.t('simulator.compareNote') }}</p>
           <div class="cmp-actions">
-            <button matButton="outlined" type="button" (click)="editCopy()">Edit a copy of the stored rule</button>
-            <button matButton="filled" type="button" [disabled]="!proposed() || comparing()" (click)="compare()">{{ comparing() ? 'Comparing…' : 'Compare with stored version' }}</button>
+            <button matButton="outlined" type="button" (click)="editCopy()">{{ i18n.t('simulator.editCopy') }}</button>
+            <button matButton="filled" type="button" [disabled]="!proposed() || comparing()" (click)="compare()">{{ i18n.t(comparing() ? 'simulator.comparing' : 'simulator.compareBtn') }}</button>
           </div>
           @if (proposed() !== null) {
-            <textarea class="cmp-yaml mono" aria-label="Proposed rule YAML" [value]="proposed()" (input)="proposed.set($any($event.target).value)"></textarea>
+            <textarea class="cmp-yaml mono" [attr.aria-label]="i18n.t('simulator.proposedAria')" [value]="proposed()" (input)="proposed.set($any($event.target).value)"></textarea>
           }
           @if (cmp(); as c) {
-            <dl class="well instrument" aria-label="Comparison">
-              <div class="readout"><dt>Matches, stored {{ c.currentVersion }}</dt><dd>{{ n(c.before.conditionMatches) }}</dd></div>
-              <div class="readout"><dt>Matches, proposed {{ c.proposedVersion }}</dt><dd>{{ n(c.after.conditionMatches) }}</dd></div>
-              <div class="readout"><dt>Would stop matching</dt><dd>{{ n(c.onlyBefore) }}</dd></div>
-              <div class="readout"><dt>Would start matching</dt><dd>{{ n(c.onlyAfter) }}</dd></div>
-              <div class="readout"><dt>Alerts per day, stored → proposed</dt><dd>{{ c.before.estimatedAlertsPerDay }} → {{ c.after.estimatedAlertsPerDay }}<span class="unit">estimated</span></dd></div>
+            <dl class="well instrument" [attr.aria-label]="i18n.t('simulator.comparison')">
+              <div class="readout"><dt>{{ i18n.t('simulator.matchesStored', { version: c.currentVersion }) }}</dt><dd>{{ n(c.before.conditionMatches) }}</dd></div>
+              <div class="readout"><dt>{{ i18n.t('simulator.matchesProposed', { version: c.proposedVersion }) }}</dt><dd>{{ n(c.after.conditionMatches) }}</dd></div>
+              <div class="readout"><dt>{{ i18n.t('simulator.stops') }}</dt><dd>{{ n(c.onlyBefore) }}</dd></div>
+              <div class="readout"><dt>{{ i18n.t('simulator.starts') }}</dt><dd>{{ n(c.onlyAfter) }}</dd></div>
+              <div class="readout"><dt>{{ i18n.t('simulator.alertsDay') }}</dt><dd>{{ n(c.before.estimatedAlertsPerDay) }} → {{ n(c.after.estimatedAlertsPerDay) }}<span class="unit">{{ i18n.t('simulator.estimated') }}</span></dd></div>
             </dl>
-            <p class="muted small">{{ n(c.evaluatedEvents) }} events{{ c.window.from ? ' from ' + c.window.from + ' to ' + c.window.to : '' }}. {{ c.window.note }}</p>
+            <p class="muted small">{{ i18n.t('simulator.cmpEvents', { n: c.evaluatedEvents }) }}{{ range(c.window) }}. <oci-engine-text [text]="c.window.note" [plainInEnglish]="true" /></p>
           }
         </section>
       }
 
       @if (res.value(); as r) {
         <section class="section" aria-labelledby="h-m">
-          <div class="section-head"><h2 id="h-m">Matched events</h2><p>A sample of the events the rule matched. Expand a row to see the fields it was evaluated on.</p></div>
+          <div class="section-head"><h2 id="h-m">{{ i18n.t('simulator.matched') }}</h2><p>{{ i18n.t('simulator.matchedLede') }}</p></div>
           <div class="table-wrap"><table mat-table [dataSource]="r.matches" multiTemplateDataRows [trackBy]="byEvent">
             <ng-container matColumnDef="x">
-              <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
+              <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">{{ i18n.t('simulator.details') }}</span></th>
               <td mat-cell *matCellDef="let m; let i = dataIndex" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open().has(m.eventId)" [attr.aria-controls]="'ev-' + i"
-                (click)="toggle(m.eventId)" [attr.aria-label]="'Fields of event ' + m.eventId">
+                (click)="toggle(m.eventId)" [attr.aria-label]="i18n.t('simulator.fieldsOf', { id: m.eventId })">
                 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
             </ng-container>
             <ng-container matColumnDef="event">
-              <th mat-header-cell *matHeaderCellDef scope="col">Event</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('simulator.col.event') }}</th>
               <td mat-cell *matCellDef="let m" class="mono small nowrap" [matTooltip]="m.eventId">{{ short(m.eventId) }}</td>
             </ng-container>
             <ng-container matColumnDef="network">
-              <th mat-header-cell *matHeaderCellDef scope="col">Network</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('simulator.col.network') }}</th>
               <td mat-cell *matCellDef="let m"><oci-net [value]="m.network" /></td>
             </ng-container>
             <ng-container matColumnDef="when">
-              <th mat-header-cell *matHeaderCellDef scope="col">When</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('simulator.col.when') }}</th>
               <td mat-cell *matCellDef="let m" class="small nowrap">{{ ago(m.eventTime) }}</td>
             </ng-container>
             <ng-container matColumnDef="summary">
-              <th mat-header-cell *matHeaderCellDef scope="col">Summary</th>
-              <td mat-cell *matCellDef="let m">{{ m.summary }}</td>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('simulator.col.summary') }}</th>
+              <td mat-cell *matCellDef="let m"><oci-engine-text [text]="m.summary" [plainInEnglish]="true" /></td>
             </ng-container>
             <ng-container matColumnDef="detail">
               <td mat-cell *matCellDef="let m; let i = dataIndex" [attr.colspan]="cols.length" [id]="'ev-' + i">
@@ -133,7 +138,7 @@ function readDraft(): string | null {
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
             <tr mat-row *matRowDef="let m; columns: cols"></tr>
             <tr mat-row *matRowDef="let m; columns: ['detail']" class="detail-row" [class.open]="open().has(m.eventId)"></tr>
-            <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell" [attr.colspan]="cols.length"><div class="empty"><strong>No event matched in this period.</strong><span>Try a longer period or loosen a condition.</span></div></td></tr>
+            <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell" [attr.colspan]="cols.length"><div class="empty"><strong>{{ i18n.t('simulator.noMatch') }}</strong><span>{{ i18n.t('simulator.noMatchHint') }}</span></div></td></tr>
           </table></div>
         </section>
       }
@@ -151,6 +156,7 @@ function readDraft(): string | null {
 })
 export class SimulatorPage {
   private readonly api = inject(ApiService);
+  protected readonly i18n = inject(I18nService);
   /** ?rule=<id> preselects a stored rule; ?draft=1 comes from the builder (the YAML is in sessionStorage). */
   readonly rule = input<string>();
   readonly draft = input<string>();
@@ -192,21 +198,31 @@ export class SimulatorPage {
     this.comparing.set(true);
     this.api.simulateRule(this.ruleId(), src).subscribe({
       next: (c) => { this.comparing.set(false); this.cmp.set(c); },
-      error: (e: ApiError) => { this.comparing.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+      error: (e: ApiError) => { this.comparing.set(false); this.toasts.error(errorText(e, this.i18n.lang())); },
     });
   }
 
   readonly open = signal(new Set<string>());
   readonly cols = ['x', 'event', 'network', 'when', 'summary'];
   readonly byEvent = (_: number, m: { eventId: string }) => m.eventId;
-  readonly ago = timeAgo;
-  readonly n = (v: number) => v.toLocaleString('en-US');
+  protected ago(iso: string): string { return timeAgo(iso, Date.now(), this.i18n.lang()); }
+  protected n(v: number): string { return fmtNumber(v, this.i18n.lang()); }
+  protected ruleLabel(r: Rule): string { return ruleText(r, this.i18n.lang()).name; }
+  protected simulated(): string { return levelWord('SIMULATED', this.i18n.lang()); }
+  protected periodLabel(days: number): string { return this.i18n.t(`simulator.period.${days}` as 'simulator.period.1'); }
+  /** " from X to Y" when the server gave the window of the comparison. */
+  protected range(w: { from: string | null; to: string | null }): string {
+    const lang = this.i18n.lang();
+    return w.from && w.to ? this.i18n.t('simulator.cmpRange', { from: `${fmtStamp(w.from, lang)} UTC`, to: `${fmtStamp(w.to, lang)} UTC` }) : '';
+  }
   readonly short = (id: string) => shortHash(id, 22, 6);
   readonly rate = computed(() => {
     const r = this.res.value();
+    const lang = this.i18n.lang();
     if (!r || !r.evaluatedEvents) return '–';
     const pct = (r.matchCount / r.evaluatedEvents) * 100;
-    return pct < 0.01 ? '<0.01%' : `${pct.toFixed(2)}%`;
+    const sign = lang === 'fr' ? '\u202f%' : '%';
+    return pct < 0.01 ? `<${fmtNumber(0.01, lang, 2, 2)}${sign}` : `${fmtNumber(pct, lang, 2, 2)}${sign}`;
   });
 
   run(): void {

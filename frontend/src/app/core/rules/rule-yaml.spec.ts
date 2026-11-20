@@ -101,7 +101,7 @@ describe('rule YAML parser', () => {
 
   it('reports unknown keys and structural problems', () => {
     const y = ruleToYaml(sample()).replace('cooldown: 30m', 'cooldown: 30m\nscript: rm -rf');
-    expect(yamlToRule(y).errors).toContainEqual({ path: 'script', message: 'unknown key "script"' });
+    expect(yamlToRule(y).errors).toContainEqual(expect.objectContaining({ path: 'script', message: 'unknown key "script"', key: 'rules.err.unknownKey' }));
     const bad = yamlToRule('apiVersion: openchain.io/rule/v1\nid: x1\nversion: 1.0.0\nname: n\nauthor: a\nseverity: HIGH\nscope:\n  networks: [ethereum]\nconditions:\n  logic: BOTH\ncooldown: 1m\n');
     expect(bad.errors.map((e) => e.path)).toContain('conditions.logic');
   });

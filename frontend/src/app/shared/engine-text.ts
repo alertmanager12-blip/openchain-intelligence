@@ -15,7 +15,7 @@ import { I18nService } from '../core/i18n/i18n.service';
     } @else if (mode() === 'collapsed') {
       <details class="engine"><summary>{{ i18n.t('engine.label') }}</summary><span lang="en">{{ text() }}</span></details>
     } @else {
-      <span class="engine"><span class="engine-label">{{ i18n.t('engine.label') }}</span> <span lang="en">{{ text() }}</span></span>
+      <span class="engine"><span class="engine-label">{{ i18n.t('engine.label') }}</span>{{ ' ' }}<span lang="en">{{ text() }}</span></span>
     }
   `,
   styles: `

@@ -5,6 +5,7 @@ export const prefixes = ['wallet.'] as const;
 
 export const wallet = {
   // header and identity
+  'wallet.docTitle': 'Wallet',
   'wallet.crumb': 'Wallets',
   'wallet.watch': 'Watch',
   'wallet.unwatch': 'Unwatch',

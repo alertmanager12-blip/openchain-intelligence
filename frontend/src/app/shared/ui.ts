@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { MatButton } from '@angular/material/button';
 import { MatTooltip } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { ApiError } from '../core/api-error';
+import { ApiError, FieldError, errorText, fieldErrorText, fieldLine, statusTitle } from '../core/api-error';
 import { EvidenceLevel, NetworkId, RiskLevel, Severity } from '../core/models';
 import { RiskGauge } from './risk-gauge';
 import { netLabel, sentence, severityName, shortHash } from './format';
@@ -23,9 +23,9 @@ export { sentence };
   template: `
     @if (error(); as e) {
       <div class="state state--error" role="alert">
-        <strong>{{ e.title }}</strong>
-        @if (e.detail) { <p>{{ e.detail }}</p> }
-        @for (f of e.fieldErrors; track $index) { <p class="mono small">{{ f.field }}: {{ f.message }}</p> }
+        <strong>{{ title(e) }}</strong>
+        @if (message(e); as m) { <p>{{ m }}</p> }
+        @for (f of e.fieldErrors; track $index) { <p class="mono small">{{ field(f) }}</p> }
         @if (e.retryable || retryAlways()) { <button matButton="outlined" class="sm" type="button" (click)="retry.emit()">{{ i18n.t('state.retry') }}</button> }
       </div>
     } @else if (loading() && !hasData()) {
@@ -52,6 +52,10 @@ export class StateComponent {
   readonly skeletonColumns = input<number[]>([70, 90, 60, 80, 50]);
   readonly gridCols = computed(() => this.skeletonColumns().map(() => 'minmax(0, 1fr)').join(' '));
   readonly retry = output<void>();
+  /** The error in the console's language: a title by status, the message by code (else the server's detail), field errors by code. */
+  protected title(e: ApiError): string { return statusTitle(e, this.i18n.lang()); }
+  protected message(e: ApiError): string | null { const m = errorText(e, this.i18n.lang()); return m === this.title(e) ? null : m; }
+  protected field(f: FieldError): string { return fieldLine(f.field, fieldErrorText(f, this.i18n.lang()), this.i18n.lang()); }
 }
 
 @Component({

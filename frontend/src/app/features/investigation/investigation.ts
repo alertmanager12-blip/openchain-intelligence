@@ -4,7 +4,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { Router } from '@angular/router';
-import { ApiError, errorText } from '../../core/api-error';
+import { ApiError, errorText, statusTitle } from '../../core/api-error';
 import { LOCALE } from '../../core/i18n/format';
 import { hasKey, I18nService } from '../../core/i18n/i18n.service';
 import { ApiService } from '../../core/api.service';
@@ -128,7 +128,7 @@ export function structuralStops(stops: GraphStop[] | null | undefined): GraphSto
           @if (expanding()) { <mat-progress-bar class="expanding" mode="indeterminate" [attr.aria-label]="i18n.t('graph.expandingBar')" /> }
           @if (graph.loading()) { <div class="overlay"><oci-skeleton kind="lines" [rows]="4" [label]="i18n.t('graph.loading')" class="sk" /></div> }
           @else if (graph.error() ?? expandError(); as e) {
-            <div class="overlay err" role="alert"><strong>{{ e.title }}</strong><span>{{ err(e) }}</span><button matButton="outlined" class="sm" type="button" (click)="graph.reload()">{{ i18n.t('state.retry') }}</button></div>
+            <div class="overlay err" role="alert"><strong>{{ errTitle(e) }}</strong><span>{{ err(e) }}</span><button matButton="outlined" class="sm" type="button" (click)="graph.reload()">{{ i18n.t('state.retry') }}</button></div>
           } @else if (!nodes().length) {
             <div class="overlay"><div class="empty"><strong>{{ i18n.t('graph.emptyTitle') }}</strong><span>{{ i18n.t('graph.emptyBody') }}</span></div></div>
           }
@@ -223,6 +223,7 @@ export class InvestigationPage {
   readonly hopCount = computed(() => Number(this.maxHop()) || 0);
   readonly stopName = (reason: string) => { const k = `graph.stop.${reason}`; return hasKey(k) ? this.i18n.t(k) : sentence(reason); };
   readonly err = (e: ApiError) => errorText(e, this.i18n.lang());
+  readonly errTitle = (e: ApiError) => statusTitle(e, this.i18n.lang());
 
   readonly addr = signal('');
   readonly net = signal<NetworkId>('ethereum');
@@ -346,7 +347,7 @@ export class InvestigationPage {
         this.toasts.success(this.i18n.t('graph.toast.queued'), this.i18n.t('graph.toast.queuedBody'));
         this.router.navigate(['/traces'], { queryParams: { id: t.id } });
       },
-      error: (e: ApiError) => { this.saving.set(false); this.toasts.error(e.title, errorText(e, this.i18n.lang())); },
+      error: (e: ApiError) => { this.saving.set(false); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 
@@ -361,7 +362,7 @@ export class InvestigationPage {
         if (r.missing.length) this.toasts.error(this.i18n.t('graph.toast.missing', { count: r.missing.length }), `${r.note}`);
         else this.toasts.success(this.i18n.t('graph.toast.noChange'), this.i18n.t('graph.toast.stillHeld', { count: r.checked }));
       },
-      error: (e: ApiError) => { this.verifying.set(false); this.toasts.error(e.title, errorText(e, this.i18n.lang())); },
+      error: (e: ApiError) => { this.verifying.set(false); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 

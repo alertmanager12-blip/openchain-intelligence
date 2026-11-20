@@ -22,7 +22,7 @@ export const enums: Record<keyof typeof enEnums, Entry> = {
   'enum.status.FALSE_POSITIVE': 'Faux positif',
   'enum.decision.ACCEPTED': 'Acceptée',
   'enum.decision.REJECTED': 'Rejetée',
-  'enum.decision.NEEDS_EVIDENCE': 'Preuves demandées',
+  'enum.decision.NEEDS_EVIDENCE': 'Éléments de preuve demandés',
   'enum.risk.CRITICAL': 'Critique',
   'enum.risk.HIGH': 'Élevé',
   'enum.risk.MEDIUM': 'Moyen',

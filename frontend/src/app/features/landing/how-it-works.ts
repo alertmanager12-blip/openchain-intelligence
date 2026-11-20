@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { I18nService } from '../../core/i18n/i18n.service';
 import { LANDING_COPY } from './landing-content';
 
 /** The pipeline in four steps: a real sequence, hence the numbering and the connecting rail. */
@@ -31,23 +32,24 @@ import { LANDING_COPY } from './landing-content';
   template: `
     <section class="cs-section" id="how-it-works" aria-labelledby="how-title">
       <div class="cs-wrap">
-        <h2 class="cs-h2" id="how-title">From a new block to an alert, in four steps.</h2>
-        <p class="cs-lede">You don’t need to know how a blockchain stores transfers. ChainSentinel reads them, explains what they mean and tells you when to look.</p>
+        <h2 class="cs-h2" id="how-title">{{ i18n.t('landing.how.title') }}</h2>
+        <p class="cs-lede">{{ i18n.t('landing.how.lede') }}</p>
         <ol>
-          @for (s of steps; track s.name; let i = $index) {
+          @for (s of steps; track s.id; let i = $index) {
             <li>
               <span class="step-num" aria-hidden="true">{{ i + 1 }}</span>
-              <h3>{{ s.name }}</h3>
-              <p class="sum">{{ s.summary }}</p>
-              <p class="det">{{ s.detail }}</p>
+              <h3>{{ i18n.t(s.name) }}</h3>
+              <p class="sum">{{ i18n.t(s.summary) }}</p>
+              <p class="det">{{ i18n.t(s.detail) }}</p>
             </li>
           }
         </ol>
-        <p class="how-note">Everything runs on your infrastructure: the indexers, the detectors, the database and the console. Nothing leaves your servers except the requests to the blockchain nodes you configure and the notifications you set up.</p>
+        <p class="how-note">{{ i18n.t('landing.how.note') }}</p>
       </div>
     </section>
   `,
 })
 export class HowItWorksSection {
+  protected readonly i18n = inject(I18nService);
   protected readonly steps = LANDING_COPY.steps;
 }

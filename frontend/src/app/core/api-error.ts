@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Lang, Params, hasKey, translate } from './i18n/i18n.service';
+import { Key, Lang, Params, hasKey, translate } from './i18n/i18n.service';
 import type { Coded } from './models';
 
 export interface FieldError {
@@ -34,26 +34,26 @@ export class ApiError extends Error {
   }
 }
 
-const DEFAULT_TITLES: Record<number, string> = {
-  0: 'Backend unreachable',
-  400: 'Invalid request',
-  401: 'Authentication required',
-  403: 'Not allowed',
-  404: 'Not found',
-  409: 'Conflict',
-  422: 'Validation failed',
-  429: 'Too many requests',
-  500: 'Server error',
-  502: 'Upstream provider error',
-  503: 'Service unavailable',
-  504: 'Upstream provider timeout',
-};
+/** Statuses with a title of their own in the dictionaries (`error.status.<n>`); 0 is a client-side network failure. */
+const TITLED = new Set([0, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]);
+
+/** Dictionary key of the title of a status: its own, else its class (5xx), else a generic "HTTP <n>" or "unexpected". */
+function statusKey(status: number): Key {
+  if (TITLED.has(status)) return `error.status.${status}` as Key;
+  if (status >= 500) return 'error.status.500';
+  return status > 0 ? 'error.status.other' : 'error.status.unexpected';
+}
+
+/** Client-side code of a network failure (no server reply); translated as `error.client.unreachable`. */
+export const UNREACHABLE = 'client.unreachable';
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.trim() ? v : null;
 }
 
 function parseBody(body: unknown): Record<string, unknown> | null {
+  // a network failure carries a ProgressEvent, whose `type` ('error') must not read as a problem type
+  if (typeof Event !== 'undefined' && body instanceof Event) return null;
   if (body && typeof body === 'object' && !(body instanceof Blob) && !(body instanceof ArrayBuffer)) return body as Record<string, unknown>;
   if (typeof body === 'string') {
     try {
@@ -97,7 +97,7 @@ export function toApiError(err: unknown): ApiError {
   if (err instanceof HttpErrorResponse) {
     const status = err.status ?? 0;
     const p = parseBody(err.error);
-    const fallbackTitle = DEFAULT_TITLES[status] ?? (status >= 500 ? 'Server error' : `HTTP ${status}`);
+    const fallbackTitle = translate('en', statusKey(status), { status });
     if (p && (str(p['title']) || str(p['detail']) || str(p['type']))) {
       return new ApiError(
         typeof p['status'] === 'number' ? (p['status'] as number) : status,
@@ -110,11 +110,12 @@ export function toApiError(err: unknown): ApiError {
         paramsOf(p['params']),
       );
     }
-    const detail = status === 0 ? 'The API could not be reached. Check your connection or the backend URL.' : (p && str(p['message'])) ?? null;
-    return new ApiError(status, fallbackTitle, detail);
+    if (status === 0) return new ApiError(0, fallbackTitle, translate('en', 'error.client.unreachable'), 'about:blank', null, [], UNREACHABLE);
+    return new ApiError(status, fallbackTitle, (p && str(p['message'])) ?? null);
   }
-  if (err instanceof Error) return new ApiError(-1, 'Unexpected error', err.message);
-  return new ApiError(-1, 'Unexpected error', String(err));
+  const unexpected = translate('en', 'error.status.unexpected');
+  if (err instanceof Error) return new ApiError(-1, unexpected, err.message);
+  return new ApiError(-1, unexpected, String(err));
 }
 
 /** Placeholder values as the dictionary takes them: numbers stay numbers, lists and sets read as text. */
@@ -132,7 +133,29 @@ function textParams(params: Record<string, unknown> | undefined): Params {
  */
 export function codeText(code: string | null | undefined, params: Record<string, unknown> | undefined, lang: Lang): string | null {
   const key = `error.${code}`;
-  return code && hasKey(key) ? translate(lang, key, textParams(params)) : null;
+  return code && hasKey(key) ? translate(lang, key, enumParams(code, textParams(params), lang)) : null;
+}
+
+/** Params that carry an enum value, named through the enum's dictionary (`OPEN` reads "Open" / "Ouverte"). */
+const ENUM_PARAMS: Record<string, Record<string, string>> = {
+  'alert.already_in_status': { status: 'enum.status.' },
+};
+
+/** A value this console does not know (a newer server) stays as sent. */
+function enumParams(code: string, params: Params, lang: Lang): Params {
+  const named = ENUM_PARAMS[code];
+  if (!named) return params;
+  const out = { ...params };
+  for (const [p, prefix] of Object.entries(named)) {
+    const key = `${prefix}${out[p]}`;
+    if (out[p] !== undefined && hasKey(key)) out[p] = translate(lang, key);
+  }
+  return out;
+}
+
+/** Title of an API error in the console's language, by its HTTP status (the server's title is English only). */
+export function statusTitle(e: ApiError, lang: Lang): string {
+  return translate(lang, statusKey(e.status), { status: e.status });
 }
 
 /** Text of a coded item (a limitation, an unreachable reason) in the console's language, else the fallback. */
@@ -140,12 +163,22 @@ export function codedText(c: Coded, lang: Lang, fallback: string): string {
   return codeText(c.code, c.params, lang) ?? fallback;
 }
 
-/** Message of an API error in the console's language: by its code, else the server's detail, else its title. */
+/** Message of an API error in the console's language: by its code, else the server's detail, else its status title. */
 export function errorText(e: ApiError, lang: Lang): string {
-  return codeText(e.code, e.params, lang) ?? e.detail ?? e.title;
+  return codeText(e.code, e.params, lang) ?? e.detail ?? statusTitle(e, lang);
 }
 
 /** Message of one field error in the console's language: by its code, else the server's message. */
 export function fieldErrorText(f: FieldError, lang: Lang): string {
   return codeText(f.code, f.params, lang) ?? f.message;
+}
+
+/** "field: message" with the colon of the language (French sets a narrow no-break space before it). */
+export function fieldLine(field: string, message: string, lang: Lang): string {
+  return `${field}${lang === 'fr' ? '\u202f' : ''}: ${message}`;
+}
+
+/** An API error as one text in the console's language: its message, then each field error as "field: message". */
+export function apiErrorText(e: ApiError, lang: Lang): string {
+  return [errorText(e, lang), ...e.fieldErrors.map((f) => fieldLine(f.field, fieldErrorText(f, lang), lang))].join(' ');
 }

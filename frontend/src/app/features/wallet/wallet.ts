@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, li
 import { MatTabsModule } from '@angular/material/tabs';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { codedText, errorText, toApiError } from '../../core/api-error';
+import { codedText, errorText, statusTitle, toApiError } from '../../core/api-error';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { fmtDate, fmtNumber, fmtPercent } from '../../core/i18n/format';
 import { ApiService } from '../../core/api.service';
@@ -101,7 +101,7 @@ export class WalletPage {
     this.investigating.set(true);
     this.api.createInvestigation(this.network(), this.address()).subscribe({
       next: (i) => { this.investigating.set(false); void this.router.navigate(['/investigations'], { queryParams: { id: i.id } }); },
-      error: (e: unknown) => { this.investigating.set(false); const a = toApiError(e); this.toasts.error(a.title, errorText(a, this.i18n.lang())); },
+      error: (e: unknown) => { this.investigating.set(false); const a = toApiError(e); this.toasts.error(statusTitle(a, this.i18n.lang()), errorText(a, this.i18n.lang())); },
     });
   }
 
