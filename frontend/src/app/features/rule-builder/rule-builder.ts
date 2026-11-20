@@ -6,13 +6,15 @@ import { MatProgressBar } from '@angular/material/progress-bar';
 import { MatStepperModule } from '@angular/material/stepper';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
-import { ApiError } from '../../core/api-error';
+import { ApiError, apiErrorText } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
-import { EventTypeDef, Rule } from '../../core/models';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { EventTypeDef, Rule, RuleValidationError } from '../../core/models';
 import { AVAILABLE_EVENT_TYPES, DEFAULT_FIELDS, EVENT_TYPES, RuleDraft, emptyRule } from '../../core/rules/rule-model';
-import { ruleToYaml, validateDraft, yamlToRule } from '../../core/rules/rule-yaml';
+import { ruleErrorText, ruleToYaml, validateDraft, yamlToRule } from '../../core/rules/rule-yaml';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
+import { ruleText } from '../../shared/rule-text';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { ActionsStep } from './actions-step';
@@ -34,63 +36,63 @@ import { WindowStep } from './window-step';
   providers: [{ provide: STEPPER_GLOBAL_OPTIONS, useValue: { showError: true, displayDefaultIndicatorType: false } }],
   template: `
     <div class="page">
-      <oci-page-header heading="Rule builder" lede="Compose a rule without code. Rules are declarative data checked against a fixed set of operators, so nothing you type is ever executed.">
+      <oci-page-header class="stack-acts" [heading]="i18n.t('rules.builder.title')" [lede]="i18n.t('rules.builder.lede')">
         <mat-form-field class="open" subscriptSizing="dynamic">
-          <mat-select [value]="loadedId()" (valueChange)="loadRule($event)" aria-label="Open a rule">
-            <mat-option value="">New rule</mat-option>@for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ r.name }}</mat-option> }
+          <mat-select [value]="loadedId()" (valueChange)="loadRule($event)" [attr.aria-label]="i18n.t('rules.builder.open')">
+            <mat-option value="">{{ i18n.t('rules.builder.new') }}</mat-option>@for (r of rules(); track r.id) { <mat-option [value]="r.id">{{ ruleLabel(r) }}</mat-option> }
           </mat-select>
         </mat-form-field>
       </oci-page-header>
 
       <div class="layout" [class.review]="step() === 'review'">
         <form class="panel-raised main" (submit)="$event.preventDefault(); next()" novalidate [attr.aria-labelledby]="'h-step'">
-          <h2 id="h-step" class="sr-only">Step {{ index() + 1 }}: {{ current().label }}</h2>
+          <h2 id="h-step" class="sr-only">{{ i18n.t('rules.builder.stepHeading', { n: index() + 1, label: i18n.t(current().label) }) }}</h2>
           <mat-stepper [linear]="false" [selectedIndex]="index()" (selectionChange)="step.set(steps[$event.selectedIndex].id)" [orientation]="narrow() ? 'vertical' : 'horizontal'"
-            aria-label="Rule builder steps" animationDuration="0">
+            [attr.aria-label]="i18n.t('rules.builder.stepsAria')" animationDuration="0">
             <!-- step icons: the number, or the number in the error colour when the step has issues (no icon font) -->
             <ng-template matStepperIcon="edit" let-index="index">{{ index + 1 }}</ng-template>
             <ng-template matStepperIcon="done" let-index="index">{{ index + 1 }}</ng-template>
             <ng-template matStepperIcon="error" let-index="index">{{ index + 1 }}</ng-template>
             @for (s of steps; track s.id) {
               <mat-step [hasError]="!!issues()[s.id]" [errorMessage]="issueText(s.id)" [aria-label]="stepAria(s.id, $index)" [completed]="false">
-                <ng-template matStepLabel>{{ s.label }}@if (issues()[s.id]; as c) { <span class="iss" aria-hidden="true">{{ c }}</span> }</ng-template>
+                <ng-template matStepLabel>{{ i18n.t(s.label) }}@if (issues()[s.id]; as c) { <span class="iss" aria-hidden="true">{{ c }}</span> }</ng-template>
                 <ng-template matStepContent>
                   <div class="step-body">
-                    <p class="step-hint">{{ s.hint }}</p>
+                    <p class="step-hint">{{ i18n.t(s.hint) }}</p>
                     @switch (s.id) {
                       @case ('scope') { <oci-scope-step [draft]="d()" [errors]="errors()" [eventTypes]="eventTypes()" [idLocked]="!!loadedId()" (patch)="patch($event)" /> }
                       @case ('conditions') {
-                        <p class="hint lead">Conditions are checked on each event in scope. Group them with all, any or none, up to four levels deep.</p>
+                        <p class="hint lead">{{ i18n.t('rules.builder.conditionsLead') }}</p>
                         <oci-condition-group [group]="d().when" [catalog]="catalog()" [errors]="errors()" (changed)="touch()" />
                       }
                       @case ('window') { <oci-window-step [draft]="d()" [catalog]="catalog()" [errors]="errors()" (patch)="patch($event)" /> }
                       @case ('actions') { <oci-actions-step [draft]="d()" [errors]="errors()" (patch)="patch($event)" /> }
                       @case ('review') {
                         <div class="well verdict" role="status">
-                          @if (errors().length === 0) { <strong class="ok">Ready to save.</strong> <span>The rule passes every local check. The server validates it again when you save.</span> }
-                          @else { <strong class="bad">{{ errors().length === 1 ? '1 issue to fix' : errors().length + ' issues to fix' }}</strong> <span>before this rule can be saved.</span> }
+                          @if (errors().length === 0) { <strong class="ok">{{ i18n.t('rules.builder.ready') }}</strong> <span>{{ i18n.t('rules.builder.readyBody') }}</span> }
+                          @else { <strong class="bad">{{ i18n.t('rules.builder.issuesToFix', { n: errors().length }) }}</strong> <span>{{ i18n.t('rules.builder.beforeSave') }}</span> }
                         </div>
                         @if (errors().length) {
                           <ul class="errs">@for (e of errors(); track $index) {
-                            <li><span class="mono">{{ e.path }}</span> {{ e.message }} <button matButton class="sm" type="button" (click)="step.set(stepOf(e.path))">Fix in {{ stepLabel(e.path) }}</button></li>
+                            <li><span class="mono">{{ e.path }}</span> {{ errText(e) }} <button matButton class="sm" type="button" (click)="step.set(stepOf(e.path))">{{ i18n.t('rules.builder.fixIn', { step: stepLabel(e.path) }) }}</button></li>
                           }</ul>
                         }
-                        <pre class="code yaml-full" aria-label="Rule YAML">{{ yaml() }}</pre>
-                        @if (saveError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+                        <pre class="code yaml-full" [attr.aria-label]="i18n.t('rules.builder.yamlAria')">{{ yaml() }}</pre>
+                        @if (saveError(); as e) { <p class="field-error" role="alert">{{ apiError(e) }}</p> }
                       }
                     }
                     <div class="foot">
-                      @if (index() > 0) { <button matButton="outlined" type="button" (click)="back()">Back</button> }
+                      @if (index() > 0) { <button matButton="outlined" type="button" (click)="back()">{{ i18n.t('rules.builder.back') }}</button> }
                       <span class="spacer"></span>
                       @if (step() === 'review') {
-                        <button matButton="outlined" type="button" (click)="copy()">Copy YAML</button>
-                        <button matButton="outlined" type="button" (click)="simulate()" [disabled]="errors().length > 0">Run simulation</button>
-                        <button matButton="filled" type="button" (click)="save()" [disabled]="errors().length > 0 || saving()">{{ saving() ? 'Saving…' : loadedId() ? 'Save changes' : 'Create rule' }}</button>
+                        <button matButton="outlined" type="button" (click)="copy()">{{ i18n.t('rules.builder.copy') }}</button>
+                        <button matButton="outlined" type="button" (click)="simulate()" [disabled]="errors().length > 0">{{ i18n.t('rules.builder.simulate') }}</button>
+                        <button matButton="filled" type="button" (click)="save()" [disabled]="errors().length !== 0 || saving()">{{ i18n.t(saving() ? 'rules.builder.saving' : loadedId() ? 'rules.builder.saveChanges' : 'rules.builder.create') }}</button>
                       } @else {
-                        <button matButton="filled" type="submit">{{ step() === 'actions' ? 'Review rule' : 'Next: ' + nextLabel() }}</button>
+                        <button matButton="filled" type="submit">{{ step() === 'actions' ? i18n.t('rules.builder.reviewRule') : i18n.t('rules.builder.next', { step: nextLabel() }) }}</button>
                       }
                     </div>
-                    @if (saving()) { <mat-progress-bar mode="indeterminate" aria-label="Saving the rule" /> }
+                    @if (saving()) { <mat-progress-bar mode="indeterminate" [attr.aria-label]="i18n.t('rules.builder.savingAria')" /> }
                   </div>
                 </ng-template>
               </mat-step>
@@ -100,10 +102,10 @@ import { WindowStep } from './window-step';
 
         @if (step() !== 'review') {
           <aside class="card side" aria-labelledby="h-yaml">
-            <div class="card-head"><h2 id="h-yaml">YAML preview</h2>
-              <span class="small strong act" [class.ok]="errors().length === 0" [class.bad]="errors().length > 0">{{ errors().length === 0 ? 'Valid' : errors().length === 1 ? '1 issue' : errors().length + ' issues' }}</span></div>
-            <pre class="code yaml" aria-label="Generated YAML">{{ yaml() }}</pre>
-            <p class="small muted">This is exactly what gets saved. <a routerLink="/rules/code">Edit it as code instead</a>.</p>
+            <div class="card-head"><h2 id="h-yaml">{{ i18n.t('rules.builder.preview') }}</h2>
+              <span class="small strong act" [class.ok]="errors().length === 0" [class.bad]="errors().length > 0">{{ errors().length === 0 ? i18n.t('rules.builder.valid') : i18n.t('rules.builder.issues', { n: errors().length }) }}</span></div>
+            <pre class="code yaml" [attr.aria-label]="i18n.t('rules.builder.generatedAria')">{{ yaml() }}</pre>
+            <p class="small muted">{{ i18n.t('rules.builder.exactly') }} <a routerLink="/rules/code">{{ i18n.t('rules.builder.editAsCode') }}</a>.</p>
           </aside>
         }
       </div>
@@ -147,6 +149,7 @@ export class RuleBuilderPage {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
   /** ?rule=<id> opens that stored rule (links from Rules as code). */
   readonly rule = input<string>();
 
@@ -156,7 +159,7 @@ export class RuleBuilderPage {
   readonly narrow = toSignal(inject(BreakpointObserver).observe('(max-width: 720px)').pipe(map((s) => s.matches)), { initialValue: false });
   readonly index = computed(() => STEPS.findIndex((s) => s.id === this.step()));
   readonly current = computed(() => STEPS[this.index()]);
-  readonly nextLabel = computed(() => STEPS[this.index() + 1]?.label.toLowerCase() ?? '');
+  readonly nextLabel = computed(() => { const n = STEPS[this.index() + 1]; return n ? this.i18n.t(n.label).toLocaleLowerCase(this.i18n.lang()) : ''; });
 
   private readonly catalogRes = apiResource({ params: () => ({}), stream: () => this.api.fieldCatalog().pipe(catchError(() => of(DEFAULT_FIELDS))) });
   private readonly eventTypesRes = apiResource({ params: () => ({}), stream: () => this.api.eventTypes().pipe(catchError(() => of([] as EventTypeDef[]))) });
@@ -198,19 +201,22 @@ export class RuleBuilderPage {
   }
 
   issueText(id: StepId): string {
-    const n = this.issues()[id] ?? 0;
-    return n === 1 ? '1 issue' : `${n} issues`;
+    return this.i18n.t('rules.builder.issues', { n: this.issues()[id] ?? 0 });
   }
 
   /** Accessible name of a step header: its number, label and issue count. */
   stepAria(id: StepId, i: number): string {
     const n = this.issues()[id];
-    return `${i + 1}. ${STEPS[i].label}${n ? ', ' + this.issueText(id) : ''}`;
+    return `${i + 1}. ${this.i18n.t(STEPS[i].label)}${n ? ', ' + this.issueText(id) : ''}`;
   }
 
   stepLabel(path: string): string {
-    return STEPS.find((s) => s.id === stepOfPath(path))!.label.toLowerCase();
+    return this.i18n.t(STEPS.find((s) => s.id === stepOfPath(path))!.label).toLocaleLowerCase(this.i18n.lang());
   }
+  protected errText(e: RuleValidationError): string { return ruleErrorText(e, this.i18n.lang()); }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
+  /** A stored rule's name in the console's language. */
+  protected ruleLabel(r: Rule): string { return ruleText(r, this.i18n.lang()).name; }
 
   next(): void {
     const n = STEPS[this.index() + 1];
@@ -239,7 +245,7 @@ export class RuleBuilderPage {
     const r = this.rules().find((x) => x.id === id);
     const parsed = r ? yamlToRule(r.yaml, this.catalog()) : null;
     if (parsed?.draft) this.d.set(parsed.draft);
-    else this.toasts.error('Cannot open this rule in the builder', 'Its YAML could not be parsed. Open it in Rules as code.');
+    else this.toasts.error(this.i18n.t('rules.builder.toast.cannotOpen'), this.i18n.t('rules.builder.toast.cannotOpenDetail'));
   }
 
   save(): void {
@@ -252,7 +258,7 @@ export class RuleBuilderPage {
         this.saving.set(false);
         this.loadedId.set(r.id);
         this.rulesRes.update((p) => ({ items: [r, ...(p?.items ?? []).filter((x) => x.id !== r.id)], nextCursor: p?.nextCursor ?? null }));
-        this.toasts.success(id ? 'Changes saved' : 'Rule created', `${r.id}, version ${r.version}`);
+        this.toasts.success(this.i18n.t(id ? 'rules.builder.toast.saved' : 'rules.builder.toast.created'), this.i18n.t('rules.builder.toast.savedDetail', { id: r.id, version: r.version }));
       },
       error: (e: ApiError) => {
         this.saving.set(false);
@@ -262,7 +268,7 @@ export class RuleBuilderPage {
   }
 
   copy(): void {
-    void navigator.clipboard?.writeText(this.yaml()).then(() => this.toasts.success('YAML copied')).catch(() => this.toasts.error('Could not copy', 'The browser refused clipboard access.'));
+    void navigator.clipboard?.writeText(this.yaml()).then(() => this.toasts.success(this.i18n.t('rules.builder.toast.copied'))).catch(() => this.toasts.error(this.i18n.t('rules.builder.toast.cannotCopy'), this.i18n.t('rules.builder.toast.clipboardRefused')));
   }
 
   simulate(): void {

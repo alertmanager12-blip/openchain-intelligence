@@ -622,8 +622,14 @@ export interface Rule {
 
 export interface RuleValidationError {
   path: string;
+  /** English wording. */
   message: string;
   line?: number;
+  /** Dictionary key and values of an error the console raised itself: the screens show it in the console's language. */
+  key?: string;
+  params?: Record<string, string | number>;
+  /** Position of the document in a multi-document file (rules as code). */
+  doc?: number;
 }
 
 export interface RuleValidationResult {

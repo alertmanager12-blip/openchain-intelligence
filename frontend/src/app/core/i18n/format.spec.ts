@@ -1,4 +1,4 @@
-import { fmtDate, fmtDuration, fmtNumber, fmtRelative, plural } from './format';
+import { fmtDate, fmtDuration, fmtNumber, fmtPercent, fmtRelative, plural } from './format';
 
 /** Spec 2026-11-19 §1: numbers, dates, relative times, durations and plurals follow the language. */
 describe('i18n formatting', () => {
@@ -36,5 +36,16 @@ describe('i18n formatting', () => {
     expect(plural(1, 'fr', f)).toBe('alerte');
     expect(plural(2, 'fr', f)).toBe('alertes');
     expect(plural(0, 'en', { one: 'alert', other: 'alerts' })).toBe('alerts');
+  });
+});
+
+describe('percent, stamps and fractions', () => {
+  it('writes a ratio as a percentage with the narrow space in French', () => {
+    expect(fmtPercent(0.7, 'en')).toBe('70%');
+    expect(fmtPercent(0.7, 'fr')).toBe('70 %');
+  });
+  it('keeps a fixed number of fractions on request', () => {
+    expect(fmtNumber(0.5, 'en', 2, 2)).toBe('0.50');
+    expect(fmtNumber(0.5, 'fr', 2, 2)).toBe('0,50');
   });
 });

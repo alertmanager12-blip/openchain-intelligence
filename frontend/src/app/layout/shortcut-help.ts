@@ -1,31 +1,33 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, TemplateRef, effect, inject, model, untracked, viewChild } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { NAV_ITEMS } from './navigation';
-import { I18nService } from '../core/i18n/i18n.service';
+import { I18nService, type Key } from '../core/i18n/i18n.service';
 
 export interface Shortcut {
   keys: string[];
   /** Keys pressed one after the other (G then A) rather than together. */
   sequence?: boolean;
+  /** English name (tests, fallback); the dialog shows {@link labelKey} in the console's language. */
   label: string;
+  labelKey: Key;
 }
 
 const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** Every keyboard shortcut of the console, grouped as shown in the help dialog. Shared with the tests. */
-export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
-  { group: 'General', items: [
-    { keys: [MAC ? '⌘' : 'Ctrl', 'K'], label: 'Search an address, a transaction or a page' },
-    { keys: ['?'], label: 'Show keyboard shortcuts' },
-    { keys: ['['], label: 'Collapse or expand the sidebar' },
+export const SHORTCUTS: { group: string; groupKey: Key; items: Shortcut[] }[] = [
+  { group: 'General', groupKey: 'help.general', items: [
+    { keys: [MAC ? '⌘' : 'Ctrl', 'K'], label: 'Search an address, a transaction or a page', labelKey: 'help.s.search' },
+    { keys: ['?'], label: 'Show keyboard shortcuts', labelKey: 'help.s.help' },
+    { keys: ['['], label: 'Collapse or expand the sidebar', labelKey: 'help.s.sidebar' },
   ] },
-  { group: 'Go to', items: NAV_ITEMS.filter((i) => i.key).map((i) => ({ keys: ['G', i.key!.toUpperCase()], sequence: true, label: i.label })) },
-  { group: 'Alerts inbox', items: [
-    { keys: ['J'], label: 'Next alert' },
-    { keys: ['K'], label: 'Previous alert' },
-    { keys: ['Enter'], label: 'Open the highlighted alert' },
-    { keys: ['E'], label: 'Acknowledge the open alert' },
-    { keys: ['Esc'], label: 'Close the alert pane' },
+  { group: 'Go to', groupKey: 'help.goTo', items: NAV_ITEMS.filter((i) => i.key).map((i) => ({ keys: ['G', i.key!.toUpperCase()], sequence: true, label: i.label, labelKey: i.labelKey })) },
+  { group: 'Alerts inbox', groupKey: 'help.alerts', items: [
+    { keys: ['J'], label: 'Next alert', labelKey: 'help.s.next' },
+    { keys: ['K'], label: 'Previous alert', labelKey: 'help.s.prev' },
+    { keys: ['Enter'], label: 'Open the highlighted alert', labelKey: 'help.s.open' },
+    { keys: ['E'], label: 'Acknowledge the open alert', labelKey: 'help.s.ack' },
+    { keys: ['Esc'], label: 'Close the alert pane', labelKey: 'help.s.close' },
   ] },
 ];
 
@@ -40,11 +42,11 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
         <div class="groups">
           @for (g of groups; track g.group) {
             <section [attr.aria-labelledby]="'hg-' + $index">
-              <h3 [id]="'hg-' + $index">{{ g.group === 'Go to' ? i18n.t('help.goTo') : g.group }}</h3>
+              <h3 [id]="'hg-' + $index">{{ i18n.t(g.groupKey) }}</h3>
               <dl>
                 @for (s of g.items; track s.label) {
-                  <div class="r"><dt>{{ name(s) }}</dt>
-                    <dd>@for (k of s.keys; track $index) { @if (!$first && s.sequence) { <span class="then">then</span> }<kbd>{{ k }}</kbd> }</dd></div>
+                  <div class="r"><dt>{{ i18n.t(s.labelKey) }}</dt>
+                    <dd>@for (k of s.keys; track $index) { @if (!$first && s.sequence) { <span class="then">{{ i18n.t('help.then') }}</span> }<kbd>{{ k }}</kbd> }</dd></div>
                 }
               </dl>
             </section>
@@ -70,11 +72,6 @@ export const SHORTCUTS: { group: string; items: Shortcut[] }[] = [
 })
 export class ShortcutHelp {
   protected readonly i18n = inject(I18nService);
-  /** Page names follow the console language; the other shortcut descriptions are English for now (spec 2026-11-19: later screens). */
-  protected name(s: Shortcut): string {
-    const page = NAV_ITEMS.find((i) => i.label === s.label);
-    return page ? this.i18n.t(page.labelKey) : s.label;
-  }
 
   readonly open = model(false);
   readonly groups = SHORTCUTS;

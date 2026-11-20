@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 import { Availability, LANDING_COPY } from './landing-content';
 
-const STATUS: Record<Availability, string> = { available: 'Available', partial: 'Partial', planned: 'Planned' };
+const STATUS: Record<Availability, Key> = { available: 'landing.status.available', partial: 'landing.status.partial', planned: 'landing.status.planned' };
 
 /** The four capabilities as tabs (WAI-ARIA tabs pattern: arrow keys, Home/End); every item states its availability. */
 @Component({
@@ -47,24 +48,24 @@ const STATUS: Record<Availability, string> = { available: 'Available', partial: 
   template: `
     <section class="cs-section" id="capabilities" aria-labelledby="cap-title">
       <div class="cs-wrap">
-        <h2 class="cs-h2" id="cap-title">Understand. Predict. Investigate. Act.</h2>
-        <p class="cs-lede">Each capability below is labeled with what works today, what is partial and what is planned.</p>
+        <h2 class="cs-h2" id="cap-title">{{ i18n.t('landing.cap.title') }}</h2>
+        <p class="cs-lede">{{ i18n.t('landing.cap.lede') }}</p>
 
-        <div class="tabs" role="tablist" aria-label="Capabilities" (keydown)="onKey($event)">
+        <div class="tabs" role="tablist" [attr.aria-label]="i18n.t('landing.cap.tabsAria')" (keydown)="onKey($event)">
           @for (p of pillars; track p.id; let i = $index) {
             <button class="tab" type="button" role="tab" [id]="'tab-' + p.id" [attr.aria-controls]="'panel-' + p.id"
               [attr.aria-selected]="active() === i" [attr.tabindex]="active() === i ? 0 : -1" (click)="active.set(i)">
-              <b>{{ p.verb }}</b><span>{{ p.name }}</span>
+              <b>{{ i18n.t(p.verb) }}</b><span>{{ i18n.t(p.name) }}</span>
             </button>
           }
         </div>
         @for (p of pillars; track p.id; let i = $index) {
           <div class="panel" role="tabpanel" [id]="'panel-' + p.id" [attr.aria-labelledby]="'tab-' + p.id" [hidden]="active() !== i">
             <div>
-              <p class="summary">{{ p.summary }}</p>
+              <p class="summary">{{ i18n.t(p.summary) }}</p>
               <ul>
                 @for (c of p.items; track c.title) {
-                  <li><strong>{{ c.title }}</strong><span class="cs-status cs-status--{{ c.status }}">{{ status[c.status] }}</span><p>{{ c.detail }}</p></li>
+                  <li><strong>{{ i18n.t(c.title) }}</strong><span class="cs-status cs-status--{{ c.status }}">{{ i18n.t(status[c.status]) }}</span><p>{{ i18n.t(c.detail) }}</p></li>
                 }
               </ul>
             </div>
@@ -72,22 +73,22 @@ const STATUS: Record<Availability, string> = { available: 'Available', partial: 
               @switch (p.id) {
                 @case ('understand') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
-                    <text class="v-txt" x="0" y="14">Activity by day</text>
+                    <text class="v-txt" x="0" y="14">{{ i18n.t('landing.viz.activity') }}</text>
                     @for (h of bars; track $index) { <rect [attr.x]="$index * 22" [attr.y]="150 - h" width="14" [attr.height]="h" rx="2" [class.v-acc]="$index === 9" fill="#2a3542" /> }
                     <path class="v-line" d="M0 160 H300" />
-                    <text class="v-txt" x="0" y="190">Score 41, medium: 2 contributions</text>
+                    <text class="v-txt" x="0" y="190">{{ i18n.t('landing.viz.score') }}</text>
                   </svg>
-                  <figcaption>Wallet profile and score (illustrative)</figcaption>
+                  <figcaption>{{ i18n.t('landing.viz.profile') }}</figcaption>
                 }
                 @case ('predict') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
                     <path class="v-line" d="M10 110 H310" />
                     @for (x of ticks; track x) { <circle [attr.cx]="x" cy="110" r="4" fill="#2a3542" /> }
-                    <circle class="v-acc" cx="196" cy="110" r="6" /><text class="v-txt" x="196" y="86" text-anchor="middle">unusual amount</text>
-                    <circle class="v-risk" cx="262" cy="110" r="7" /><text class="v-txt" x="262" y="146" text-anchor="middle">rapid drain</text>
-                    <text class="v-txt" x="10" y="190">Signals on one wallet over 24 h</text>
+                    <circle class="v-acc" cx="196" cy="110" r="6" /><text class="v-txt" x="196" y="86" text-anchor="middle">{{ i18n.t('landing.viz.unusual') }}</text>
+                    <circle class="v-risk" cx="262" cy="110" r="7" /><text class="v-txt" x="262" y="146" text-anchor="middle">{{ i18n.t('landing.viz.drain') }}</text>
+                    <text class="v-txt" x="10" y="190">{{ i18n.t('landing.viz.signals') }}</text>
                   </svg>
-                  <figcaption>Each signal keeps its evidence (illustrative)</figcaption>
+                  <figcaption>{{ i18n.t('landing.viz.evidence') }}</figcaption>
                 }
                 @case ('investigate') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
@@ -96,21 +97,21 @@ const STATUS: Record<Availability, string> = { available: 'Available', partial: 
                     @for (n of graph; track $index) { <circle class="v-node" [attr.cx]="n[0]" [attr.cy]="n[1]" r="9" /> }
                     <circle class="v-node" cx="160" cy="100" r="14" style="stroke: var(--cs-flow)" />
                     <circle class="v-risk" cx="300" cy="110" r="8" />
-                    <text class="v-txt" x="300" y="138" text-anchor="middle">2 hops</text>
+                    <text class="v-txt" x="300" y="138" text-anchor="middle">{{ i18n.t('landing.viz.twoHops') }}</text>
                   </svg>
-                  <figcaption>Exposure through an intermediary wallet (illustrative)</figcaption>
+                  <figcaption>{{ i18n.t('landing.viz.exposure') }}</figcaption>
                 }
                 @case ('act') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
                     <rect x="8" y="78" width="96" height="44" rx="8" fill="#2a1416" stroke="#f0645c" />
-                    <text class="v-txt" x="56" y="105" text-anchor="middle" style="fill: #e8edf3">Alert</text>
+                    <text class="v-txt" x="56" y="105" text-anchor="middle" style="fill: #e8edf3">{{ i18n.t('landing.viz.alert') }}</text>
                     @for (c of channels; track c; let i = $index) {
                       <path class="v-line" [attr.d]="'M104 100 C 160 100, 160 ' + (28 + i * 48) + ', 210 ' + (28 + i * 48)" />
                       <rect x="210" [attr.y]="12 + i * 48" width="102" height="32" rx="6" class="v-node" />
                       <text class="v-txt" x="261" [attr.y]="33 + i * 48" text-anchor="middle">{{ c }}</text>
                     }
                   </svg>
-                  <figcaption>One alert, routed per rule</figcaption>
+                  <figcaption>{{ i18n.t('landing.viz.routed') }}</figcaption>
                 }
               }
             </figure>
@@ -121,6 +122,7 @@ const STATUS: Record<Availability, string> = { available: 'Available', partial: 
   `,
 })
 export class CapabilitiesSection {
+  protected readonly i18n = inject(I18nService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   protected readonly pillars = LANDING_COPY.pillars;
   protected readonly status = STATUS;

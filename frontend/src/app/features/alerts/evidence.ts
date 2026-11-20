@@ -1,4 +1,5 @@
 import { NetworkId } from '../../core/models';
+import { Lang, hasKey, translate } from '../../core/i18n/i18n.service';
 
 /** One condition outcome as written by the engine: "field op expected (actual value) -> true". */
 export interface ConditionOutcome {
@@ -16,27 +17,27 @@ export function parseCondition(s: string): ConditionOutcome | null {
   return m ? { field: m[1], op: m[2], expected: m[3], actual: m[4], matched: m[5] === 'true' } : null;
 }
 
-const OPS: Record<string, string> = {
-  gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠', ne: '≠', in: 'in', not_in: 'not in', between: 'between', contains: 'contains', exists: 'exists',
-};
+const SYMBOLS: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=', neq: '≠', ne: '≠' };
 
-/** Engine operators come as "gte" (conditions) or "GTE" (aggregations). */
-export function opSymbol(op: string): string {
-  return OPS[op.toLowerCase()] ?? op.toLowerCase().replace(/_/g, ' ');
+/** Engine operators come as "gte" (conditions) or "GTE" (aggregations); word operators are written in the console's language. */
+export function opSymbol(op: string, lang: Lang = 'en'): string {
+  const k = op.toLowerCase();
+  const key = `alerts.op.${k}`;
+  return SYMBOLS[k] ?? (hasKey(key) ? translate(lang, key) : k.replace(/_/g, ' '));
 }
 
 /** ISO-8601 duration (Java Duration.toString, e.g. "PT2H30M", "PT0.5S", "P1D") in plain words. */
-export function isoDuration(d: string | null | undefined): string {
+export function isoDuration(d: string | null | undefined, lang: Lang = 'en'): string {
   if (!d) return '–';
   const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?)?$/.exec(d);
   if (!m) return d;
   const [, days, h, min, sec] = m;
   const parts: string[] = [];
-  if (days) parts.push(`${+days} d`);
-  if (h) parts.push(`${+h} h`);
-  if (min) parts.push(`${+min} min`);
-  if (sec && +sec) parts.push(`${+sec} s`);
-  return parts.join(' ') || '0 s';
+  if (days) parts.push(translate(lang, 'time.day', { n: +days }));
+  if (h) parts.push(translate(lang, 'time.hour', { n: +h }));
+  if (min) parts.push(translate(lang, 'time.min', { n: +min }));
+  if (sec && +sec) parts.push(translate(lang, 'alerts.sec', { n: +sec }));
+  return parts.join(' ') || translate(lang, 'alerts.sec', { n: 0 });
 }
 
 /** Event ids are "network:txHash:logIndex" (oci-core model). */

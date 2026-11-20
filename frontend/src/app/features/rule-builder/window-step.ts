@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatSlideToggle } from '@angular/material/slide-toggle';
+import { I18nService, hasKey } from '../../core/i18n/i18n.service';
 import { FieldDef, RuleValidationError } from '../../core/models';
 import { AGGREGATES, RuleDraft, WindowSpec } from '../../core/rules/rule-model';
+import { ruleErrorText } from '../../core/rules/rule-yaml';
 import { MAT_FORM } from '../../shared/material';
 
 /** Step 3: optional time-window aggregation ("sum of amount per sender over 1h > 1,000,000"). */
@@ -12,37 +14,37 @@ import { MAT_FORM } from '../../shared/material';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="toggle">
-      <mat-slide-toggle hideIcon [checked]="!!draft().window" (change)="toggle()" aria-describedby="win-h">Aggregate over a time window</mat-slide-toggle>
-      <p class="hint" id="win-h">Fires when the aggregate of matching events over the window crosses the threshold. Leave it off to alert on every single matching event.</p>
+      <mat-slide-toggle hideIcon [checked]="!!draft().window" (change)="toggle()" aria-describedby="win-h">{{ i18n.t('rules.window.toggle') }}</mat-slide-toggle>
+      <p class="hint" id="win-h">{{ i18n.t('rules.window.hint') }}</p>
     </div>
     @if (draft().window; as w) {
       <div class="grid win">
         <mat-form-field>
-          <mat-label>Aggregate</mat-label>
+          <mat-label>{{ i18n.t('rules.window.aggregate') }}</mat-label>
           <mat-select [value]="w.aggregate" (valueChange)="set({ aggregate: $event })">@for (a of aggregates; track a) { <mat-option [value]="a">{{ aggLabel(a) }}</mat-option> }</mat-select>
         </mat-form-field>
         @if (w.aggregate !== 'count') {
           <mat-form-field>
-            <mat-label>Of field</mat-label>
+            <mat-label>{{ i18n.t('rules.window.ofField') }}</mat-label>
             <mat-select [value]="w.field" (valueChange)="set({ field: $event })">@for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span></mat-option> }</mat-select>
           </mat-form-field>
         }
         <mat-form-field>
-          <mat-label>Per</mat-label>
+          <mat-label>{{ i18n.t('rules.window.per') }}</mat-label>
           <mat-select [value]="w.groupBy[0] ?? ''" (valueChange)="set({ groupBy: $event ? [$event, ...w.groupBy.slice(1)] : [] })">
-            <mat-option value="">Whole rule</mat-option>@for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span></mat-option> }
+            <mat-option value="">{{ i18n.t('rules.window.wholeRule') }}</mat-option>@for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span></mat-option> }
           </mat-select>
         </mat-form-field>
         <mat-form-field>
-          <mat-label>Over</mat-label>
+          <mat-label>{{ i18n.t('rules.window.over') }}</mat-label>
           <input matInput name="wd" [ngModel]="w.duration" (ngModelChange)="set({ duration: $event })" placeholder="1h" [ociInvalid]="!!err('window.duration')" />
         </mat-form-field>
         <mat-form-field>
-          <mat-label>Is</mat-label>
-          <mat-select [value]="w.op" (valueChange)="set({ op: $event })"><mat-option value="gt">greater than</mat-option><mat-option value="gte">at least</mat-option></mat-select>
+          <mat-label>{{ i18n.t('rules.window.is') }}</mat-label>
+          <mat-select [value]="w.op" (valueChange)="set({ op: $event })"><mat-option value="gt">{{ i18n.t('rules.winOp.gt') }}</mat-option><mat-option value="gte">{{ i18n.t('rules.winOp.gte') }}</mat-option></mat-select>
         </mat-form-field>
         <mat-form-field>
-          <mat-label>Threshold</mat-label>
+          <mat-label>{{ i18n.t('rules.window.threshold') }}</mat-label>
           <input matInput name="wv" inputmode="decimal" [ngModel]="w.value" (ngModelChange)="set({ value: $event })" [ociInvalid]="!!err('window.value')" />
         </mat-form-field>
       </div>
@@ -63,21 +65,25 @@ export class WindowStep {
   readonly catalog = input<FieldDef[]>([]);
   readonly errors = input<RuleValidationError[]>([]);
   readonly patch = output<Partial<RuleDraft>>();
+  protected readonly i18n = inject(I18nService);
   readonly aggregates = AGGREGATES;
 
   aggLabel(a: string): string {
-    return ({ count: 'Count of events', sum: 'Sum', distinct_count: 'Distinct count', max: 'Maximum', ratio_of_balance: 'Ratio of balance' } as Record<string, string>)[a] ?? a;
+    const k = `rules.agg.${a}`;
+    return hasKey(k) ? this.i18n.t(k) : a;
   }
   summary(w: WindowSpec): string {
-    const what = w.aggregate === 'count' ? 'Number of matching events' : `${this.aggLabel(w.aggregate)} of ${w.field}`;
-    const per = w.groupBy.length ? ` per ${w.groupBy.join(', ')}` : '';
-    return `${what}${per} over ${w.duration || '…'} is ${w.op === 'gte' ? 'at least' : 'greater than'} ${w.value || '…'}.`;
+    const t = this.i18n.t.bind(this.i18n);
+    const what = w.aggregate === 'count' ? t('rules.win.whatCount') : t('rules.win.whatOf', { agg: this.aggLabel(w.aggregate), field: w.field ?? '' });
+    const per = w.groupBy.length ? t('rules.win.per', { fields: w.groupBy.join(', ') }) : '';
+    return t('rules.win.summary', { what, per, duration: w.duration || '…', cmp: t(w.op === 'gte' ? 'rules.win.cmp.gte' : 'rules.win.cmp.gt'), value: w.value || '…' });
   }
   err(path: string): string | null {
-    return this.errors().find((e) => e.path === path)?.message ?? null;
+    const e = this.errors().find((x) => x.path === path);
+    return e ? ruleErrorText(e, this.i18n.lang()) : null;
   }
   errsUnder(): string[] {
-    return this.errors().filter((e) => e.path === 'window' || e.path.startsWith('window.')).map((e) => e.message);
+    return this.errors().filter((e) => e.path === 'window' || e.path.startsWith('window.')).map((e) => ruleErrorText(e, this.i18n.lang()));
   }
   set(p: Partial<WindowSpec>): void {
     const w = this.draft().window;

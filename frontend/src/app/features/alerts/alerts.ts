@@ -4,13 +4,15 @@ import { ApiService } from '../../core/api.service';
 import { ALERT_STATUSES, Alert, AlertStatus, SEVERITIES, Severity } from '../../core/models';
 import { Shell, isTypingTarget } from '../../layout/shell';
 import { apiResource } from '../../shared/api-resource';
-import { netLabel, shortHash, timeAgo } from '../../shared/format';
+import { netLabel, severityName, shortHash, statusName, timeAgo } from '../../shared/format';
+import { alertSentence } from '../../shared/alert-sentence';
+import { errorText } from '../../core/api-error';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { Crumb, PageHeader } from '../../shared/page-header';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { ruleName } from '../../shared/rule-text';
 import { TableState } from '../../shared/table-state';
-import { UI, sentence } from '../../shared/ui';
+import { UI } from '../../shared/ui';
 import { AlertDetail } from './alert-detail';
 
 const SEV_RANK: Record<Severity, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, INFO: 0 };
@@ -65,9 +67,15 @@ export class AlertsPage {
     return d?.id === id ? d : (this.list.value()?.items.find((a) => a.id === id) ?? null);
   });
 
-  readonly ago = (iso: string) => timeAgo(iso).replace(' ago', '');
+  /** "5m" / "5 min": the age without the "ago" / "il y a", which the list does not have room for. */
+  readonly ago = (iso: string) => timeAgo(iso, Date.now(), this.i18n.lang()).replace(' ago', '').replace('il y a ', '');
   readonly short = (a: string) => shortHash(a, 6, 4);
-  readonly sentence = sentence;
+  readonly sevName = (s: string) => severityName(s, this.i18n.lang());
+  readonly statName = (s: string) => statusName(s, this.i18n.lang());
+  /** The alert's sentence in the console's language; `en` is true when it is the engine's own English wording. */
+  readonly why = (a: Alert) => alertSentence(a, this.i18n.lang());
+  readonly whyIsEnglish = (a: Alert) => this.i18n.lang() === 'fr' && this.why(a) === (a.evidenceSummary ?? a.summary);
+  readonly errText = (e: Parameters<typeof errorText>[0]) => errorText(e, this.i18n.lang());
   /** Rule name in the console's language, from the translations the alert carries. */
   readonly ruleName = (a: Alert) => ruleName(a, this.i18n.lang());
   readonly netLabel = netLabel;
@@ -81,7 +89,8 @@ export class AlertsPage {
   readonly cursor = linkedSignal<string | null>(() => this.selectedId());
   readonly crumbs = computed<Crumb[]>(() => {
     const id = this.selectedId();
-    return id ? [{ label: 'Alerts', link: '/alerts' }, { label: id, mono: true }] : [{ label: 'Alerts' }];
+    const title = this.i18n.t('alerts.title');
+    return id ? [{ label: title, link: '/alerts' }, { label: id, mono: true }] : [{ label: title }];
   });
 
   private readonly pane = viewChild(AlertDetail);
@@ -139,7 +148,7 @@ export class AlertsPage {
       }
       case 'e': case 'E': {
         const a = this.selected();
-        if (a?.status === 'OPEN') { e.preventDefault(); void this.pane()?.move('ACKNOWLEDGED', 'Alert acknowledged'); }
+        if (a?.status === 'OPEN') { e.preventDefault(); void this.pane()?.move('ACKNOWLEDGED', 'alerts.done.acknowledge'); }
         break;
       }
       case 'Escape':

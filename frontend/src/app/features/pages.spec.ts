@@ -107,7 +107,9 @@ describe('pages (mock mode smoke test)', () => {
 
   it('shows a retryable error state when the provider is down', async () => {
     const el = await render(RiskPage, { network: 'polygon', address: MockDb.OUTAGE_ADDRESS });
-    expect(el.querySelector('.state--error')?.textContent).toContain('Provider unavailable');
+    // titled by status in the console language; the server's detail (no code in this mock) follows
+    expect(el.querySelector('.state--error strong')?.textContent).toBe('Service unavailable');
+    expect(el.querySelector('.state--error')?.textContent).toContain('The provider is currently failing');
     expect(el.querySelector('.state--error button')?.textContent).toContain('Retry');
   });
 });

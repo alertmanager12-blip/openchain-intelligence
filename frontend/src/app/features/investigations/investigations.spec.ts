@@ -43,7 +43,17 @@ describe('rule proposals (ADR-0022 amendment 4)', () => {
   });
 
   it('states the window the dry run actually covered', () => {
-    expect(dryRunLine(dry())).toBe('Dry run on 1200 event(s) from 2026-11-17 08:00:00 UTC to 2026-11-17 09:30:00 UTC: 40 in scope, 2 trigger(s), about 32.0 alert(s) per day.');
+    expect(dryRunLine(dry())).toBe('Dry run on 1,200 events from 2026-11-17 08:00:00 UTC to 2026-11-17 09:30:00 UTC: 40 in scope, 2 triggers, about 32.0 alerts per day.');
+  });
+
+  it('agrees events and triggers in number, in both languages, without "(s)"', () => {
+    const one = dry({ totalEvents: 1, eventsInScope: 1, triggers: 1 });
+    expect(dryRunLine(one)).toContain('1 event from');
+    expect(dryRunLine(one)).toContain('1 trigger,');
+    expect(dryRunLine(one, 'fr')).toContain('1 événement du');
+    expect(dryRunLine(one, 'fr')).toContain('1 déclenchement,');
+    expect(dryRunLine(dry(), 'fr')).toContain('2 déclenchements');
+    for (const l of ['en', 'fr'] as const) expect(dryRunLine(dry(), l) + dryRunLine(one, l)).not.toContain('(s)');
   });
 
   it('says when nothing could be tested', () => {

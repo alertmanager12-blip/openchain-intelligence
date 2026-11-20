@@ -94,6 +94,9 @@ export interface Crumb {
       .crumbs li:not(.cur) { display: none; }
       .crumbs li.cur::before { content: none; }
       .acts ::ng-deep .hide-sm { display: none; }
+      /* a page with wide actions (opt in with class="stack-acts"): they take their own row under the bar instead of overflowing it */
+      :host(.stack-acts) .bar { flex-wrap: wrap; height: auto; min-height: var(--topbar-h); padding-block: 6px; row-gap: 6px; }
+      :host(.stack-acts) .acts { order: 1; flex: 1 1 100%; flex-wrap: wrap; }
     }
   `,
 })

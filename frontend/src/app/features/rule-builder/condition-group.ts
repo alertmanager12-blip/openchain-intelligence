@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { FieldDef, FieldType } from '../../core/models';
+import { I18nService } from '../../core/i18n/i18n.service';
+import { FieldDef, FieldType, RuleValidationError } from '../../core/models';
 import {
-  Condition, ConditionGroup, ConditionValue, OPERATORS_BY_TYPE, OPERATOR_LABELS, Operator, availabilityNote, newCondition, newGroup,
+  Condition, ConditionGroup, ConditionValue, OPERATORS_BY_TYPE, Operator, availabilityNote, fieldDescription, fieldTypeName, newCondition, newGroup, operatorLabel,
 } from '../../core/rules/rule-model';
+import { ruleErrorText } from '../../core/rules/rule-yaml';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 
 /** Label category ids as written in wallet.labels / counterparty.labels by the backend. */
@@ -33,77 +35,77 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
   imports: [FormsModule, MatButtonToggleModule, ...MAT_BUTTONS, ...MAT_FORM],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="group" [class.nested]="depth() > 1" role="group" [attr.aria-label]="(group().match === 'all' ? 'All' : group().match === 'any' ? 'Any' : 'None') + ' of the following conditions'">
+    <div class="group" [class.nested]="depth() !== 1" role="group" [attr.aria-label]="groupAria()">
       <div class="row head">
-        <span class="kw">{{ depth() === 1 ? 'When' : 'Group' }}</span>
-        <mat-button-toggle-group aria-label="Group logic" [value]="group().match" (change)="setMatch($event.value)">
-          <mat-button-toggle value="all">All match</mat-button-toggle>
-          <mat-button-toggle value="any">Any matches</mat-button-toggle>
-          <mat-button-toggle value="not">None matches</mat-button-toggle>
+        <span class="kw">{{ i18n.t(depth() === 1 ? 'rules.cond.when' : 'rules.cond.group') }}</span>
+        <mat-button-toggle-group [aria-label]="i18n.t('rules.cond.logicAria')" [value]="group().match" (change)="setMatch($event.value)">
+          <mat-button-toggle value="all">{{ i18n.t('rules.cond.all') }}</mat-button-toggle>
+          <mat-button-toggle value="any">{{ i18n.t('rules.cond.any') }}</mat-button-toggle>
+          <mat-button-toggle value="not">{{ i18n.t('rules.cond.none') }}</mat-button-toggle>
         </mat-button-toggle-group>
         <span class="spacer"></span>
-        @if (removable()) { <button matButton class="sm danger" type="button" (click)="remove.emit()" aria-label="Remove group">Remove group</button> }
+        @if (removable()) { <button matButton class="sm danger" type="button" (click)="remove.emit()" [attr.aria-label]="i18n.t('rules.cond.removeGroup')">{{ i18n.t('rules.cond.removeGroup') }}</button> }
       </div>
 
       @for (ch of group().children; track ch.id; let i = $index; let first = $first) {
-        @if (!first) { <div class="joiner">{{ group().match === 'any' ? 'or' : group().match === 'not' ? 'nor' : 'and' }}</div> }
+        @if (!first) { <div class="joiner">{{ i18n.t(group().match === 'any' ? 'rules.cond.or' : group().match === 'not' ? 'rules.cond.nor' : 'rules.cond.and') }}</div> }
         @if (ch.kind === 'group') {
           <oci-condition-group [group]="ch" [catalog]="catalog()" [depth]="depth() + 1" [removable]="true" [errors]="errors()" [path]="childPath(i)" (changed)="changed.emit()" (remove)="removeAt(i)" />
         } @else {
           <div class="cond" [class.invalid]="hasError(childPath(i))">
             <mat-form-field class="f">
-              <mat-label>Field</mat-label>
+              <mat-label>{{ i18n.t('rules.cond.field') }}</mat-label>
               <mat-select [value]="ch.field" (valueChange)="setField(ch, $event)" panelWidth="auto" [ociInvalid]="hasError(childPath(i))">
-                @for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span> <span class="muted small">{{ f.type }}{{ note(f.available) }}</span></mat-option> }
+                @for (f of catalog(); track f.path) { <mat-option [value]="f.path"><span class="mono">{{ f.path }}</span> <span class="muted small">{{ typeName(f.type) }}{{ note(f.available) }}</span></mat-option> }
               </mat-select>
             </mat-form-field>
             <mat-form-field class="o">
-              <mat-label>Operator</mat-label>
+              <mat-label>{{ i18n.t('rules.cond.operator') }}</mat-label>
               <mat-select [value]="ch.op" (valueChange)="setOp(ch, $event)">
-                @for (op of ops(ch); track op) { <mat-option [value]="op">{{ opLabel[op] }}</mat-option> }
+                @for (op of ops(ch); track op) { <mat-option [value]="op">{{ opName(op) }}</mat-option> }
               </mat-select>
             </mat-form-field>
             <div class="v">
               @switch (inputKind(ch)) {
-                @case ('none') { <span class="small muted none">no value needed</span> }
+                @case ('none') { <span class="small muted none">{{ i18n.t('rules.cond.noValue') }}</span> }
                 @case ('bool') {
-                  <mat-form-field><mat-label>Value</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)"><mat-option [value]="true">true</mat-option><mat-option [value]="false">false</mat-option></mat-select></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.value') }}</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)"><mat-option [value]="true">{{ i18n.t('rules.cond.true') }}</mat-option><mat-option [value]="false">{{ i18n.t('rules.cond.false') }}</mat-option></mat-select></mat-form-field>
                 }
                 @case ('enum') {
-                  <mat-form-field><mat-label>Value</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of def(ch)?.options ?? []; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.value') }}</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of def(ch)?.options ?? []; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
                 }
                 @case ('label') {
-                  <mat-form-field><mat-label>Category</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of labelCats; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.category') }}</mat-label><mat-select [value]="ch.value" (valueChange)="set(ch, $event)">@for (o of labelCats; track o) { <mat-option [value]="o">{{ o }}</mat-option> }</mat-select></mat-form-field>
                 }
                 @case ('list') {
-                  <mat-form-field><mat-label>Values (comma separated)</mat-label><input matInput [ngModel]="listText(ch)" (ngModelChange)="setList(ch, $event)" [placeholder]="def(ch)?.options?.join(', ') ?? 'a, b, c'" /></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.values') }}</mat-label><input matInput [ngModel]="listText(ch)" (ngModelChange)="setList(ch, $event)" [placeholder]="def(ch)?.options?.join(', ') ?? 'a, b, c'" /></mat-form-field>
                 }
                 @case ('range') {
                   <div class="range">
-                    <mat-form-field><mat-label>Min</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 0)" (ngModelChange)="setRange(ch, 0, $event)" /></mat-form-field>
-                    <mat-form-field><mat-label>Max</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 1)" (ngModelChange)="setRange(ch, 1, $event)" /></mat-form-field>
+                    <mat-form-field><mat-label>{{ i18n.t('rules.cond.min') }}</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 0)" (ngModelChange)="setRange(ch, 0, $event)" /></mat-form-field>
+                    <mat-form-field><mat-label>{{ i18n.t('rules.cond.max') }}</mat-label><input matInput [attr.inputmode]="numeric(ch) ? 'decimal' : null" [ngModel]="rangeAt(ch, 1)" (ngModelChange)="setRange(ch, 1, $event)" /></mat-form-field>
                   </div>
                 }
                 @case ('number') {
-                  <mat-form-field><mat-label>Value</mat-label><input matInput type="number" [ngModel]="ch.value" (ngModelChange)="set(ch, $event === null || $event === '' ? null : +$event)" /></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.value') }}</mat-label><input matInput type="number" [ngModel]="ch.value" (ngModelChange)="set(ch, $event === null || $event === '' ? null : +$event)" /></mat-form-field>
                 }
                 @default {
-                  <mat-form-field><mat-label>Value</mat-label><input matInput [attr.inputmode]="def(ch)?.type === 'amount' ? 'decimal' : null" [ngModel]="ch.value" (ngModelChange)="set(ch, $event)"
-                    [placeholder]="def(ch)?.type === 'amount' ? 'exact decimal, e.g. 100000.50' : def(ch)?.type === 'timestamp' ? '2026-01-31T00:00:00Z' : ''" /></mat-form-field>
+                  <mat-form-field><mat-label>{{ i18n.t('rules.cond.value') }}</mat-label><input matInput [attr.inputmode]="def(ch)?.type === 'amount' ? 'decimal' : null" [ngModel]="ch.value" (ngModelChange)="set(ch, $event)"
+                    [placeholder]="valuePlaceholder(ch)" /></mat-form-field>
                 }
               }
             </div>
-            <button matIconButton class="x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" [attr.aria-label]="'Remove condition ' + (i + 1)" matTooltip="Remove condition">
+            <button matIconButton class="x" type="button" (click)="removeAt(i)" [disabled]="group().children.length === 1 && depth() === 1" [attr.aria-label]="i18n.t('rules.cond.removeAria', { n: i + 1 })" [matTooltip]="i18n.t('rules.cond.remove')">
               <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
-            @for (e of errorsFor(childPath(i)); track $index) { <p class="field-error full">{{ e }}</p> }
-            @if (def(ch); as d) { <p class="small muted full">{{ d.description }}</p> }
+            @for (e of errorsFor(childPath(i)); track $index) { <p class="field-error full">{{ errText(e) }}</p> }
+            @if (def(ch); as d) { <p class="small muted full">{{ describe(d) }}</p> }
           </div>
         }
       }
-      @if (hasOwnError()) { <p class="field-error">{{ ownErrors().join('; ') }}</p> }
+      @if (hasOwnError()) { <p class="field-error">{{ ownText() }}</p> }
       <div class="row add">
-        <button matButton="outlined" class="sm" type="button" (click)="addCondition()">Add condition</button>
-        @if (depth() < maxDepth) { <button matButton="outlined" class="sm" type="button" (click)="addGroup()">Add group</button> }
+        <button matButton="outlined" class="sm" type="button" (click)="addCondition()">{{ i18n.t('rules.cond.add') }}</button>
+        @if (canNest()) { <button matButton="outlined" class="sm" type="button" (click)="addGroup()">{{ i18n.t('rules.cond.addGroup') }}</button> }
       </div>
     </div>
   `,
@@ -120,7 +122,9 @@ export function defaultValue(type: FieldType | undefined, op: Operator, def?: Fi
     .none { display: block; padding-top: 14px; }
     .full { grid-column: 1 / -1; margin: 2px 0 0; }
     .x { margin-top: 4px; }
-    @media (max-width: 720px) { .cond { grid-template-columns: minmax(0, 1fr) auto; } .cond .o, .cond .v { grid-column: 1; } .x { grid-row: 1; grid-column: 2; } }
+    :host { display: block; min-width: 0; }
+    .head { flex-wrap: wrap; }
+    @media (max-width: 720px) { mat-button-toggle-group { flex-direction: column; width: 100%; } .cond { row-gap: 6px; grid-template-columns: minmax(0, 1fr) auto; } .cond .o, .cond .v { grid-column: 1; } .x { grid-row: 1; grid-column: 2; } }
   `,
 })
 export class ConditionGroupEditor {
@@ -130,22 +134,34 @@ export class ConditionGroupEditor {
   readonly removable = input(false);
   readonly path = input('when');
   /** Validation errors keyed by path, from the page. */
-  readonly errors = input<{ path: string; message: string }[]>([]);
+  readonly errors = input<RuleValidationError[]>([]);
   readonly changed = output<void>();
   readonly remove = output<void>();
 
-  readonly opLabel = OPERATOR_LABELS;
+  protected readonly i18n = inject(I18nService);
   readonly labelCats = LABEL_CATEGORIES;
   readonly maxDepth = MAX_DEPTH;
-  readonly note = availabilityNote;
-  readonly ownErrors = computed(() => this.errors().filter((e) => e.path === this.path()).map((e) => e.message));
+  readonly ownErrors = computed(() => this.errors().filter((e) => e.path === this.path()));
   readonly hasOwnError = computed(() => this.ownErrors().length > 0);
+  /** Texts built at render time, so they follow a language switch. */
+  protected canNest(): boolean { return this.depth() < this.maxDepth; }
+  protected groupAria(): string { return this.i18n.t(this.group().match === 'all' ? 'rules.cond.groupAll' : this.group().match === 'any' ? 'rules.cond.groupAny' : 'rules.cond.groupNone'); }
+  protected valuePlaceholder(c: Condition): string {
+    const t = this.def(c)?.type;
+    return t === 'amount' ? this.i18n.t('rules.cond.amountPlaceholder') : t === 'timestamp' ? '2026-01-31T00:00:00Z' : '';
+  }
+  protected note(available: boolean | undefined): string { return availabilityNote(available, this.i18n.lang()); }
+  protected opName(op: Operator): string { return operatorLabel(op, this.i18n.lang()); }
+  protected typeName(t: FieldType): string { return fieldTypeName(t, this.i18n.lang()); }
+  protected describe(f: FieldDef): string { return fieldDescription(f, this.i18n.lang()); }
+  protected errText(e: RuleValidationError): string { return ruleErrorText(e, this.i18n.lang()); }
+  protected ownText(): string { return this.ownErrors().map((e) => this.errText(e)).join(this.i18n.lang() === 'fr' ? '\u202f; ' : '; '); }
 
   childPath(i: number): string {
     return `${this.path()}.${this.group().match}[${i}]`;
   }
-  errorsFor(p: string): string[] {
-    return this.errors().filter((e) => e.path === p || e.path.startsWith(p + '.')).map((e) => e.message);
+  errorsFor(p: string): RuleValidationError[] {
+    return this.errors().filter((e) => e.path === p || e.path.startsWith(p + '.'));
   }
   hasError(p: string): boolean {
     return this.errorsFor(p).length > 0;

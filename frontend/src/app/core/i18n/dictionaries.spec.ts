@@ -6,6 +6,22 @@ import { band, prefixes as bandPrefixes } from './en/band';
 import { verdict, prefixes as verdictPrefixes } from './en/verdict';
 import { enums, prefixes as enumsPrefixes } from './en/enums';
 import { errors, prefixes as errorsPrefixes } from './en/errors';
+import { shared, prefixes as sharedPrefixes } from './en/shared';
+import { alerts, prefixes as alertsPrefixes } from './en/alerts';
+import { wallet, prefixes as walletPrefixes } from './en/wallet';
+import { risk, prefixes as riskPrefixes } from './en/risk';
+import { explorer, prefixes as explorerPrefixes } from './en/explorer';
+import { graph, prefixes as graphPrefixes } from './en/graph';
+import { traces, prefixes as tracesPrefixes } from './en/traces';
+import { investigations, prefixes as investigationsPrefixes } from './en/investigations';
+import { predictions, prefixes as predictionsPrefixes } from './en/predictions';
+import { community, prefixes as communityPrefixes } from './en/community';
+import { watchlist, prefixes as watchlistPrefixes } from './en/watchlist';
+import { integrations, prefixes as integrationsPrefixes } from './en/integrations';
+import { rules, prefixes as rulesPrefixes } from './en/rules';
+import { simulator, prefixes as simulatorPrefixes } from './en/simulator';
+import { settings, prefixes as settingsPrefixes } from './en/settings';
+import { landing, prefixes as landingPrefixes } from './en/landing';
 import { ALERT_STATUSES, SEVERITIES } from '../models';
 
 /** Spec 2026-11-19 §1: dictionaries are split by area; a key lives in one area, under that area's prefixes. */
@@ -16,6 +32,22 @@ const AREAS: Record<string, { keys: string[]; prefixes: readonly string[] }> = {
   verdict: { keys: Object.keys(verdict), prefixes: verdictPrefixes },
   enums: { keys: Object.keys(enums), prefixes: enumsPrefixes },
   errors: { keys: Object.keys(errors), prefixes: errorsPrefixes },
+  shared: { keys: Object.keys(shared), prefixes: sharedPrefixes },
+  alerts: { keys: Object.keys(alerts), prefixes: alertsPrefixes },
+  wallet: { keys: Object.keys(wallet), prefixes: walletPrefixes },
+  risk: { keys: Object.keys(risk), prefixes: riskPrefixes },
+  explorer: { keys: Object.keys(explorer), prefixes: explorerPrefixes },
+  graph: { keys: Object.keys(graph), prefixes: graphPrefixes },
+  traces: { keys: Object.keys(traces), prefixes: tracesPrefixes },
+  investigations: { keys: Object.keys(investigations), prefixes: investigationsPrefixes },
+  predictions: { keys: Object.keys(predictions), prefixes: predictionsPrefixes },
+  community: { keys: Object.keys(community), prefixes: communityPrefixes },
+  watchlist: { keys: Object.keys(watchlist), prefixes: watchlistPrefixes },
+  integrations: { keys: Object.keys(integrations), prefixes: integrationsPrefixes },
+  rules: { keys: Object.keys(rules), prefixes: rulesPrefixes },
+  simulator: { keys: Object.keys(simulator), prefixes: simulatorPrefixes },
+  settings: { keys: Object.keys(settings), prefixes: settingsPrefixes },
+  landing: { keys: Object.keys(landing), prefixes: landingPrefixes },
 };
 
 describe('dictionaries by area', () => {

@@ -1,11 +1,11 @@
 <div class="page">
-  <oci-page-header heading="Settings" lede="How this console connects to the backend, how it looks, and who can use it." />
+  <oci-page-header [heading]="i18n.t('settings.title')" [lede]="i18n.t('settings.lede')" />
 
   <div class="layout">
-  <div class="subnav" role="tablist" aria-label="Settings sections" aria-orientation="vertical" (keydown)="tabKey($event)">
+  <div class="subnav" role="tablist" [attr.aria-label]="i18n.t('settings.sections')" aria-orientation="vertical" (keydown)="tabKey($event)">
     @for (x of sections; track x.id) {
       <button type="button" role="tab" [id]="'tab-' + x.id" [attr.aria-selected]="section() === x.id" [attr.aria-controls]="'panel-' + x.id"
-        [tabindex]="section() === x.id ? 0 : -1" (click)="section.set(x.id)">{{ x.label }}</button>
+        [tabindex]="section() === x.id ? 0 : -1" (click)="section.set(x.id)">{{ i18n.t(x.label) }}</button>
     }
   </div>
   <div class="panel">
@@ -13,34 +13,34 @@
     @case ('connection') {
     <div role="tabpanel" id="panel-connection" aria-labelledby="tab-connection">
       <section class="card stack" aria-labelledby="h-conn">
-        <h2 id="h-conn">Connection</h2>
+        <h2 id="h-conn">{{ i18n.t('settings.conn.title') }}</h2>
         @if (allowMock) {
           <div class="switch-row">
-            <mat-slide-toggle hideIcon [checked]="conn().mock" (change)="toggleMock()" aria-describedby="mock-h">Use mock data</mat-slide-toggle>
-            <span id="mock-h" class="hint">Fictitious, in memory, no backend. Development builds only.</span>
+            <mat-slide-toggle hideIcon [checked]="conn().mock" (change)="toggleMock()" aria-describedby="mock-h">{{ i18n.t('settings.conn.mock') }}</mat-slide-toggle>
+            <span id="mock-h" class="hint">{{ i18n.t('settings.conn.mockHint') }}</span>
           </div>
         }
         <mat-form-field class="auth">
-          <mat-label>Authentication</mat-label>
+          <mat-label>{{ i18n.t('settings.conn.auth') }}</mat-label>
           <mat-select [value]="conn().authMode" (valueChange)="setMode($event)">
-            <mat-option value="none">None (development)</mat-option><mat-option value="bearer">Bearer token (OIDC)</mat-option><mat-option value="apiKey">API key</mat-option>
+            <mat-option value="none">{{ i18n.t('settings.conn.authNone') }}</mat-option><mat-option value="bearer">{{ i18n.t('settings.conn.authBearer') }}</mat-option><mat-option value="apiKey">{{ i18n.t('settings.conn.authApiKey') }}</mat-option>
           </mat-select>
         </mat-form-field>
         @if (conn().authMode !== 'none') {
           <mat-form-field class="token">
-            <mat-label>{{ conn().authMode === 'bearer' ? 'Access token' : 'API key' }}</mat-label>
+            <mat-label>{{ conn().authMode === 'bearer' ? i18n.t('settings.conn.tokenBearer') : i18n.t('settings.conn.authApiKey') }}</mat-label>
             <input matInput type="password" autocomplete="off" [value]="conn().token" (input)="settings.update({ token: $any($event.target).value })" />
-            <mat-hint>Stored in this browser only and sent to /api requests only.</mat-hint>
+            <mat-hint>{{ i18n.t('settings.conn.tokenHint') }}</mat-hint>
           </mat-form-field>
         }
       </section>
       <section class="card stack" aria-labelledby="h-sanctions">
-        <h2 id="h-sanctions">Sanctions lists</h2>
+        <h2 id="h-sanctions">{{ i18n.t('settings.sanctions.title') }}</h2>
         @let sl = sanctions.value()?.items?.[0];
-        <p class="sanctions-state" [class.warn]="!sl || sl.state !== 'CURRENT'">{{ sanctionsSentence(sl) }}</p>
+        <p class="sanctions-state" [class.warn]="!sl || sl.state !== 'CURRENT'">{{ sanctionsSentence(sl, i18n.lang()) }}</p>
         @if (sl) {
-          <p class="hint">{{ sl.fetchEnabled ? 'Fetched from the official source every 24 hours; the last accepted publication stays in force if a download fails or looks wrong.' : 'Automatic fetch is off (OCI_SANCTIONS_OFAC_ENABLED): only a stored publication applies.' }}</p>
-          @if (sl.lastError) { <p class="field-error" role="status">Last attempt: {{ sl.lastError }}</p> }
+          <p class="hint">{{ i18n.t(sl.fetchEnabled ? 'settings.sanctions.fetchOn' : 'settings.sanctions.fetchOff') }}</p>
+          @if (sl.lastError) { <p class="field-error" role="status">{{ i18n.t('settings.sanctions.lastError') }} <span lang="en">{{ sl.lastError }}</span></p> }
         }
       </section>
     </div>
@@ -48,57 +48,65 @@
     @case ('appearance') {
     <div role="tabpanel" id="panel-appearance" aria-labelledby="tab-appearance">
       <section class="card stack" aria-labelledby="h-app">
-        <h2 id="h-app">Appearance</h2>
+        <h2 id="h-app">{{ i18n.t('settings.appearance.title') }}</h2>
         <mat-radio-group class="themes" aria-labelledby="h-theme" [value]="theme.pref()" (change)="theme.pref.set($event.value)">
-          <span id="h-theme" class="legend">Theme</span>
-          @for (p of themes; track p) { <mat-radio-button [value]="p">{{ sentence(p) }}</mat-radio-button> }
+          <span id="h-theme" class="legend">{{ i18n.t('settings.appearance.theme') }}</span>
+          @for (p of themes; track p) { <mat-radio-button [value]="p">{{ i18n.t(themeKey[p]) }}</mat-radio-button> }
         </mat-radio-group>
-        <p class="hint">System follows your operating system preference.</p>
+        <p class="hint">{{ i18n.t('settings.appearance.themeHint') }}</p>
+      </section>
+      <section class="card stack" aria-labelledby="h-lang">
+        <h2 id="h-lang">{{ i18n.t('settings.language.title') }}</h2>
+        <mat-radio-group class="themes" aria-labelledby="h-lang-label" [value]="i18n.lang()" (change)="i18n.set($event.value)">
+          <span id="h-lang-label" class="legend">{{ i18n.t('settings.language.label') }}</span>
+          @for (l of langs; track l) { <mat-radio-button [value]="l" [attr.data-lang]="l" [attr.lang]="l">{{ i18n.t(langKey[l]) }}</mat-radio-button> }
+        </mat-radio-group>
+        <p class="hint">{{ i18n.t('settings.language.hint') }}</p>
       </section>
     </div>
     }
     @case ('keys') {
     <div role="tabpanel" id="panel-keys" aria-labelledby="tab-keys">
       <section class="card card--flush" aria-labelledby="h-keys">
-        <div class="card-head"><h2 id="h-keys">API keys</h2></div>
+        <div class="card-head"><h2 id="h-keys">{{ i18n.t('settings.keys.title') }}</h2></div>
         <form class="key-form" (submit)="createKey($event)" novalidate>
           <mat-form-field class="name">
-            <mat-label>Name</mat-label>
-            <input matInput [formField]="keyForm.name" [ociInvalid]="keyForm.name().touched() && keyForm.name().invalid()" placeholder="CI pipeline" />
-            <mat-error>{{ keyForm.name().errors()[0]?.message }}</mat-error>
+            <mat-label>{{ i18n.t('settings.keys.name') }}</mat-label>
+            <input matInput [formField]="keyForm.name" [ociInvalid]="keyForm.name().touched() && keyForm.name().invalid()" [placeholder]="i18n.t('settings.keys.namePlaceholder')" />
+            <mat-error>{{ errText(keyForm.name().errors()[0]) }}</mat-error>
           </mat-form-field>
-          <fieldset><legend>Scopes</legend><div class="row scopes">
+          <fieldset><legend>{{ i18n.t('settings.keys.scopes') }}</legend><div class="row scopes">
             @for (s of scopes; track s) { <mat-checkbox [checked]="keyModel().scopes.includes(s)" (change)="toggleScope(s)"><span class="mono">{{ s }}</span></mat-checkbox> }
-          </div>@if (keyForm.scopes().invalid()) { <span class="field-error" role="alert">{{ keyForm.scopes().errors()[0]?.message }}</span> }</fieldset>
-          <div><button matButton="filled" type="submit">Create key</button></div>
+          </div>@if (keyForm.scopes().invalid()) { <span class="field-error" role="alert">{{ errText(keyForm.scopes().errors()[0]) }}</span> }</fieldset>
+          <div><button matButton="filled" type="submit">{{ i18n.t('settings.keys.create') }}</button></div>
         </form>
         @if (newSecret(); as s) {
-          <div class="note note--warn secret" role="alert"><strong>Copy this key now. It will not be shown again.</strong><code class="mono">{{ s }}</code>
-            <div><button matButton="outlined" class="sm" type="button" (click)="newSecret.set(null)">I stored it</button></div></div>
+          <div class="note note--warn secret" role="alert"><strong>{{ i18n.t('settings.keys.copyNow') }}</strong><code class="mono">{{ s }}</code>
+            <div><button matButton="outlined" class="sm" type="button" (click)="newSecret.set(null)">{{ i18n.t('settings.keys.stored') }}</button></div></div>
         }
-        @if (keyError(); as e) { <p class="field-error pad" role="alert">{{ e.title }}: {{ e.detail }}</p> }
+        @if (keyError(); as e) { <p class="field-error pad" role="alert">{{ apiError(e) }}</p> }
         <oci-state [loading]="keys.loading()" [error]="keys.error()" [hasData]="!!keys.value()" [empty]="(keys.value() ?? []).length === 0" skeleton="table" [skeletonRows]="2"
-          emptyText="No API key yet. Create one above for scripts and CI pipelines." (retry)="keys.reload()">
+          [emptyText]="i18n.t('settings.keys.empty')" (retry)="keys.reload()">
           <div class="table-wrap"><table mat-table [dataSource]="keys.value() ?? []" [trackBy]="byId">
             <ng-container matColumnDef="name">
-              <th mat-header-cell *matHeaderCellDef scope="col">Name</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.keys.name') }}</th>
               <td mat-cell *matCellDef="let k" class="strong">{{ k.name }}</td>
             </ng-container>
             <ng-container matColumnDef="key">
-              <th mat-header-cell *matHeaderCellDef scope="col">Key</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.keys.key') }}</th>
               <td mat-cell *matCellDef="let k" class="mono small">{{ k.prefix }}…</td>
             </ng-container>
             <ng-container matColumnDef="scopes">
-              <th mat-header-cell *matHeaderCellDef scope="col">Scopes</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.keys.scopes') }}</th>
               <td mat-cell *matCellDef="let k"><div class="chips">@for (s of k.scopes; track s) { <span class="chip">{{ s }}</span> }</div></td>
             </ng-container>
             <ng-container matColumnDef="used">
-              <th mat-header-cell *matHeaderCellDef scope="col">Last used</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.keys.lastUsed') }}</th>
               <td mat-cell *matCellDef="let k" class="small muted">{{ ago(k.lastUsedAt) }}</td>
             </ng-container>
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef scope="col" class="right"><span class="sr-only">Actions</span></th>
-              <td mat-cell *matCellDef="let k" class="right">@if (k.revoked) { <span class="small muted">Revoked</span> } @else { <span class="row-actions"><button matButton class="sm danger" type="button" (click)="revoke(k)" [attr.aria-label]="'Revoke ' + k.name">Revoke</button></span> }</td>
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right"><span class="sr-only">{{ i18n.t('settings.keys.actions') }}</span></th>
+              <td mat-cell *matCellDef="let k" class="right">@if (k.revoked) { <span class="small muted">{{ i18n.t('settings.keys.revoked') }}</span> } @else { <span class="row-actions"><button matButton class="sm danger" type="button" (click)="revoke(k)" [attr.aria-label]="i18n.t('settings.keys.revokeAria', { name: k.name })">{{ i18n.t('settings.keys.revoke') }}</button></span> }</td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="keyCols"></tr>
             <tr mat-row *matRowDef="let k; columns: keyCols" [class.revoked]="k.revoked"></tr>
@@ -110,26 +118,26 @@
     @case ('users') {
     <div role="tabpanel" id="panel-users" aria-labelledby="tab-users">
       <section class="card card--flush" aria-labelledby="h-users">
-        <div class="card-head"><h2 id="h-users">Users and roles</h2></div>
-        <dl class="roles"><div><dt>Admin</dt><dd>manages users, keys and connectors.</dd></div><div><dt>Analyst</dt><dd>triages alerts and edits rules.</dd></div><div><dt>Viewer</dt><dd>reads only.</dd></div></dl>
+        <div class="card-head"><h2 id="h-users">{{ i18n.t('settings.users.title') }}</h2></div>
+        <dl class="roles">@for (r of roles; track r) { <div><dt>{{ roleName(r) }}</dt><dd>{{ i18n.t(roleDesc[r]) }}</dd></div> }</dl>
         <oci-state [loading]="users.loading()" [error]="users.error()" [hasData]="!!users.value()" skeleton="table" [skeletonRows]="3" (retry)="users.reload()">
           <div class="table-wrap"><table mat-table [dataSource]="users.value() ?? []" [trackBy]="byId">
             <ng-container matColumnDef="user">
-              <th mat-header-cell *matHeaderCellDef scope="col">User</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.users.user') }}</th>
               <td mat-cell *matCellDef="let u"><span class="strong">{{ u.name }}</span><div class="sub">{{ u.email }}</div></td>
             </ng-container>
             <ng-container matColumnDef="role">
-              <th mat-header-cell *matHeaderCellDef scope="col">Role</th>
+              <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('settings.users.role') }}</th>
               <td mat-cell *matCellDef="let u">
                 <mat-form-field class="role">
-                  <mat-select [value]="u.role" (valueChange)="setRole(u, $event)" [aria-label]="'Role of ' + u.email">
-                    @for (r of roles; track r) { <mat-option [value]="r">{{ sentence(r) }}</mat-option> }
+                  <mat-select [value]="u.role" (valueChange)="setRole(u, $event)" [aria-label]="i18n.t('settings.users.roleOf', { email: u.email })">
+                    @for (r of roles; track r) { <mat-option [value]="r">{{ roleName(r) }}</mat-option> }
                   </mat-select>
                 </mat-form-field>
               </td>
             </ng-container>
             <ng-container matColumnDef="login">
-              <th mat-header-cell *matHeaderCellDef scope="col" class="right">Last login</th>
+              <th mat-header-cell *matHeaderCellDef scope="col" class="right">{{ i18n.t('settings.users.lastLogin') }}</th>
               <td mat-cell *matCellDef="let u" class="small right muted">{{ ago(u.lastLoginAt) }}</td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="userCols"></tr>

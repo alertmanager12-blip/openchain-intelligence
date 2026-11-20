@@ -1,4 +1,5 @@
 import { NetworkId } from './models';
+import type { Key } from './i18n/i18n.service';
 
 export type QueryKind = 'address' | 'transaction' | 'unknown';
 
@@ -10,6 +11,8 @@ export interface DetectionResult {
   normalized: string;
   /** Short analyst-facing explanation of why this was detected. */
   reason: string;
+  /** The same explanation as a dictionary key, for the console's language. */
+  reasonKey: Key;
 }
 
 const B58 = '1-9A-HJ-NP-Za-km-z';
@@ -30,24 +33,24 @@ const EVM_NETWORKS: NetworkId[] = ['ethereum', 'bsc', 'polygon'];
  */
 export function detectQuery(raw: string): DetectionResult {
   const q = (raw ?? '').trim();
-  if (!q) return { kind: 'unknown', candidates: [], normalized: '', reason: 'Empty query' };
+  if (!q) return { kind: 'unknown', candidates: [], normalized: '', reason: 'Empty query', reasonKey: 'palette.reason.empty' };
 
   if (EVM_ADDRESS.test(q))
-    return { kind: 'address', candidates: EVM_NETWORKS, normalized: q.toLowerCase(), reason: 'EVM address (0x + 40 hex): shared by Ethereum, BSC and Polygon' };
+    return { kind: 'address', candidates: EVM_NETWORKS, normalized: q.toLowerCase(), reason: 'EVM address (0x + 40 hex): shared by Ethereum, BSC and Polygon', reasonKey: 'palette.reason.evmAddress' };
   if (EVM_TX.test(q))
-    return { kind: 'transaction', candidates: EVM_NETWORKS, normalized: q.toLowerCase(), reason: 'EVM transaction hash (0x + 64 hex)' };
+    return { kind: 'transaction', candidates: EVM_NETWORKS, normalized: q.toLowerCase(), reason: 'EVM transaction hash (0x + 64 hex)', reasonKey: 'palette.reason.evmTx' };
   if (HEX64.test(q))
-    return { kind: 'transaction', candidates: ['tron', 'bitcoin'], normalized: q.toLowerCase(), reason: '64 hex characters without 0x: TRON or Bitcoin transaction id' };
+    return { kind: 'transaction', candidates: ['tron', 'bitcoin'], normalized: q.toLowerCase(), reason: '64 hex characters without 0x: TRON or Bitcoin transaction id', reasonKey: 'palette.reason.hex64' };
   if (TRON_ADDRESS.test(q))
-    return { kind: 'address', candidates: ['tron'], normalized: q, reason: 'TRON base58 address (T + 33 characters)' };
+    return { kind: 'address', candidates: ['tron'], normalized: q, reason: 'TRON base58 address (T + 33 characters)', reasonKey: 'palette.reason.tron' };
   if (BTC_BECH32.test(q.toLowerCase()) && (q === q.toLowerCase() || q === q.toUpperCase()))
-    return { kind: 'address', candidates: ['bitcoin'], normalized: q.toLowerCase(), reason: 'Bitcoin bech32 address' };
+    return { kind: 'address', candidates: ['bitcoin'], normalized: q.toLowerCase(), reason: 'Bitcoin bech32 address', reasonKey: 'palette.reason.btcBech32' };
   if (BTC_LEGACY.test(q))
-    return { kind: 'address', candidates: q.length >= 32 ? ['bitcoin', 'solana'] : ['bitcoin'], normalized: q, reason: 'Bitcoin legacy/P2SH base58 address' };
+    return { kind: 'address', candidates: q.length >= 32 ? ['bitcoin', 'solana'] : ['bitcoin'], normalized: q, reason: 'Bitcoin legacy/P2SH base58 address', reasonKey: 'palette.reason.btcLegacy' };
   if (SOLANA_SIGNATURE.test(q))
-    return { kind: 'transaction', candidates: ['solana'], normalized: q, reason: 'Solana transaction signature (base58, 86-88 characters)' };
+    return { kind: 'transaction', candidates: ['solana'], normalized: q, reason: 'Solana transaction signature (base58, 86-88 characters)', reasonKey: 'palette.reason.solSig' };
   if (SOLANA_ADDRESS.test(q))
-    return { kind: 'address', candidates: ['solana'], normalized: q, reason: 'Solana base58 public key (32-44 characters)' };
+    return { kind: 'address', candidates: ['solana'], normalized: q, reason: 'Solana base58 public key (32-44 characters)', reasonKey: 'palette.reason.solAddr' };
 
-  return { kind: 'unknown', candidates: [], normalized: q, reason: 'Unrecognised format: expected an address or a transaction hash' };
+  return { kind: 'unknown', candidates: [], normalized: q, reason: 'Unrecognised format: expected an address or a transaction hash', reasonKey: 'palette.reason.unknown' };
 }

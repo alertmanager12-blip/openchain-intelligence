@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 
-interface Contribution { readonly title: string; readonly points: number; readonly level: string; readonly age: string }
+interface Contribution { readonly title: Key; readonly points: number; readonly level: Key; readonly age: Key }
 interface Peer { readonly x: number; readonly y: number; readonly label: string; readonly amount: string; readonly w: number; readonly flagged?: boolean }
 
 /**
@@ -75,65 +76,65 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
       <div class="cs-wrap">
         <div class="head">
           <div>
-            <h2 class="cs-h2" id="inv-title">One Address.<br />A World of Intelligence.</h2>
-            <p class="cs-lede">Paste an address in the console and get its profile, its counterparties, the signals behind its score and the transfers to look at first.</p>
+            <h2 class="cs-h2" id="inv-title">{{ i18n.t('landing.inv.title1') }}<br />{{ i18n.t('landing.inv.title2') }}</h2>
+            <p class="cs-lede">{{ i18n.t('landing.inv.lede') }}</p>
           </div>
-          <span class="cs-illus">Illustrative data, not a real wallet</span>
+          <span class="cs-illus">{{ i18n.t('landing.inv.illus') }}</span>
         </div>
 
         @defer (on viewport) {
-          <div class="win" role="figure" aria-label="Illustration of the wallet page for a fictional TRON address with a high risk score">
+          <div class="win" role="figure" [attr.aria-label]="i18n.t('landing.inv.figureAria')">
             <div class="bar">
               <span class="net-chip">TRON</span>
               <span class="addr">TQ7mJ4qP9a…Xw2vR8kN3e</span>
               <span class="sp"></span>
-              <span class="cs-status cs-status--planned">On the watchlist</span>
+              <span class="cs-status cs-status--planned">{{ i18n.t('landing.inv.watchlist') }}</span>
             </div>
             <div class="body">
               <div class="col">
-                <h3>Risk</h3>
+                <h3>{{ i18n.t('landing.inv.risk') }}</h3>
                 <div class="gauge">
                   <svg viewBox="0 0 112 64" aria-hidden="true">
                     <path d="M8 58 A48 48 0 0 1 104 58" fill="none" stroke="#2a3542" stroke-width="8" stroke-linecap="round" />
                     <path d="M8 58 A48 48 0 0 1 104 58" fill="none" stroke="#f0645c" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="78 100" />
                   </svg>
-                  <div><div class="score">78<small> / 100</small></div><div class="level">High</div></div>
+                  <div><div class="score">78<small> / 100</small></div><div class="level">{{ i18n.t('landing.inv.high') }}</div></div>
                 </div>
                 <ul class="contrib">
                   @for (c of contributions; track c.title) {
-                    <li><b>{{ c.title }}</b><span class="pts">+{{ c.points }}</span><span class="meta">{{ c.level }}, {{ c.age }}</span></li>
+                    <li><b>{{ i18n.t(c.title) }}</b><span class="pts">+{{ c.points }}</span><span class="meta">{{ i18n.t(c.level) }}, {{ i18n.t(c.age) }}</span></li>
                   }
                 </ul>
-                <p class="method">Every contribution links to its signal and transactions. Older evidence weighs less (180-day half-life).</p>
+                <p class="method">{{ i18n.t('landing.inv.method') }}</p>
               </div>
 
               <div class="col graph">
-                <h3>Counterparties, last 7 days</h3>
+                <h3>{{ i18n.t('landing.inv.counterparties7') }}</h3>
                 <svg viewBox="0 0 360 260" aria-hidden="true">
                   @for (p of peers; track p.label) { <path class="g-edge" [class.hot]="p.flagged" [attr.d]="'M180 130 L' + p.x + ' ' + p.y" [attr.stroke-width]="p.w" /> }
                   @for (p of peers; track p.label) {
                     <circle class="g-node" [class.hot]="p.flagged" [attr.cx]="p.x" [attr.cy]="p.y" r="10" />
-                    <text class="g-txt" [attr.x]="p.x" [attr.y]="p.y + (p.y > 130 ? 26 : -16)" text-anchor="middle">{{ p.label }}</text>
-                    <text class="g-amt" [attr.x]="p.x" [attr.y]="p.y + (p.y > 130 ? 39 : -29)" text-anchor="middle">{{ p.amount }}</text>
+                    <text class="g-txt" [attr.x]="p.x" [attr.y]="labelY(p, 26, -16)" text-anchor="middle">{{ p.label }}</text>
+                    <text class="g-amt" [attr.x]="p.x" [attr.y]="labelY(p, 39, -29)" text-anchor="middle">{{ p.amount }}</text>
                   }
                   <circle class="g-me" cx="180" cy="130" r="17" />
                 </svg>
               </div>
 
               <div class="col">
-                <h3>Activity</h3>
+                <h3>{{ i18n.t('landing.inv.activity') }}</h3>
                 <dl>
-                  <dt>First seen</dt><dd>12 days ago</dd>
-                  <dt>Transactions</dt><dd>1,284</dd>
-                  <dt>Counterparties</dt><dd>211</dd>
-                  <dt>Tokens</dt><dd>USDT, TRX</dd>
+                  <dt>{{ i18n.t('landing.inv.firstSeen') }}</dt><dd>{{ i18n.t('landing.inv.firstSeenValue') }}</dd>
+                  <dt>{{ i18n.t('landing.inv.transactions') }}</dt><dd>{{ i18n.t('landing.inv.transactionsValue') }}</dd>
+                  <dt>{{ i18n.t('landing.inv.counterparties') }}</dt><dd>211</dd>
+                  <dt>{{ i18n.t('landing.inv.tokens') }}</dt><dd>USDT, TRX</dd>
                 </dl>
-                <h3 style="margin-top: 22px">Transfers to review</h3>
+                <h3 style="margin-top: 22px">{{ i18n.t('landing.inv.review') }}</h3>
                 <table>
-                  <thead><tr><th scope="col">When</th><th scope="col" class="r">Amount</th></tr></thead>
+                  <thead><tr><th scope="col">{{ i18n.t('landing.inv.when') }}</th><th scope="col" class="r">{{ i18n.t('landing.inv.amount') }}</th></tr></thead>
                   <tbody>
-                    @for (t of transfers; track t.when) {
-                      <tr><td>{{ t.when }}</td><td class="r" [class.in]="t.dir === 'in'" [class.out]="t.dir === 'out'">{{ t.dir === 'in' ? '+' : '−' }}{{ t.amount }}</td></tr>
+                    @for (tr of transfers; track $index) {
+                      <tr><td>{{ i18n.t(tr.when) }}</td><td class="r" [class.in]="tr.dir === 'in'" [class.out]="tr.dir === 'out'">{{ tr.dir === 'in' ? '+' : '−' }}{{ i18n.t(tr.amount) }}</td></tr>
                     }
                   </tbody>
                 </table>
@@ -141,7 +142,7 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
             </div>
             <div class="ev">
               @for (s of signals; track s.title) {
-                <div><b>{{ s.title }}</b><span>{{ s.text }}</span><span class="ev-meta"><code>{{ s.detector }}</code><span>{{ s.level }}</span></span></div>
+                <div><b>{{ i18n.t(s.title) }}</b><span>{{ i18n.t(s.text) }}</span><span class="ev-meta"><code>{{ s.detector }}</code><span>{{ i18n.t(s.level) }}</span></span></div>
               }
             </div>
           </div>
@@ -153,12 +154,15 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
   `,
 })
 export class InvestigationPreview {
+  protected readonly i18n = inject(I18nService);
   protected readonly contributions: readonly Contribution[] = [
-    { title: 'Fast forwarding', points: 29, level: 'Risk signal', age: '2 h ago' },
-    { title: 'Exposure to a labeled wallet, 2 hops', points: 22, level: 'Risk signal', age: '1 day ago' },
-    { title: 'Structuring', points: 18, level: 'Anomaly', age: '3 days ago' },
-    { title: 'Fan-out', points: 9, level: 'Anomaly', age: '5 days ago' },
+    { title: 'landing.inv.c.fast', points: 29, level: 'landing.inv.level.risk', age: 'landing.inv.age.2h' },
+    { title: 'landing.inv.c.exposure', points: 22, level: 'landing.inv.level.risk', age: 'landing.inv.age.1d' },
+    { title: 'landing.inv.c.structuring', points: 18, level: 'landing.inv.level.anomaly', age: 'landing.inv.age.3d' },
+    { title: 'landing.inv.c.fanout', points: 9, level: 'landing.inv.level.anomaly', age: 'landing.inv.age.5d' },
   ];
+  /** Vertical position of a peer's text: below the node for the lower half of the graph, above it otherwise. */
+  protected labelY(p: Peer, below: number, above: number): number { return p.y + (p.y > 130 ? below : above); }
   protected readonly peers: readonly Peer[] = [
     { x: 60, y: 52, label: 'TLa9…f2', amount: '410k USDT', w: 4 },
     { x: 300, y: 50, label: 'TPk3…9d', amount: '980k USDT', w: 6, flagged: true },
@@ -167,15 +171,15 @@ export class InvestigationPreview {
     { x: 104, y: 202, label: 'TGu2…0b', amount: '210k USDT', w: 3 },
     { x: 34, y: 150, label: 'TRm5…e8', amount: '18k USDT', w: 1.2 },
   ];
-  protected readonly transfers = [
-    { when: 'Today 14:05', amount: '250,000 USDT', dir: 'in' },
-    { when: 'Today 14:06', amount: '240,000 USDT', dir: 'out' },
-    { when: 'Yesterday', amount: '9,900 USDT', dir: 'out' },
-    { when: 'Yesterday', amount: '9,850 USDT', dir: 'out' },
-  ] as const;
-  protected readonly signals = [
-    { title: 'Fast forwarding', text: '96% of an incoming transfer sent on within 22 s.', detector: 'fast-forwarding', level: 'Risk signal' },
-    { title: 'Indirect exposure', text: 'Funds received from a labeled wallet through one intermediary.', detector: 'exposure', level: 'Risk signal' },
-    { title: 'Structuring', text: '6 transfers just under 10,000 USDT in 24 h.', detector: 'structuring', level: 'Anomaly' },
+  protected readonly transfers: readonly { when: Key; amount: Key; dir: 'in' | 'out' }[] = [
+    { when: 'landing.inv.today1', amount: 'landing.inv.a250', dir: 'in' },
+    { when: 'landing.inv.today2', amount: 'landing.inv.a240', dir: 'out' },
+    { when: 'landing.inv.yesterday', amount: 'landing.inv.a9900', dir: 'out' },
+    { when: 'landing.inv.yesterday', amount: 'landing.inv.a9850', dir: 'out' },
+  ];
+  protected readonly signals: readonly { title: Key; text: Key; detector: string; level: Key }[] = [
+    { title: 'landing.inv.c.fast', text: 'landing.inv.s.fast', detector: 'fast-forwarding', level: 'landing.inv.level.risk' },
+    { title: 'landing.inv.s.indirect.t', text: 'landing.inv.s.indirect', detector: 'exposure', level: 'landing.inv.level.risk' },
+    { title: 'landing.inv.c.structuring', text: 'landing.inv.s.structuring', detector: 'structuring', level: 'landing.inv.level.anomaly' },
   ];
 }

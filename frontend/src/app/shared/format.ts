@@ -1,7 +1,7 @@
-import { hasKey, translate } from '../core/i18n/i18n.service';
+import { hasKey, translate, type Lang } from '../core/i18n/i18n.service';
 
 /** Exact decimal formatting of raw integer amounts (base units): BigInt only, never floating point. */
-export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6): string {
+export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6, lang: Lang = 'en'): string {
   if (raw === null || raw === undefined || !/^-?\d+$/.test(raw)) return '—';
   const neg = raw.startsWith('-');
   const digits = (neg ? raw.slice(1) : raw).replace(/^0+(?=\d)/, '');
@@ -12,11 +12,12 @@ export function formatUnits(raw: string | null | undefined, decimals: number, ma
   // A non-zero amount below the displayed precision is never shown as "0": a dust transfer (address poisoning) must
   // stay visible. "<0.01" says "more than nothing, less than the smallest unit shown".
   if (/^0+$/.test(int) && !shown && /[1-9]/.test(frac)) {
-    return `${neg ? '-' : ''}<${maxFraction > 0 ? '0.' + '0'.repeat(maxFraction - 1) + '1' : '1'}`;
+    return `${neg ? '-' : ''}<${maxFraction > 0 ? (lang === 'fr' ? '0,' : '0.') + '0'.repeat(maxFraction - 1) + '1' : '1'}`;
   }
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const fr = lang === 'fr';
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, fr ? '\u202f' : ',');
   const zero = /^0+$/.test(int) && !shown;
-  return `${neg && !zero ? '-' : ''}${grouped}${shown ? '.' + shown : ''}`;
+  return `${neg && !zero ? '-' : ''}${grouped}${shown ? (fr ? ',' : '.') + shown : ''}`;
 }
 
 
@@ -36,20 +37,21 @@ export function shortHash(v: string | null | undefined, head = 6, tail = 4): str
   return v.length <= head + tail + 1 ? v : `${v.slice(0, head)}…${v.slice(-tail)}`;
 }
 
-export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
+/** "5m ago" / "il y a 5 min" (the console's language; English unless the caller passes one). */
+export function timeAgo(iso: string | null | undefined, now = Date.now(), lang: Lang = 'en'): string {
   if (!iso) return '—';
   const s = Math.round((now - Date.parse(iso)) / 1000);
   if (Number.isNaN(s)) return '—';
-  if (s < 60) return `${Math.max(s, 0)}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  if (s < 60) return translate(lang, 'time.secAgo', { n: Math.max(s, 0) });
+  if (s < 3600) return translate(lang, 'time.minAgo', { n: Math.floor(s / 60) });
+  if (s < 86400) return translate(lang, 'time.hourAgo', { n: Math.floor(s / 3600) });
+  return translate(lang, 'time.dayAgo', { n: Math.floor(s / 86400) });
 }
 
-export function formatAge(seconds: number): string {
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} h`;
-  return `${Math.round(seconds / 86400)} d`;
+export function formatAge(seconds: number, lang: Lang = 'en'): string {
+  if (seconds < 3600) return translate(lang, 'time.min', { n: Math.max(1, Math.round(seconds / 60)) });
+  if (seconds < 86400) return translate(lang, 'time.hour', { n: Math.round(seconds / 3600) });
+  return translate(lang, 'time.day', { n: Math.round(seconds / 86400) });
 }
 
 /** "FALSE_POSITIVE" -> "False positive": enum values are shown in sentence case. */
