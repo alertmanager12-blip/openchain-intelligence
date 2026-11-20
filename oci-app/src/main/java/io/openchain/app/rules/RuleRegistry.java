@@ -321,6 +321,12 @@ public class RuleRegistry {
                 io.openchain.app.api.PopulatedFields.EVENT_TYPES);
     }
 
+    /** The same reasons as {@link #unreachable}, structured: stable code, params and the English sentence. */
+    public static List<io.openchain.alerting.rule.RuleReachability.Reason> unreachableReasons(io.openchain.alerting.rule.Rule rule) {
+        return io.openchain.alerting.rule.RuleReachability.reasons(rule, io.openchain.app.api.PopulatedFields.FIELDS,
+                io.openchain.app.api.PopulatedFields.EVENT_TYPES);
+    }
+
     /** Disables the enabled rules that can never fire (shipped or created before this check); returns their ids. */
     public synchronized List<String> disableUnreachable() {
         List<String> off = new ArrayList<>();
@@ -338,10 +344,10 @@ public class RuleRegistry {
     public synchronized StoredRule setEnabled(String id, boolean enabled) {
         StoredRule old = get(id);
         if (enabled) {
-            List<String> why = unreachable(old.current().rule());
+            var why = unreachableReasons(old.current().rule());
             if (!why.isEmpty()) {
                 throw new InvalidRuleException("rule '" + id + "' can never fire with the data this instance produces",
-                        why.stream().map(w -> new ValidationError("$", ValidationError.Code.CONFLICT, w)).toList());
+                        why.stream().map(w -> new ValidationError("$", ValidationError.Code.CONFLICT, w.code(), w.params(), w.message())).toList());
             }
         }
         StoredRule sr = new StoredRule(id, old.versions(), enabled, old.origin(), old.createdAt(), clock.instant());

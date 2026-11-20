@@ -66,22 +66,21 @@ public class InvestigationService {
      * Simulated (demo) chains have none of them.
      */
     public List<String> limitations(Network n) {
+        return limitationCodes(n).stream().map(Dto.Coded::text).toList();
+    }
+
+    /** The limitations of {@link #limitations} as stable codes (same order); the English text is built from them. */
+    public List<Dto.Coded> limitationCodes(Network n) {
         var rt = chains.runtime(n);
         if (rt.isEmpty() || rt.get().simulator().isPresent()) return List.of();
-        List<String> out = new ArrayList<>();
+        List<Dto.Coded> out = new ArrayList<>();
         long seen = chains.observedDays(n), need = chains.ageWarmup().toDays();
-        if (seen < need) {
-            out.add("Address age and activity fields (wallet.age_days, wallet.tx_count, counterparty.age_days, "
-                    + "approval.spender_age_days) are measured from the platform's first observation: they are withheld until "
-                    + need + " days of observation (" + seen + " so far), so rules using them do not fire yet.");
-        }
+        if (seen < need) out.add(Dto.Coded.of(ApiCode.LIMITATION_AGE_WARMUP, "need", need, "seen", seen));
         if (n == Network.TRON) {
-            out.add("No historical balance from TronGrid: wallet.balance is absent, so balance-based rules (wallet-draining) and "
-                    + "the rapid-drain detector do not run on this network.");
-            out.add("TRC-10 assets and internal transactions are not indexed.");
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_TRON_NO_BALANCE));
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_TRON_NOT_INDEXED));
         } else {
-            out.add("Internal transactions (value moved by contracts during execution) are not indexed: such flows are invisible "
-                    + "to exposure and drain detection.");
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_NO_INTERNAL_TRANSACTIONS));
         }
         return out;
     }
@@ -214,7 +213,7 @@ public class InvestigationService {
         return new Dto.WalletAnalysisDto(a.value(), a.network().id(), p.firstActivity(), p.lastActivity(), p.transactionCount(),
                 contract, labels.findByAddress(a).stream().map(ApiMapper::label).toList(), balances, flowDtos,
                 counterparties(a, flows), activity(a, flows), signals, risk, profile, risk, freshness, DISCLAIMER,
-                history.coverage(a), limitations(a.network()));
+                history.coverage(a), limitations(a.network()), limitationCodes(a.network()));
     }
 
     private List<Dto.CounterpartyDto> counterparties(Address self, List<ValueFlow> flows) {

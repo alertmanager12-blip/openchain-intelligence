@@ -103,6 +103,20 @@ class KnownTransfersFallbackTest {
         assertThat(c.analysis(ME.value(), "polygon").limitations()).anySatisfy(l -> assertThat(l).contains("Internal transactions"));
         assertThat(c.networks(true).stream().filter(n -> n.network().equals("polygon")).findFirst().orElseThrow().limitations())
                 .anySatisfy(l -> assertThat(l).contains("Internal transactions"));
+        // each limitation also carries a stable code; code and text come from the same template, in the same order
+        var wallet = c.analysis(ME.value(), "polygon");
+        assertThat(wallet.limitationCodes()).extracting(Dto.Coded::code)
+                .contains("limitation.age_warmup", "limitation.no_internal_transactions");
+        assertThat(wallet.limitationCodes()).hasSameSizeAs(wallet.limitations());
+        var warmup = wallet.limitationCodes().stream().filter(k -> k.code().equals("limitation.age_warmup")).findFirst().orElseThrow();
+        assertThat(warmup.params()).containsOnlyKeys("need", "seen").containsEntry("need", 30L);
+        for (int i = 0; i < wallet.limitations().size(); i++) {
+            var k = wallet.limitationCodes().get(i);
+            assertThat(wallet.limitations().get(i)).isEqualTo(java.util.Arrays.stream(io.openchain.app.api.ApiCode.values())
+                    .filter(x -> x.id().equals(k.code())).findFirst().orElseThrow().fill(k.params()));
+        }
+        assertThat(c.networks(true).stream().filter(n -> n.network().equals("polygon")).findFirst().orElseThrow().limitationCodes())
+                .extracting(Dto.Coded::code).contains("limitation.no_internal_transactions");
     }
 
     @Test void ageAndActivityFieldsAreWithheldUntilTheRealChainHasBeenObservedLongEnough() {

@@ -132,7 +132,26 @@ public enum ApiCode {
     FIELD_MAX_EXCEEDED("field.max_exceeded", "expiry must be <= {days} days"),
     FIELD_UNSUPPORTED_NETWORK("field.unsupported_network", "network not enabled"),
     FIELD_UNKNOWN_NETWORK("field.unknown_network", "unknown network '{network}'"),
-    FIELD_INVALID_ROLE("field.invalid_role", "role must be one of {roles}");
+    FIELD_INVALID_ROLE("field.invalid_role", "role must be one of {roles}"),
+
+    // ---- data-source limitations of a network (networks[].limitationCodes) ----------------------------------------
+    LIMITATION_AGE_WARMUP("limitation.age_warmup",
+            "Address age and activity fields (wallet.age_days, wallet.tx_count, counterparty.age_days, approval.spender_age_days) "
+                    + "are measured from the platform's first observation: they are withheld until {need} days of observation "
+                    + "({seen} so far), so rules using them do not fire yet."),
+    LIMITATION_TRON_NO_BALANCE("limitation.tron_no_balance",
+            "No historical balance from TronGrid: wallet.balance is absent, so balance-based rules (wallet-draining) and "
+                    + "the rapid-drain detector do not run on this network."),
+    LIMITATION_TRON_NOT_INDEXED("limitation.tron_not_indexed", "TRC-10 assets and internal transactions are not indexed."),
+    LIMITATION_NO_INTERNAL_TRANSACTIONS("limitation.no_internal_transactions",
+            "Internal transactions (value moved by contracts during execution) are not indexed: such flows are invisible "
+                    + "to exposure and drain detection."),
+
+    // ---- why a rule can never fire on this instance (rules[].unreachableCodes, errors[].code on enable) ------------
+    UNREACHABLE_EVENT_TYPES_NOT_PRODUCED("unreachable.event_types_not_produced", "none of its event types is produced: {types}"),
+    UNREACHABLE_EVENT_TYPE_NOT_PRODUCED("unreachable.event_type_not_produced", "event type {type} is never produced"),
+    UNREACHABLE_FIELD_NOT_PRODUCED("unreachable.field_not_produced", "field '{field}' is never populated"),
+    UNREACHABLE_SEQUENCE_STEP("unreachable.sequence_step", "sequence step '{step}' can never match ({reasons})");
 
     /** {@code {name}} placeholders; braces that do not hold an identifier are literal text. */
     static final Pattern PARAM = Pattern.compile("\\{([A-Za-z][A-Za-z0-9]*)}");
@@ -143,6 +162,11 @@ public enum ApiCode {
     ApiCode(String id, String template) {
         this.id = id;
         this.template = template;
+    }
+
+    public static ApiCode byId(String id) {
+        for (ApiCode c : values()) if (c.id.equals(id)) return c;
+        throw new IllegalArgumentException("unknown code " + id);
     }
 
     public String id() { return id; }

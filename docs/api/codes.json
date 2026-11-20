@@ -236,6 +236,22 @@
     "template": "unknown label category '{category}'"
   },
   {
+    "code": "limitation.age_warmup",
+    "template": "Address age and activity fields (wallet.age_days, wallet.tx_count, counterparty.age_days, approval.spender_age_days) are measured from the platform's first observation: they are withheld until {need} days of observation ({seen} so far), so rules using them do not fire yet."
+  },
+  {
+    "code": "limitation.no_internal_transactions",
+    "template": "Internal transactions (value moved by contracts during execution) are not indexed: such flows are invisible to exposure and drain detection."
+  },
+  {
+    "code": "limitation.tron_no_balance",
+    "template": "No historical balance from TronGrid: wallet.balance is absent, so balance-based rules (wallet-draining) and the rapid-drain detector do not run on this network."
+  },
+  {
+    "code": "limitation.tron_not_indexed",
+    "template": "TRC-10 assets and internal transactions are not indexed."
+  },
+  {
     "code": "network.not_enabled",
     "template": "network '{network}' is not enabled on this instance"
   },
@@ -750,6 +766,22 @@
   {
     "code": "tx.not_found",
     "template": "transaction {hash} not found on {network}"
+  },
+  {
+    "code": "unreachable.event_type_not_produced",
+    "template": "event type {type} is never produced"
+  },
+  {
+    "code": "unreachable.event_types_not_produced",
+    "template": "none of its event types is produced: {types}"
+  },
+  {
+    "code": "unreachable.field_not_produced",
+    "template": "field '{field}' is never populated"
+  },
+  {
+    "code": "unreachable.sequence_step",
+    "template": "sequence step '{step}' can never match ({reasons})"
   },
   {
     "code": "upstream.provider_unavailable",

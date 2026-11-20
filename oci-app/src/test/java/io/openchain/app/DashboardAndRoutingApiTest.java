@@ -95,6 +95,17 @@ class DashboardAndRoutingApiTest extends ApiTestSupport {
     }
 
     @Test
+    void networksCarryLimitationCodesInTheSameOrderAsTheirText() throws Exception {
+        String body = mvc.perform(get("/api/v1/dashboard").header("X-API-Key", READER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.networks[0].limitationCodes").isArray())
+                .andReturn().getResponse().getContentAsString();
+        int texts = com.jayway.jsonpath.JsonPath.<java.util.List<?>>read(body, "$.networks[0].limitations").size();
+        int codes = com.jayway.jsonpath.JsonPath.<java.util.List<?>>read(body, "$.networks[0].limitationCodes").size();
+        org.assertj.core.api.Assertions.assertThat(codes).isEqualTo(texts);
+    }
+
+    @Test
     void demoScenariosProduceEvidenceThroughTheRealPipeline() throws Exception {
         var r = mvc.perform(get("/api/v1/demo/scenarios").header("X-API-Key", READER))
                 .andExpect(status().isOk())

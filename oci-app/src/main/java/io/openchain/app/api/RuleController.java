@@ -439,7 +439,8 @@ public class RuleController {
                 rule.evidenceLevel() == null ? null : rule.evidenceLevel().name(), v.source(), v.format().name(), v.number(),
                 rule.version(), v.compiledHash(), rule.tags(),
                 rule.scope().networks().stream().map(Network::id).sorted().toList(), r.origin(), r.createdAt(), r.updatedAt(),
-                RuleRegistry.unreachable(rule));
+                RuleRegistry.unreachable(rule),
+                RuleRegistry.unreachableReasons(rule).stream().map(w -> new Dto.Coded(w.code(), w.params())).toList());
     }
 
     private static String sha256(String s) {

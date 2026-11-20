@@ -146,6 +146,23 @@ class RuleApiTest extends ApiTestSupport {
     }
 
     @Test
+    void ruleUsingAnUnpopulatedFieldCarriesUnreachableCodesAndEnableRefusesWithThem() throws Exception {
+        String yaml = VALID.replace("test-big-transfer", "test-unreachable").replace("transaction.amount\n", "transaction.amount_usd\n");
+        mvc.perform(post("/api/v1/rules").header("X-API-Key", ANALYST).contentType(MediaType.APPLICATION_JSON).content(json("yaml", yaml)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.unreachableReasons[0]").value("field 'transaction.amount_usd' is never populated"))
+                .andExpect(jsonPath("$.unreachableCodes.length()").value(1))
+                .andExpect(jsonPath("$.unreachableCodes[0].code").value("unreachable.field_not_produced"))
+                .andExpect(jsonPath("$.unreachableCodes[0].params.field").value("transaction.amount_usd"));
+        mvc.perform(post("/api/v1/rules/test-unreachable/enable").header("X-API-Key", ANALYST))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].code").value("unreachable.field_not_produced"))
+                .andExpect(jsonPath("$.errors[0].params.field").value("transaction.amount_usd"))
+                .andExpect(jsonPath("$.errors[0].message").value("field 'transaction.amount_usd' is never populated"));
+        mvc.perform(delete("/api/v1/rules/test-unreachable").header("X-API-Key", ANALYST)).andExpect(status().isNoContent());
+    }
+
+    @Test
     void unknownRuleIs404Problem() throws Exception {
         mvc.perform(get("/api/v1/rules/no-such-rule").header("X-API-Key", READER))
                 .andExpect(status().isNotFound())
