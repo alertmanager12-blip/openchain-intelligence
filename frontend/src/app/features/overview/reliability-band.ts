@@ -40,11 +40,13 @@ import { BandLine, reliability, serverNow } from './reliability';
       }
     </section>`,
   styles: `
-    .band { border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: var(--r-panel); background: var(--surface); padding: 14px 18px; display: grid; gap: 8px; }
-    .band.v-partly { border-left-color: var(--warn); }
-    .band.v-no { border-left-color: var(--danger); }
-    h2 { margin: 0; font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
-    .verdict { font-size: 15px; }
+    .band { position: relative; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); box-shadow: var(--shadow-panel); padding: 16px 20px 16px 24px; display: grid; gap: 10px; overflow: clip; }
+    /* the verdict colour as an inset rule, so the panel's corners stay whole */
+    .band::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ok); }
+    .band.v-partly::before { background: var(--warn); }
+    .band.v-no::before { background: var(--danger); }
+    h2 { margin: 0; font-size: 16px; letter-spacing: -0.01em; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+    .verdict { font-size: 16px; }
     .v-yes .verdict { color: var(--ok); } .v-partly .verdict { color: var(--warn); } .v-no .verdict { color: var(--danger); }
     .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
     li { display: grid; grid-template-columns: 1.2em minmax(0, 1fr); gap: 8px; align-items: baseline; color: var(--ink); }

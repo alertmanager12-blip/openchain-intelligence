@@ -1,5 +1,40 @@
-/* spec 2026-11-19: reliability band, then "handle now" and a compact side column */
-oci-reliability-band { display: block; margin: 4px 0 20px; }
+/* spec 2026-11-19: reliability band, then "handle now" and a compact side column; spec 2026-11-20: the live strip first */
+oci-reliability-band { display: block; margin: 0 0 20px; }
+
+/* the live strip: one instrument panel, a tile per network, hairlines between the tiles */
+.live {
+  list-style: none; margin: 4px 0 12px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--shadow-panel); overflow: clip;
+}
+.live-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 2px 12px; align-items: center; padding: 14px 20px; min-width: 0; }
+.live-tile + .live-tile { border-left: 1px solid var(--line-soft); }
+.live-dot { grid-row: 1 / span 2; position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--risk-low); flex: none; }
+.live-tile.warn .live-dot { background: var(--risk-medium); }
+.live-tile.bad .live-dot { background: var(--risk-high); }
+/* a ring that breathes out of the dot while the network is live; stilled by prefers-reduced-motion (global rule) */
+.live-tile.on .live-dot::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--risk-low); opacity: 0; animation: breathe 2.6s var(--ease) infinite; }
+@keyframes breathe { 0% { transform: scale(0.5); opacity: 0.75; } 70%, 100% { transform: scale(1.3); opacity: 0; } }
+.live-name { font-weight: 600; font-size: var(--fs-14); color: var(--ink); letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-block { grid-column: 3; grid-row: 1; font-size: var(--fs-12); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.live-lag { grid-column: 2 / -1; font-size: var(--fs-12); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.live-tile.warn .live-lag { color: var(--warn); }
+.live-tile.bad .live-lag { color: var(--danger); }
+@media (max-width: 720px) {
+  .live { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* phones: the block number goes under the name, so the name keeps its width */
+  .live-tile { padding: 12px 14px; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto; }
+  .live-dot { grid-row: 1 / span 3; }
+  .live-block { grid-column: 2; grid-row: 2; }
+  .live-lag { grid-row: 3; }
+  .live-tile:nth-child(odd) { border-left: 0; }
+  .live-tile:nth-child(n + 3) { border-top: 1px solid var(--line-soft); }
+}
+
+/* one orchestrated reveal on load: strip, band, then the rest rise in once (prefers-reduced-motion stills it globally) */
+.rise { animation: rise 460ms var(--ease) both; }
+oci-reliability-band.rise { animation-delay: 70ms; }
+.cols.rise { animation-delay: 140ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 .cols { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
 .side { display: grid; gap: 16px; }
 .needs { display: grid; gap: 10px; }
@@ -13,14 +48,10 @@ oci-reliability-band { display: block; margin: 4px 0 20px; }
 .card { display: grid; gap: 10px; }
 .big { margin: 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .big .unit { font-size: 14px; font-weight: 500; color: var(--ink-2); }
-.by-rule, .nets { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.by-rule { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .by-rule li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; }
 .by-rule .name { overflow-wrap: anywhere; }
 .by-rule .num { font-variant-numeric: tabular-nums; }
 .by-rule .bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
 .by-rule .bar span { display: block; height: 100%; background: var(--accent); }
-.nets li { display: flex; align-items: center; gap: 8px; }
-.nets .name { font-weight: 500; }
-.nets .delay { margin-left: auto; color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
-.nets .delay.warn { color: var(--warn); }
 @media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }

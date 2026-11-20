@@ -8,6 +8,13 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Changed (console look: a 2026 SaaS finish, spec docs/superpowers/specs/2026-11-20-console-saas-2026-design.md)
+
+- **Layered surfaces**: the page canvas is a cool tint and panels are white (dark theme: deeper blue-black canvas, lighter panels), with a radius hierarchy (chips 6, controls 8, panels 12, overlays 14) and ink-tinted shadows. Verdict panels become white panels; evidence lines sit on the well tone inside them. Tokens mirrored in `frontend/src/app/shared/contrast.ts`, contrast-checked (AA) in both themes.
+- **Shell**: the sidebar sits on the canvas tone with a tinted pill for the active page (the brand rule stays), a translucent top bar, the search trigger as a raised pill, the account chip as a small card; page titles are set larger and tighter, ledes at 14 px.
+- **Overview live strip**: one instrument panel above the reliability band with a tile per watched network (name, last indexed block, delay, state); the dot breathes only while the network is live, and not under `prefers-reduced-motion`. It replaces the "Networks" side card; "Last 24 hours" stays. One orchestrated reveal on load (strip, band, then the rest). New dictionary key `overview.net.lastBlock`.
+- Filled buttons gain a hairline top highlight; focused text fields a soft brand halo; segmented filters (alerts) follow the control radius.
+
 ### Added (console entirely in English and French)
 
 - **Every console screen is available in English and French**: a FR | EN switch in every page header and on the landing page, a language setting in Settings; the default follows the browser and the choice is stored in the browser. Dictionaries are split by area (`frontend/src/app/core/i18n/en|fr/`), with ICU plurals/select and French typography. Sentences composed by the engine stay in English, shown under "Formulation du moteur :" with `lang="en"`. A test refuses hard-coded English in any screen, and a test checks that every server code has English and French text.

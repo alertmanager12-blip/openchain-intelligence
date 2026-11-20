@@ -19,5 +19,6 @@ export const overview = {
   'overview.networks': 'Networks',
   'overview.net.unknown': 'delay unknown',
   'overview.net.blocks': '{n, plural, one {# block behind} other {# blocks behind}}',
+  'overview.net.lastBlock': 'Block {n}',
   'overview.openAlert': 'Open the alert',
 } as const satisfies Record<string, Entry>;

@@ -17,5 +17,6 @@ export const overview: Record<keyof typeof enOverview, Entry> = {
   'overview.networks': 'Réseaux',
   'overview.net.unknown': 'retard inconnu',
   'overview.net.blocks': '{n, plural, one {# bloc de retard} other {# blocs de retard}}',
+  'overview.net.lastBlock': 'Bloc {n}',
   'overview.openAlert': "Ouvrir l'alerte",
 };

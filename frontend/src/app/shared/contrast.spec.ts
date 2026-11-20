@@ -18,8 +18,13 @@ describe('design tokens contrast', () => {
     }
   }
 
-  it('keeps the light values of the spec', () => {
-    expect(TOKENS.light).toMatchObject({ canvas: '#FFFFFF', band: '#F2F6F7', line: '#DCE5EA', ink: '#0B2545', 'ink-2': '#4D6177',
+  it('keeps the light values of the spec (2026-11-20: tinted canvas, white panels)', () => {
+    expect(TOKENS.light).toMatchObject({ canvas: '#F4F6F8', band: '#EDF1F4', line: '#DFE5EA', ink: '#0B1F3A', 'ink-2': '#4F627A',
       brand: '#0A7381', 'lvl-confirmed': '#1E7457', 'lvl-inferred': '#8A5D00', 'lvl-inferred-rule': '#B7791F' });
+  });
+
+  it('keeps white panels readable: ink-2 on a white surface in light, on the panel tone in dark', () => {
+    expect(contrastRatio(TOKENS.light['ink-2'], '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(TOKENS.dark['ink-2'], '#0F1829')).toBeGreaterThanOrEqual(4.5);
   });
 });

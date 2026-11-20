@@ -1,17 +1,17 @@
 /**
- * Colour tokens of the console redesign (spec 2026-11-18) and the WCAG contrast ratio that keeps them readable. The values
+ * Colour tokens of the console (specs 2026-11-18 and 2026-11-20) and the WCAG contrast ratio that keeps them readable. The values
  * mirror `src/styles.scss`; a token changed there must change here, and the contrast test then checks it in both themes.
  */
 export const TOKENS: { light: Record<string, string>; dark: Record<string, string> } = {
   light: {
-    canvas: '#FFFFFF', band: '#F2F6F7', line: '#DCE5EA', ink: '#0B2545', 'ink-2': '#4D6177', brand: '#0A7381',
-    'lvl-observed': '#4D6177', 'lvl-inferred': '#8A5D00', 'lvl-inferred-rule': '#B7791F', 'lvl-confirmed': '#1E7457',
-    'lvl-predicted': '#6B3FA0', 'lvl-simulated': '#4D6177',
+    canvas: '#F4F6F8', band: '#EDF1F4', line: '#DFE5EA', ink: '#0B1F3A', 'ink-2': '#4F627A', brand: '#0A7381',
+    'lvl-observed': '#4F627A', 'lvl-inferred': '#8A5D00', 'lvl-inferred-rule': '#B7791F', 'lvl-confirmed': '#1E7457',
+    'lvl-predicted': '#6B3FA0', 'lvl-simulated': '#4F627A',
   },
   dark: {
-    canvas: '#0B1626', band: '#11203A', line: '#22344F', ink: '#E6EDF5', 'ink-2': '#A9B8CA', brand: '#3CC6D4',
-    'lvl-observed': '#A9B8CA', 'lvl-inferred': '#E0B04A', 'lvl-inferred-rule': '#C99A3A', 'lvl-confirmed': '#5BC79A',
-    'lvl-predicted': '#B9A0F2', 'lvl-simulated': '#A9B8CA',
+    canvas: '#090F1A', band: '#151F33', line: '#22304A', ink: '#E8EEF6', 'ink-2': '#A7B6C9', brand: '#46CFDB',
+    'lvl-observed': '#A7B6C9', 'lvl-inferred': '#E0B04A', 'lvl-inferred-rule': '#C99A3A', 'lvl-confirmed': '#5BC79A',
+    'lvl-predicted': '#B9A0F2', 'lvl-simulated': '#A7B6C9',
   },
 };
 
