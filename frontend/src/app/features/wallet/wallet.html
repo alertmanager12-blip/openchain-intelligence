@@ -10,7 +10,7 @@
 
   <header class="ident sev-rail sev-rail--{{ (w.value()?.risk?.level ?? 'unknown').toLowerCase() }}">
     <div class="id-main">
-      <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" label="Copy address" /></div>
+      <div class="addr-row"><h1 class="mono addr">{{ address() }}</h1><oci-copy [value]="address()" labelKey="state.copyAddress" /></div>
       <div class="chips"><oci-net [value]="network()" />
         @if (w.value(); as a) {
           @if (a.isContract !== null) { <span class="chip">{{ a.isContract ? 'Smart contract' : 'Externally owned account' }}</span> }

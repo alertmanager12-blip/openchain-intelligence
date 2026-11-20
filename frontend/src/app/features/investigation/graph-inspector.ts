@@ -15,7 +15,7 @@ import { UI } from '../../shared/ui';
   template: `
     @if (node(); as n) {
       <div class="head"><h2>{{ n.label ?? 'Wallet' }}</h2><oci-risk [value]="n.riskLevel" /></div>
-      <p class="addr"><span class="mono">{{ n.address }}</span><oci-copy [value]="n.address" label="Copy address" /></p>
+      <p class="addr"><span class="mono">{{ n.address }}</span><oci-copy [value]="n.address" labelKey="state.copyAddress" /></p>
       <dl class="kv">
         <dt>Hops from root</dt><dd>{{ n.depth === 0 ? 'Root' : n.depth }}</dd>
         <dt>Type</dt><dd>{{ n.isContract ? 'Smart contract' : 'Wallet' }}</dd>

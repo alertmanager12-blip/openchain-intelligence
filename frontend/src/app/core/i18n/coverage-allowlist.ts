@@ -39,11 +39,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/wallet/wallet-profile.ts',
     'features/wallet/wallet.html',
     'features/watchlist/watchlist.ts',
-    'layout/command-palette.ts',
-    'layout/shortcut-help.ts',
-    'layout/toast-outlet.ts',
-    'shared/confirm-dialog.ts',
-    'shared/network-not-enabled.ts',
   ],
   tokens: [
     /^[A-Z0-9_.:\-/+]+$/,

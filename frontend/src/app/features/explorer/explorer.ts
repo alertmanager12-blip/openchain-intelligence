@@ -58,7 +58,7 @@ const EXAMPLES: { family: string; example: string }[] = [
                 <oci-net [value]="a.transaction.network" />
                 <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Trace the sender</a></span>
               </div>
-              <p class="hash"><span class="mono">{{ a.transaction.hash }}</span><oci-copy [value]="a.transaction.hash" label="Copy transaction hash" /></p>
+              <p class="hash"><span class="mono">{{ a.transaction.hash }}</span><oci-copy [value]="a.transaction.hash" labelKey="state.copyHash" /></p>
 
               <dl class="well instrument">
                 <div class="readout"><dt>Status</dt><dd [class.bad]="!a.transaction.success"><span class="status" [class.st-ok]="a.transaction.success" [class.st-failed]="!a.transaction.success">{{ a.transaction.success ? 'Succeeded' : 'Failed' }}</span></dd></div>

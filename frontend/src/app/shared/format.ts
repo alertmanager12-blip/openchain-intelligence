@@ -1,4 +1,4 @@
-import { hasKey, translate } from '../core/i18n/i18n.service';
+import { hasKey, translate, type Lang } from '../core/i18n/i18n.service';
 
 /** Exact decimal formatting of raw integer amounts (base units): BigInt only, never floating point. */
 export function formatUnits(raw: string | null | undefined, decimals: number, maxFraction = 6): string {
@@ -36,20 +36,21 @@ export function shortHash(v: string | null | undefined, head = 6, tail = 4): str
   return v.length <= head + tail + 1 ? v : `${v.slice(0, head)}…${v.slice(-tail)}`;
 }
 
-export function timeAgo(iso: string | null | undefined, now = Date.now()): string {
+/** "5m ago" / "il y a 5 min" (the console's language; English unless the caller passes one). */
+export function timeAgo(iso: string | null | undefined, now = Date.now(), lang: Lang = 'en'): string {
   if (!iso) return '—';
   const s = Math.round((now - Date.parse(iso)) / 1000);
   if (Number.isNaN(s)) return '—';
-  if (s < 60) return `${Math.max(s, 0)}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  if (s < 60) return translate(lang, 'time.secAgo', { n: Math.max(s, 0) });
+  if (s < 3600) return translate(lang, 'time.minAgo', { n: Math.floor(s / 60) });
+  if (s < 86400) return translate(lang, 'time.hourAgo', { n: Math.floor(s / 3600) });
+  return translate(lang, 'time.dayAgo', { n: Math.floor(s / 86400) });
 }
 
-export function formatAge(seconds: number): string {
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} h`;
-  return `${Math.round(seconds / 86400)} d`;
+export function formatAge(seconds: number, lang: Lang = 'en'): string {
+  if (seconds < 3600) return translate(lang, 'time.min', { n: Math.max(1, Math.round(seconds / 60)) });
+  if (seconds < 86400) return translate(lang, 'time.hour', { n: Math.round(seconds / 3600) });
+  return translate(lang, 'time.day', { n: Math.round(seconds / 86400) });
 }
 
 /** "FALSE_POSITIVE" -> "False positive": enum values are shown in sentence case. */

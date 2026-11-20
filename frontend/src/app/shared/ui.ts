@@ -5,9 +5,9 @@ import { RouterLink } from '@angular/router';
 import { ApiError } from '../core/api-error';
 import { EvidenceLevel, NetworkId, RiskLevel, Severity } from '../core/models';
 import { RiskGauge } from './risk-gauge';
-import { netLabel, sentence, shortHash } from './format';
+import { netLabel, sentence, severityName, shortHash } from './format';
 import { Skeleton, SkeletonKind } from './skeleton';
-import { I18nService, hasKey, translate } from '../core/i18n/i18n.service';
+import { I18nService, hasKey, translate, type Key } from '../core/i18n/i18n.service';
 
 /** Re-exported for the pages: sentence() lives in format.ts so the app shell can use it without loading these components. */
 export { sentence };
@@ -31,7 +31,7 @@ export { sentence };
     } @else if (loading() && !hasData()) {
       <oci-skeleton [kind]="skeleton()" [rows]="skeletonRows()" [columns]="skeletonColumns()" [label]="loadingText()" [style.--cols]="gridCols()" />
     } @else if (empty()) {
-      <div class="empty" role="status"><span>{{ emptyText() }}</span><ng-content select="[empty]" /></div>
+      <div class="empty" role="status"><span>{{ emptyText() ?? i18n.t('state.empty') }}</span><ng-content select="[empty]" /></div>
     } @else {
       <ng-content />
     }
@@ -44,8 +44,9 @@ export class StateComponent {
   readonly empty = input(false);
   readonly hasData = input(false);
   readonly retryAlways = input(true);
-  readonly loadingText = input('Loading');
-  readonly emptyText = input('Nothing to show yet.');
+  /** Skeleton label and empty message; the console's own words when absent. */
+  readonly loadingText = input<string | null>(null);
+  readonly emptyText = input<string | null>(null);
   readonly skeleton = input<SkeletonKind>('lines');
   readonly skeletonRows = input(5);
   readonly skeletonColumns = input<number[]>([70, 90, 60, 80, 50]);
@@ -60,14 +61,9 @@ export class StateComponent {
 })
 export class SeverityBadge {
   readonly value = input.required<Severity>();
-  readonly text = computed(() => sentence(this.value()));
+  private readonly i18n = inject(I18nService);
+  readonly text = computed(() => severityName(this.value(), this.i18n.lang()));
 }
-
-const EVIDENCE_HELP: Record<EvidenceLevel, string> = {
-  ANOMALY: 'Statistical anomaly: unusual behaviour, no risk claim.',
-  RISK_SIGNAL: 'Risk signal: pattern associated with risk. Not proof of wrongdoing.',
-  CONFIRMED_BY_SOURCE: 'Confirmed by a cited external source (e.g. official sanctions list).',
-};
 
 @Component({
   selector: 'oci-evidence',
@@ -78,8 +74,10 @@ const EVIDENCE_HELP: Record<EvidenceLevel, string> = {
 })
 export class EvidenceBadge {
   readonly value = input.required<EvidenceLevel>();
-  readonly text = computed(() => sentence(this.value()));
-  readonly help = computed(() => EVIDENCE_HELP[this.value()]);
+  private readonly i18n = inject(I18nService);
+  /** The level's name in the console's language, capitalised ("Risk signal" / "Signal de risque"). */
+  readonly text = computed(() => { const w = translate(this.i18n.lang(), `enum.evidence.${this.value()}`); return w.charAt(0).toUpperCase() + w.slice(1); });
+  readonly help = computed(() => translate(this.i18n.lang(), `ui.evidence.${this.value()}`));
 }
 
 @Component({
@@ -125,7 +123,7 @@ export class AddressLink {
   selector: 'oci-copy',
   imports: [MatButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<button matButton class="sm" type="button" (click)="copy()" [attr.aria-label]="done() ? i18n.t('state.copied') : (label() ?? i18n.t('state.copyLabel'))">
+  template: `<button matButton class="sm" type="button" (click)="copy()" [attr.aria-label]="done() ? i18n.t('state.copied') : (label() ?? i18n.t(labelKey() ?? 'state.copyLabel'))">
       <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
       <span aria-live="polite">{{ i18n.t(done() ? 'state.copied' : 'state.copy') }}</span></button>`,
 })
@@ -133,6 +131,8 @@ export class CopyButton {
   readonly value = input.required<string>();
   protected readonly i18n = inject(I18nService);
   readonly label = input<string | null>(null);
+  /** Dictionary key of the accessible name (follows the language); wins over nothing, loses to a ready {@link label}. */
+  readonly labelKey = input<Key | null>(null);
   readonly done = signal(false);
   copy(): void {
     void navigator.clipboard?.writeText(this.value()).then(() => {
@@ -151,7 +151,7 @@ export class CopyButton {
   selector: 'oci-tech',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<details class="tech" [open]="open()" (toggle)="open.set($any($event.target).open)">
-      <summary [attr.aria-expanded]="open()">{{ label() }}</summary>
+      <summary [attr.aria-expanded]="open()">{{ label() ?? i18n.t('state.tech') }}</summary>
       <div class="tech-body"><ng-content /></div>
     </details>`,
   styles: `
@@ -166,7 +166,9 @@ export class CopyButton {
   `,
 })
 export class TechDetail {
-  readonly label = input('Technical detail');
+  protected readonly i18n = inject(I18nService);
+  /** The disclosure's title; "Technical detail" in the console's language when absent. */
+  readonly label = input<string | null>(null);
   readonly open = signal(false);
 }
 

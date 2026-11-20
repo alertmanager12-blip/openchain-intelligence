@@ -37,3 +37,8 @@ export function fmtDuration(ms: number, _lang: Lang): string {
 export function plural(n: number, lang: Lang, forms: { one: string; other: string }): string {
   return new Intl.PluralRules(LOCALE[lang]).select(n) === 'one' ? forms.one : forms.other;
 }
+
+/** "a", "a and b", "a, b and c" / "a, b et c". */
+export function fmtList(items: readonly string[], lang: Lang): string {
+  return items.length <= 1 ? (items[0] ?? '') : new Intl.ListFormat(LOCALE[lang], { style: 'long', type: 'conjunction' }).format(items);
+}

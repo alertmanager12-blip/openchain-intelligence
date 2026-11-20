@@ -4,6 +4,7 @@ import { band } from './band';
 import { verdict } from './verdict';
 import { enums } from './enums';
 import { errors } from './errors';
+import { shared } from './shared';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -13,4 +14,5 @@ export const en = {
   ...verdict,
   ...enums,
   ...errors,
+  ...shared,
 } as const;

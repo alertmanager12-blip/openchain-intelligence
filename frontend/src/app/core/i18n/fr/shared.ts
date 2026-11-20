@@ -1,0 +1,30 @@
+import type { Entry } from '../i18n.service';
+import type { shared as enShared } from '../en/shared';
+
+export const shared: Record<keyof typeof enShared, Entry> = {
+  'dialog.cancel': 'Annuler',
+  'dialog.confirm': 'Confirmer',
+  'dialog.sample.title': 'Supprimer cet élément\u202f?',
+  'dialog.sample.message': 'Cette action est irréversible.',
+  'toast.notifications': 'Notifications',
+  'toast.dismiss': 'Fermer la notification',
+  'nne.title': '{network} n’est pas indexé par cette instance',
+  'nne.only': 'Cette instance indexe uniquement {list}.',
+  'nne.none': 'Cette instance n’indexe encore aucun réseau.',
+  'nne.unknown': 'Son opérateur n’a pas activé ce réseau.',
+  'nne.openOn': 'Ouvrir sur {network}',
+  'nne.search': 'Rechercher une autre adresse',
+  'gauge.label': 'Score de risque',
+  'gauge.of': '/ 100',
+  'gauge.valueText': '{score} sur 100, risque {level}',
+  'time.secAgo': 'il y a {n} s',
+  'time.minAgo': 'il y a {n} min',
+  'time.hourAgo': 'il y a {n} h',
+  'time.dayAgo': 'il y a {n} j',
+  'time.min': '{n} min',
+  'time.hour': '{n} h',
+  'time.day': '{n} j',
+  'ui.evidence.ANOMALY': 'Anomalie statistique\u202f: comportement inhabituel, sans affirmation de risque.',
+  'ui.evidence.RISK_SIGNAL': 'Signal de risque\u202f: schéma associé à un risque. Ce n’est pas une preuve de malveillance.',
+  'ui.evidence.CONFIRMED_BY_SOURCE': 'Confirmé par une source externe citée (par exemple une liste officielle de sanctions).',
+};

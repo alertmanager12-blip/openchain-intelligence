@@ -6,8 +6,8 @@ type Fs = {
 };
 
 const ROOT = 'src/app';
-const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'matTooltip'];
-const BOUND = ['attr.aria-label', 'attr.title', 'attr.label', 'attr.placeholder', 'aria-label', 'title', 'placeholder', 'matTooltip'];
+const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'matTooltip', 'label', 'heading', 'lede', 'emptyText', 'loadingText', 'text'];
+const BOUND = ['attr.aria-label', 'attr.title', 'attr.label', 'attr.placeholder', 'aria-label', 'title', 'placeholder', 'matTooltip', 'label', 'heading', 'lede', 'emptyText', 'loadingText', 'text'];
 
 function fs(): Fs {
   return (globalThis as unknown as { process: { getBuiltinModule(n: string): Fs } }).process.getBuiltinModule('node:fs');
