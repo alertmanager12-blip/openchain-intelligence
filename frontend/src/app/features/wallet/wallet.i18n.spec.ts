@@ -48,6 +48,16 @@ describe('Wallet screen in French', () => {
     return f;
   }
 
+  it('keeps the fund flow link on phones: the header stacks its actions instead of hiding it', async () => {
+    const f = await mount();
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('oci-page-header')?.classList).toContain('stack-acts');
+    const trace = Array.from(el.querySelectorAll('oci-page-header a')).find((a) => a.textContent?.includes(translate('fr', 'wallet.trace')));
+    expect(trace).toBeTruthy();
+    expect(trace?.classList).not.toContain('hide-sm');
+    f.destroy();
+  });
+
   it('writes the headings, the tabs and the limitation from its code in French', async () => {
     const f = await mount();
     const el = f.nativeElement as HTMLElement;
