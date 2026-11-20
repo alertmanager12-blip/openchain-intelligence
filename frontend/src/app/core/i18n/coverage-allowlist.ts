@@ -5,7 +5,6 @@
 export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
   files: [],
   tokens: [
-    /^[A-Z0-9_.:\-/+]+$/,
     /^(ChainSentinel|OFAC|SDN|TRON|Ethereum|YAML|JSON|API|OIDC|USDT|USDC|ETH|TRX|BTC|CSV|URL|IDs?|Enter|Esc|Escape|Shift|Ctrl|Cmd|Alt|Tab|Bearer|Gate)$/,
   ],
 };

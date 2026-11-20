@@ -23,15 +23,20 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /** Templates of a source: the html file itself, or every template: `...` of a component. */
-function templatesOf(path: string, src: string): string[] {
+export function templatesOf(path: string, src: string): string[] {
   if (path.endsWith('.html')) return [src];
   const out: string[] = [];
   for (const m of src.matchAll(/template:\s*`((?:[^`\\]|\\.)*)`/g)) out.push(m[1]);
+  for (const m of src.matchAll(/template:\s*'((?:[^'\\\n]|\\.)*)'/g)) out.push(m[1]);
+  for (const m of src.matchAll(/template:\s*"((?:[^"\\\n]|\\.)*)"/g)) out.push(m[1]);
   return out;
 }
 
+/** A lone all-caps word is an identifier (HTTP, KYT); two or more of them in one chunk are an English fragment (NOT FOUND). */
 function words(chunk: string, tokens: RegExp[]): string[] {
-  return (chunk.match(/[A-Za-z][A-Za-z'’-]*/g) ?? []).filter((w) => w.replace(/[^A-Za-z]/g, '').length >= 3 && !tokens.some((t) => t.test(w)));
+  const all = (chunk.match(/[A-Za-z][A-Za-z'’-]*/g) ?? []).filter((w) => w.replace(/[^A-Za-z]/g, '').length >= 3 && !tokens.some((t) => t.test(w)));
+  const caps = all.filter((w) => /^[A-Z]+$/.test(w));
+  return caps.length >= 2 ? all : all.filter((w) => !/^[A-Z]+$/.test(w));
 }
 
 /** Literal user-visible English in a template: text between tags and literal values of the visible attributes. */
@@ -67,6 +72,28 @@ describe('hard-coded English scanner (spec 2026-11-19 §6)', () => {
     expect(findings(`<b [attr.aria-label]="'Revoke ' + k.name" [title]="x ? 'Copy link' : i18n.t('k')">{{ t }}</b>`)).toEqual(["'Revoke ' + k.name", "x ? 'Copy link' : i18n.t('k')"]);
     expect(findings(`<b [attr.aria-label]="i18n.t('shell.x', { id: a })" [matTooltip]="'USDT'"></b>`)).toEqual([]);
     expect(findings('<span>USDT ETH TRON 0x12</span>')).toEqual([]);
+  });
+
+  it('catches every literal visible attribute', () => {
+    for (const a of ['label', 'heading', 'lede', 'emptyText', 'loadingText', 'text']) {
+      expect(findings(`<x ${a}="Some English text">`), a).toEqual(['Some English text']);
+    }
+  });
+
+  it('scans inline templates in single, double and backtick quotes', () => {
+    expect(templatesOf('a.ts', `@Component({ template: 'Nothing to show' })`).flatMap((t) => findings(t))).toEqual(['Nothing to show']);
+    expect(templatesOf('a.ts', `@Component({ template: "<p>Nothing to show</p>" })`).flatMap((t) => findings(t))).toEqual(['Nothing to show']);
+    expect(templatesOf('a.ts', 'x({ template: `<p>Nothing to show</p>` })').flatMap((t) => findings(t))).toEqual(['Nothing to show']);
+    expect(templatesOf('a.ts', `x({ template: '<p>{{ t }}</p>' })`).flatMap((t) => findings(t))).toEqual([]);
+  });
+
+  it('catches an all-caps English fragment but keeps lone identifiers', () => {
+    expect(findings('<p>NO DATA AVAILABLE</p>')).toEqual(['NO DATA AVAILABLE']);
+    expect(findings('<p>KYT</p><p>HTTP 404</p>')).toEqual([]);
+  });
+
+  it('keeps the allowlist of files empty (every screen is translated)', () => {
+    expect(COVERAGE_ALLOWLIST.files).toEqual([]);
   });
 
   const sources = walk(ROOT)
