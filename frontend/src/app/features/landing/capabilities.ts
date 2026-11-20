@@ -74,7 +74,7 @@ const STATUS: Record<Availability, Key> = { available: 'landing.status.available
                 @case ('understand') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
                     <text class="v-txt" x="0" y="14">{{ i18n.t('landing.viz.activity') }}</text>
-                    @for (h of bars; track $index) { <rect [attr.x]="$index * 22" [attr.y]="150 - h" width="14" [attr.height]="h" rx="2" [class.v-acc]="$index === 9" fill="#2a3542" /> }
+                    @for (h of bars; track $index) { <rect [attr.x]="$index * 22" [attr.y]="150 - h" width="14" [attr.height]="h" rx="2" [class.v-acc]="$index === 9" fill="#22304a" /> }
                     <path class="v-line" d="M0 160 H300" />
                     <text class="v-txt" x="0" y="190">{{ i18n.t('landing.viz.score') }}</text>
                   </svg>
@@ -83,7 +83,7 @@ const STATUS: Record<Availability, Key> = { available: 'landing.status.available
                 @case ('predict') {
                   <svg viewBox="0 0 320 200" aria-hidden="true">
                     <path class="v-line" d="M10 110 H310" />
-                    @for (x of ticks; track x) { <circle [attr.cx]="x" cy="110" r="4" fill="#2a3542" /> }
+                    @for (x of ticks; track x) { <circle [attr.cx]="x" cy="110" r="4" fill="#22304a" /> }
                     <circle class="v-acc" cx="196" cy="110" r="6" /><text class="v-txt" x="196" y="86" text-anchor="middle">{{ i18n.t('landing.viz.unusual') }}</text>
                     <circle class="v-risk" cx="262" cy="110" r="7" /><text class="v-txt" x="262" y="146" text-anchor="middle">{{ i18n.t('landing.viz.drain') }}</text>
                     <text class="v-txt" x="10" y="190">{{ i18n.t('landing.viz.signals') }}</text>

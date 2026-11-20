@@ -36,7 +36,7 @@ import { publicLinks } from './public-links';
     .soon { padding: 20px; border: 1px dashed var(--cs-line-2); border-radius: 10px; color: var(--cs-muted); font-size: 15px; line-height: 1.6; }
     .soon ::ng-deep b { color: var(--cs-text); font-weight: 600; }
 
-    .final { text-align: center; padding: 128px 0; border-top: 1px solid var(--cs-line); background: radial-gradient(ellipse 50% 60% at 50% 100%, rgba(61, 220, 151, 0.09), transparent 70%); }
+    .final { text-align: center; padding: 128px 0; border-top: 1px solid var(--cs-line); background: radial-gradient(ellipse 50% 60% at 50% 100%, rgba(70, 207, 219, 0.1), transparent 70%); }
     .final h2 { font-size: clamp(32px, 4.6vw, 56px); line-height: 1.05; font-weight: 650; letter-spacing: -0.035em; max-width: 18ch; margin: 0 auto; text-wrap: balance; }
     .final p { margin: 20px auto 0; max-width: 56ch; color: var(--cs-muted); font-size: 18px; line-height: 1.6; }
     .final .final-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 36px; }
