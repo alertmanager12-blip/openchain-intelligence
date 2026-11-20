@@ -23,6 +23,8 @@ import org.springframework.http.MediaType;
 /** Rule texts in French come from the rule YAML ({@code translations.fr}) and reach rules and alerts through the API. */
 class RuleTranslationsApiTest extends ApiTestSupport {
 
+    static final String WALLET_DRAINING_FR = "Portefeuille vidé (plus de 80\u202F% du solde sorti en 2 minutes)";
+
     @Autowired AlertService alerts;
 
     private String newAlert(String ruleId) {
@@ -37,7 +39,7 @@ class RuleTranslationsApiTest extends ApiTestSupport {
         mvc.perform(get("/api/v1/rules/wallet-draining").header("X-API-Key", READER))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Wallet drained (>80% of balance out in 2 minutes)"))
-                .andExpect(jsonPath("$.translations.fr.name").value("Portefeuille vidé"))
+                .andExpect(jsonPath("$.translations.fr.name").value(WALLET_DRAINING_FR))
                 .andExpect(jsonPath("$.translations.fr.description").isNotEmpty())
                 .andExpect(jsonPath("$.translations.fr.documentation").isNotEmpty());
     }
@@ -49,10 +51,10 @@ class RuleTranslationsApiTest extends ApiTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].ruleId").value("wallet-draining"))
                 .andExpect(jsonPath("$.items[0].ruleName").value("Rule wallet-draining"))
-                .andExpect(jsonPath("$.items[0].ruleTranslations.fr.name").value("Portefeuille vidé"));
+                .andExpect(jsonPath("$.items[0].ruleTranslations.fr.name").value(WALLET_DRAINING_FR));
         mvc.perform(get("/api/v1/alerts/" + id).header("X-API-Key", READER))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ruleTranslations.fr.name").value("Portefeuille vidé"));
+                .andExpect(jsonPath("$.ruleTranslations.fr.name").value(WALLET_DRAINING_FR));
     }
 
     @Test

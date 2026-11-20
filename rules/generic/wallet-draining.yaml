@@ -64,7 +64,7 @@ documentation: |
   still match; exclude known exchange addresses with labels or a NOT group in your copy.
 translations:
   fr:
-    name: "Portefeuille vidé"
+    name: "Portefeuille vidé (plus de 80 % du solde sorti en 2 minutes)"
     description: "Les transferts sortants d'un portefeuille dépassent 80 % de son solde de départ sur une fenêtre de 2 minutes."
     documentation: |
       Pour chaque couple (expéditeur, jeton), additionne les montants sortants sur une fenêtre de 2 minutes en temps des

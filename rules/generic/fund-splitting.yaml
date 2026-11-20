@@ -87,7 +87,7 @@ documentation: |
   Note: repeated payments to the same recipient count once.
 translations:
   fr:
-    name: "Fractionnement de fonds"
+    name: "Fractionnement de fonds (plus de 30 destinataires distincts en 3 minutes)"
     description: "Un même expéditeur transfère des montants significatifs de jetons connus à plus de 30 destinataires distincts en 3 minutes."
     documentation: |
       1.3.0 (liste de surveillance) : tant que la liste de surveillance de l'opérateur (GET/POST /api/v1/watchlist) est

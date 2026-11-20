@@ -121,6 +121,38 @@ class RulesRepositoryTest {
         }));
     }
 
+    /** Digit runs of a text, thousands separators (comma, spaces) inside numbers ignored. */
+    static List<String> numbers(String s) {
+        String joined = s.replaceAll("(?<=\\d)[,\\u202F\\u00A0 ](?=\\d{3})", "");
+        List<String> out = new java.util.ArrayList<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(joined);
+        while (m.find()) out.add(m.group());
+        return out;
+    }
+
+    /** The English name is the reference: its figures (thresholds, windows) stay in the French name. */
+    @TestFactory Stream<DynamicTest> frenchNamesKeepTheEnglishFigures() throws IOException {
+        return ruleFiles().stream().map(file -> DynamicTest.dynamicTest(rulesDir().relativize(file).toString(), () -> {
+            Rule r = rule(file);
+            RuleTranslation fr = r.translations().get("fr");
+            assertThat(fr).isNotNull();
+            assertThat(numbers(fr.name())).as("figures of '%s' in '%s' (%s)", r.name(), fr.name(), file)
+                    .containsAll(numbers(r.name()));
+        }));
+    }
+
+    @Test void frenchNamesKeepTheEnglishQualifiers() throws IOException {
+        java.util.function.Function<String, String> fr = path -> {
+            try { return rule(rulesDir().resolve(path)).translations().get("fr").name(); }
+            catch (IOException e) { throw new java.io.UncheckedIOException(e); }
+        };
+        assertThat(numbers("10,000 USDT, 80% in 2 minutes")).containsExactly("10000", "80", "2");
+        assertThat(fr.apply("generic/wallet-draining.yaml")).contains("80\u202F%").contains("2 minutes");
+        assertThat(fr.apply("generic/fund-splitting.yaml")).contains("30 destinataires distincts").contains("3 minutes");
+        assertThat(fr.apply("generic/listed-address-exposure.yaml")).contains("indirecte").contains("hors sanctions");
+        assertThat(fr.apply("generic/sanctioned-exposure-signal.yaml")).contains("directe ou indirecte");
+    }
+
     @Test void frenchBanListCatchesFeminineAndPluralForms() {
         for (String w : List.of("criminel", "Criminelles", "criminels", "escroc", "escrocs", "voleur", "voleuses", "fraudeurs",
                 "fraudeuse", "coupable", "coupables", "illégal", "ILLÉGALE", "illégaux", "illegales", "terroriste", "terroristes",

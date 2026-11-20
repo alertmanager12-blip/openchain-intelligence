@@ -40,7 +40,7 @@ documentation: |
   exchanges and bridges (pooled funds). One alert per wallet per 6 hours.
 translations:
   fr:
-    name: "Exposition à une adresse sanctionnée"
+    name: "Exposition à une adresse sanctionnée (directe ou indirecte)"
     description: "Le moteur de détection signale une exposition directe ou indirecte (en plusieurs sauts) d'un portefeuille à une adresse figurant sur une liste de sanctions (p. ex. OFAC SDN)."
     documentation: |
       Lève une alerte quand oci-intelligence émet un signal SANCTIONED_EXPOSURE (contrepartie directe figurant sur une liste

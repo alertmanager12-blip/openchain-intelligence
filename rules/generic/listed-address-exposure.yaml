@@ -38,7 +38,7 @@ documentation: |
   detail gives the traced path and the amount bounded by its smallest hop. One alert per wallet per 6 hours.
 translations:
   fr:
-    name: "Exposition à une adresse listée (hors sanctions)"
+    name: "Exposition indirecte à une adresse listée (hors sanctions)"
     description: "De la valeur est parvenue au portefeuille, par des intermédiaires, depuis une adresse qu'une source liste comme risquée mais pas comme sanctionnée (gelée par l'émetteur d'un stablecoin, mixeur, arnaque, fonds volés...)."
     documentation: |
       Lève une alerte quand oci-intelligence émet un signal INDIRECT_EXPOSURE (valeur parvenue au portefeuille par des
