@@ -20,7 +20,7 @@ import { Level, levelWord } from './levels';
       @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }
     </div>`,
   styles: `
-    .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 7px 12px; background: var(--surface);
+    .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 8px 12px; background: var(--well);
       border-left: 3px solid var(--line); border-radius: 0 var(--r-control) var(--r-control) 0; color: var(--ink); overflow-wrap: anywhere; }
     .lvl { font-size: var(--fs-12); font-weight: 600; min-width: 72px; }
     .text { flex: 1 1 260px; }

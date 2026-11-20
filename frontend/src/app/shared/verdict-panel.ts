@@ -28,7 +28,8 @@ export interface VerdictLine { level: Level; text: string; detail?: string | nul
       <p class="coverage">{{ coverage() || i18n.t('verdict.coverageUnknown') }}@if (limit()) { {{ ' ' + limit() }} }@if (engineCoverage()) { <oci-engine-text [text]="engineCoverage()!" /> }</p>
     </section>`,
   styles: `
-    .verdict { background: var(--band); border-radius: var(--r-panel); padding: 16px 18px; display: grid; gap: 10px; }
+    /* a white panel on the tinted canvas (spec 2026-11-20); the evidence lines inside sit on the well tone */
+    .verdict { background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-panel); border-radius: var(--r-panel); padding: 18px 20px; display: grid; gap: 12px; }
     .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
     .sentence { font-size: 17px; line-height: 24px; font-weight: 600; margin: 0; max-width: 60ch; min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
     .lines { display: grid; gap: 6px; }

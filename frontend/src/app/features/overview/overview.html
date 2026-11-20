@@ -6,9 +6,21 @@
 
   <oci-state [loading]="dash.loading()" [error]="dash.error()" [hasData]="!!dash.value()" skeleton="readout" [skeletonRows]="6" [loadingText]="t('overview.loading')" (retry)="dash.reload()">
     @if (dash.value(); as d) {
-      <oci-reliability-band [dashboard]="d" [sanctions]="sanctions.loading() ? undefined : sanctionsList()" />
+      <!-- the live strip (spec 2026-11-20): one tile per watched network, from what the API already reports; the pulse only when the network is live -->
+      <ul class="live rise" [attr.aria-label]="t('overview.networks')">
+        @for (x of nets(); track x.network) {
+          @let line = netLine(x);
+          <li class="live-tile" [class.warn]="line.warn" [class.bad]="!x.healthy" [class.on]="x.healthy && !line.warn">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span class="live-name">{{ netLabel(x.network) }}</span>
+            @if (x.lastIndexedBlock != null) { <span class="live-block">{{ t('overview.net.lastBlock', { n: n(x.lastIndexedBlock) }) }}</span> }
+            <span class="live-lag">{{ line.text }}</span>
+          </li>
+        }
+      </ul>
+      <oci-reliability-band class="rise" [dashboard]="d" [sanctions]="sanctions.loading() ? undefined : sanctionsList()" />
 
-      <div class="cols">
+      <div class="cols rise">
         <section class="needs" aria-labelledby="h-needs">
           <h2 id="h-needs">{{ t('overview.handleNow') }}</h2>
           <p class="needs-note">{{ t('overview.handleNote') }}</p>
@@ -44,16 +56,6 @@
               </ul>
             </section>
           }
-          <section class="card" aria-labelledby="h-nets">
-            <h2 id="h-nets">{{ t('overview.networks') }}</h2>
-            <ul class="nets">
-              @for (x of nets(); track x.network) {
-                @let line = netLine(x);
-                <li><span class="dot" [class.dot--bad]="!x.healthy" aria-hidden="true"></span><span class="name">{{ netLabel(x.network) }}</span>
-                  <span class="delay" [class.warn]="line.warn">{{ line.text }}</span></li>
-              }
-            </ul>
-          </section>
         </aside>
       </div>
     }

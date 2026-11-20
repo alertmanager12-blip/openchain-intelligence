@@ -9,7 +9,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     :host { display: inline-flex; flex: none; }
-    .bg { fill: var(--cs-accent, #3ddc97); }
+    .bg { fill: var(--cs-accent, #46cfdb); }
     .ln { fill: none; stroke: var(--cs-accent-ink, #03150d); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
     .mk-dot { fill: var(--cs-accent-ink, #03150d); }
     .ring { fill: none; stroke: var(--cs-accent-ink, #03150d); stroke-width: 1.6; }

@@ -61,7 +61,8 @@ export interface Crumb {
     :host { display: grid; gap: 20px; min-width: 0; }
     .bar {
       position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; height: var(--topbar-h); margin: 0 calc(-1 * var(--gutter));
-      padding: 0 var(--gutter); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(8px); border-bottom: 1px solid var(--line);
+      padding: 0 var(--gutter); background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px);
+      border-bottom: 1px solid var(--line-soft);
     }
     .ib { display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--ink-2); cursor: pointer; }
     .ib:hover { background: var(--hover); }
@@ -79,14 +80,15 @@ export interface Crumb {
     .acts:empty { display: none; }
     .acts ::ng-deep .mat-mdc-form-field { width: 220px; --mat-form-field-container-height: 30px; --mat-form-field-container-vertical-padding: 5px; }
     .search {
-      display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 6px 0 8px; flex: none; cursor: pointer; font: inherit; font-size: 13px;
-      color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control); transition: border-color var(--t-fast) var(--ease), color var(--t-fast);
+      display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 10px; flex: none; cursor: pointer; font: inherit; font-size: 13px;
+      color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: var(--shadow-panel);
+      transition: border-color var(--t-fast) var(--ease), color var(--t-fast), box-shadow var(--t-fast) var(--ease);
     }
-    .search:hover { border-color: var(--line-strong); color: var(--ink); }
+    .search:hover { border-color: var(--line-strong); color: var(--ink); box-shadow: var(--shadow-raised); }
     .search svg { width: 14px; height: 14px; }
-    .ph { margin-right: 18px; }
-    .title { display: grid; gap: 4px; }
-    p { margin: 0; color: var(--muted); max-width: 80ch; font-size: 13px; }
+    .ph { margin-right: 28px; }
+    .title { display: grid; gap: 6px; padding-top: 8px; }
+    p { margin: 0; color: var(--ink-2); max-width: 70ch; font-size: 14px; line-height: 1.5; }
     @media (max-width: 720px) {
       .ph, .search kbd { display: none; }
       .search { width: 30px; padding: 0; justify-content: center; }

@@ -13,11 +13,11 @@ import { publicLinks } from './public-links';
     :host { display: block; position: relative; overflow: hidden; }
     :host::before {
       content: ''; position: absolute; inset: -40% -10% auto -10%; height: 900px; pointer-events: none;
-      background: radial-gradient(ellipse 50% 40% at 70% 40%, rgba(61, 220, 151, 0.07), transparent 70%);
+      background: radial-gradient(ellipse 50% 40% at 70% 40%, rgba(70, 207, 219, 0.08), transparent 70%);
     }
     .hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 56px; align-items: center; padding-top: 88px; padding-bottom: 96px; }
     .pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 10px; border: 1px solid var(--cs-line-2); border-radius: 999px; color: var(--cs-muted); font-size: 13px; }
-    .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-accent); box-shadow: 0 0 0 3px rgba(61, 220, 151, 0.16); }
+    .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-accent); box-shadow: 0 0 0 3px rgba(70, 207, 219, 0.18); }
     h1 { margin-top: 24px; font-size: clamp(40px, 5.6vw, 68px); line-height: 1.02; font-weight: 650; letter-spacing: -0.04em; text-wrap: balance; }
     .sub { margin-top: 22px; font-size: 19px; line-height: 1.6; color: var(--cs-muted); max-width: 52ch; }
     .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 36px; }

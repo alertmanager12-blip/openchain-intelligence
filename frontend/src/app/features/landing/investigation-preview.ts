@@ -14,7 +14,7 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: `
     :host { display: block; }
-    section { background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(111, 183, 217, 0.06), transparent 70%); }
+    section { background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(149, 163, 255, 0.06), transparent 70%); }
     .head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px; }
     .win { margin-top: 48px; border: 1px solid var(--cs-line-2); border-radius: 14px; background: var(--cs-surface); overflow: hidden; box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.8); }
     .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 20px; border-bottom: 1px solid var(--cs-line); }
@@ -37,11 +37,11 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
     .contrib .meta { grid-column: 1 / -1; color: var(--cs-faint); font-size: 12px; }
     .method { margin-top: 16px; color: var(--cs-faint); font-size: 12px; line-height: 1.5; }
     .graph svg { width: 100%; height: auto; display: block; }
-    .g-edge { fill: none; stroke: #33404f; }
+    .g-edge { fill: none; stroke: #2a3a56; }
     .g-edge.hot { stroke: var(--cs-risk); }
     .g-node { fill: var(--cs-raised); stroke: var(--cs-line-2); stroke-width: 1.5; }
     .g-node.hot { fill: #2a1416; stroke: var(--cs-risk); }
-    .g-me { fill: #0f2230; stroke: var(--cs-flow); stroke-width: 2; }
+    .g-me { fill: #10213a; stroke: var(--cs-flow); stroke-width: 2; }
     .g-txt { fill: var(--cs-muted); font: 500 11px var(--cs-mono); }
     .g-amt { fill: var(--cs-faint); font: 500 10px var(--cs-font); }
     dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 14px; }
@@ -95,7 +95,7 @@ interface Peer { readonly x: number; readonly y: number; readonly label: string;
                 <h3>{{ i18n.t('landing.inv.risk') }}</h3>
                 <div class="gauge">
                   <svg viewBox="0 0 112 64" aria-hidden="true">
-                    <path d="M8 58 A48 48 0 0 1 104 58" fill="none" stroke="#2a3542" stroke-width="8" stroke-linecap="round" />
+                    <path d="M8 58 A48 48 0 0 1 104 58" fill="none" stroke="#22304a" stroke-width="8" stroke-linecap="round" />
                     <path d="M8 58 A48 48 0 0 1 104 58" fill="none" stroke="#f0645c" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="78 100" />
                   </svg>
                   <div><div class="score">78<small> / 100</small></div><div class="level">{{ i18n.t('landing.inv.high') }}</div></div>

@@ -19,7 +19,7 @@ interface LogLine { readonly at: string; readonly text: Key; readonly tag?: stri
     .head strong { color: var(--cs-text); font-weight: 500; }
     .head .sp { flex: 1; }
     .replay { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--cs-line-2); border-radius: 6px; background: none; color: var(--cs-muted); font: 500 12px var(--cs-font); cursor: pointer; }
-    .replay:hover { color: var(--cs-text); border-color: #3a4757; }
+    .replay:hover { color: var(--cs-text); border-color: #34496a; }
     .stage { position: relative; padding: 8px 8px 0; }
     svg { display: block; width: 100%; height: auto; }
     .edge { fill: none; stroke: var(--cs-line-2); stroke-width: 1.5; }
