@@ -53,7 +53,16 @@ class SchemaConsistencyTest {
         // top-level properties == validator whitelist
         assertThat(p.propertyNames()).containsExactlyInAnyOrder("apiVersion", "id", "version", "name", "description", "author",
                 "enabled", "scope", "conditions", "aggregation", "sequence", "severity", "evidenceLevel", "actions", "cooldown",
-                "dedupKey", "documentation", "expectedConfidence", "tags", "examples", "tests");
+                "dedupKey", "documentation", "expectedConfidence", "tags", "examples", "tests", "translations");
         assertThat(s.get("additionalProperties").asBoolean()).isFalse();
+        // translations: languages accepted by the validator, same length limits as the originals
+        JsonNode tr = p.get("translations");
+        assertThat(tr.get("additionalProperties").asBoolean()).isFalse();
+        assertThat(tr.get("properties").propertyNames()).containsExactlyInAnyOrderElementsOf(RuleTranslation.LANGUAGES);
+        JsonNode text = defs.get("translation");
+        assertThat(text.get("additionalProperties").asBoolean()).isFalse();
+        for (String k : List.of("name", "description", "documentation")) {
+            assertThat(text.get("properties").get(k).get("maxLength").asInt()).as(k).isEqualTo(p.get(k).get("maxLength").asInt());
+        }
     }
 }

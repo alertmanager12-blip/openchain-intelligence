@@ -11,6 +11,7 @@ import io.openchain.app.api.ApiMapper;
 import io.openchain.app.api.Dto;
 import io.openchain.app.chain.EventHistory;
 import io.openchain.app.demo.DemoScenarios;
+import io.openchain.app.rules.RuleRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import io.openchain.core.event.ChainEvent;
 import java.time.Instant;
@@ -50,11 +51,13 @@ public class AlertFacade {
     private final AlertService alerts;
     private final EventHistory history;
     private final ObjectProvider<DemoScenarios> demo;
+    private final RuleRegistry rules;
 
-    public AlertFacade(AlertService alerts, EventHistory history, ObjectProvider<DemoScenarios> demo) {
+    public AlertFacade(AlertService alerts, EventHistory history, ObjectProvider<DemoScenarios> demo, RuleRegistry rules) {
         this.alerts = alerts;
         this.history = history;
         this.demo = demo;
+        this.rules = rules;
     }
 
     public static String apiStatus(AlertStatus s) { return OPEN.contains(s) ? "OPEN" : s.name(); }
@@ -207,7 +210,13 @@ public class AlertFacade {
                 a.firstSeen(), a.lastSeen(), a.createdAt(), a.updatedAt(), a.matchedEventIds(), matched,
                 ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a), subject == null ? null : subject.counterparty(),
                 subject == null ? null : subject.blockNumber(), AlertNarrative.explain(a, fields), a.evidenceState().name(),
-                a.withdrawnEventIds());
+                a.withdrawnEventIds(), ruleTranslations(a.ruleId()));
+    }
+
+    /** The current version's translations of the rule, so lists show its translated name without {@code rules:read}. */
+    private Map<String, io.openchain.alerting.rule.RuleTranslation> ruleTranslations(String ruleId) {
+        if (ruleId == null) return Map.of();
+        return rules.find(ruleId).map(r -> r.current().rule().translations()).orElse(Map.of());
     }
 
     private String demoScenario(Alert a) {

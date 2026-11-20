@@ -71,7 +71,8 @@ class RuleParserValidatorTest {
                 SIMPLE + "actions: [ { type: WEBHOOK, params: { 'bad name': x, ok: [1] } } ]\n",
                 SIMPLE + "tests: [ { name: a, events: [ { fields: { nope: 1, id: 2 }, repeat: 0 } ] }, { name: b } ]\n",
                 SIMPLE + "examples: [ { name: a, expect: MAYBE } ]\n",
-                SIMPLE + "tags: 3\n");
+                SIMPLE + "tags: 3\n",
+                SIMPLE + "translations: { de: { name: x }, fr: { name: \"\", title: y } }\n");
         java.util.Set<String> seen = new java.util.TreeSet<>();
         for (String yaml : corpus) {
             RuleLoader.LoadResult r = loader.tryLoad(yaml, Format.YAML);
@@ -84,6 +85,45 @@ class RuleParserValidatorTest {
             r.errors().forEach(e -> { assertKeyed(e); seen.add(e.key()); });
         }
         assertThat(seen).hasSizeGreaterThan(40);
+    }
+
+    @Test void translationsAreOptionalAndValidated() {
+        assertThat(Fx.rule(SIMPLE).rule().translations()).isEmpty();
+
+        Rule full = Fx.rule(SIMPLE + """
+                translations:
+                  fr:
+                    name: "Gros transfert"
+                    description: "Un transfert supérieur à 100."
+                    documentation: |
+                      Documentation en français.
+                """).rule();
+        assertThat(full.translations()).containsOnlyKeys("fr");
+        assertThat(full.translations().get("fr"))
+                .isEqualTo(new RuleTranslation("Gros transfert", "Un transfert supérieur à 100.", "Documentation en français.\n"));
+
+        Rule nameOnly = Fx.rule(SIMPLE + "translations: { fr: { name: \"Gros transfert\" } }\n").rule();
+        assertThat(nameOnly.translations().get("fr")).isEqualTo(new RuleTranslation("Gros transfert", null, null));
+
+        List<ValidationError> de = errors(SIMPLE + "translations: { de: { name: \"Große Überweisung\" } }\n");
+        assertThat(de).singleElement().satisfies(e -> {
+            assertThat(e.path()).isEqualTo("$.translations.de");
+            assertThat(e.code()).isEqualTo(Code.INVALID_VALUE);
+            assertThat(e.key()).isEqualTo("rule.translation_language");
+            assertThat(e.params()).containsEntry("language", "de").containsEntry("supported", "fr");
+        });
+
+        List<ValidationError> e = errors(SIMPLE + "translations: { fr: { name: \"" + "n".repeat(201) + "\", description: \""
+                + "d".repeat(4097) + "\", documentation: \"" + "x".repeat(64 * 1024 + 1) + "\", title: x } }\n");
+        assertThat(has(e, "$.translations.fr.name", Code.LIMIT_EXCEEDED)).isTrue();
+        assertThat(has(e, "$.translations.fr.description", Code.LIMIT_EXCEEDED)).isTrue();
+        assertThat(has(e, "$.translations.fr.documentation", Code.LIMIT_EXCEEDED)).isTrue();
+        assertThat(has(e, "$.translations.fr.title", Code.UNKNOWN_PROPERTY)).isTrue();
+
+        assertThat(has(errors(SIMPLE + "translations: { fr: { name: \"  \" } }\n"), "$.translations.fr.name", Code.REQUIRED)).isTrue();
+        assertThat(has(errors(SIMPLE + "translations: { fr: { name: 3 } }\n"), "$.translations.fr.name", Code.TYPE)).isTrue();
+        assertThat(has(errors(SIMPLE + "translations: { fr: Gros }\n"), "$.translations.fr", Code.TYPE)).isTrue();
+        assertThat(has(errors(SIMPLE + "translations: [fr]\n"), "$.translations", Code.TYPE)).isTrue();
     }
 
     @Test void catalogueHasUniqueKeysAndDeclaredParams() {

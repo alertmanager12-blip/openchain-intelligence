@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: listed-address-exposure
-version: 1.0.0
+version: 1.0.1
 name: Indirect exposure to a listed address (not a sanction)
 description: Value reached the wallet through intermediaries from an address that a source lists as risky but not as sanctioned (frozen by a stablecoin issuer, mixer, scam, stolen funds...).
 author: openchain-community
@@ -36,6 +36,19 @@ documentation: |
   (law-enforcement request, hack, precaution); it is not a sanctions listing. Sanctions exposure is handled by
   sanctioned-exposure-signal (HIGH). Exposure describes where funds came from, not who owns the wallet; the alert
   detail gives the traced path and the amount bounded by its smallest hop. One alert per wallet per 6 hours.
+translations:
+  fr:
+    name: "Exposition à une adresse listée (hors sanctions)"
+    description: "De la valeur est parvenue au portefeuille, par des intermédiaires, depuis une adresse qu'une source liste comme risquée mais pas comme sanctionnée (gelée par l'émetteur d'un stablecoin, mixeur, arnaque, fonds volés...)."
+    documentation: |
+      Lève une alerte quand oci-intelligence émet un signal INDIRECT_EXPOSURE (valeur parvenue au portefeuille par des
+      intermédiaires) concernant une adresse listée dans une catégorie autre que SANCTIONED, avec une confiance d'au moins
+      0,5 (exposition directe ou à 2 sauts à une source fiable). signal.listed_category indique ce que la source affirme :
+      pour issuer-frozen, l'émetteur du stablecoin a gelé cette adresse dans son propre contrat, pour des raisons qu'il ne
+      publie pas (demande des autorités, piratage, précaution) ; ce n'est pas une inscription sur une liste de sanctions.
+      L'exposition aux sanctions est traitée par sanctioned-exposure-signal (HIGH). L'exposition décrit d'où viennent les
+      fonds, pas à qui appartient le portefeuille ; le détail de l'alerte donne le chemin tracé et le montant borné par son
+      plus petit saut. Une alerte par portefeuille toutes les 6 heures.
 examples:
   - name: 2-hop exposure to an issuer-frozen address matches
     expect: MATCH

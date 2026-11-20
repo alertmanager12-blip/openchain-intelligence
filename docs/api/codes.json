@@ -668,6 +668,10 @@
     "template": "more than {max} values"
   },
   {
+    "code": "rule.translation_language",
+    "template": "unsupported translation language '{language}', expected one of {supported}"
+  },
+  {
     "code": "rule.unit_invalid",
     "template": "unit must be SECONDS|MINUTES|HOURS|DAYS"
   },

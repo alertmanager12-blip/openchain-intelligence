@@ -245,7 +245,9 @@ public final class Dto {
                            /** VALID, PARTIALLY_WITHDRAWN or WITHDRAWN: matched events that left the canonical chain (reorganisation). */
                            String evidenceState,
                            /** Matched events withdrawn by a reorganisation and not re-included since. */
-                           List<String> withdrawnEventIds) {}
+                           List<String> withdrawnEventIds,
+                           /** The current version's translations of the rule (by language); empty when the rule is gone. */
+                           Map<String, io.openchain.alerting.rule.RuleTranslation> ruleTranslations) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,
@@ -253,7 +255,9 @@ public final class Dto {
                           /** Why the rule can never fire on this instance (fields/event types never produced); empty = may fire. */
                           List<String> unreachableReasons,
                           /** The same reasons as stable codes, in the same order. */
-                          List<Coded> unreachableCodes) {}
+                          List<Coded> unreachableCodes,
+                          /** The rule's texts in other languages ({@code translations} of its source); absent texts are left out. */
+                          Map<String, io.openchain.alerting.rule.RuleTranslation> translations) {}
 
     public record WebhookDto(String id, String type, String name, String target, String url, List<String> events, boolean enabled,
                              Instant createdAt, Instant lastDeliveryAt, String lastDeliveryStatus,

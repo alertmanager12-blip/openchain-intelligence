@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: dormant-wallet-reactivation
-version: 1.0.0
+version: 1.0.1
 name: Dormant wallet reactivated
 description: A wallet without any activity for a long period (default 180 days) sends value again.
 author: openchain-community
@@ -27,6 +27,16 @@ documentation: |
   longer than the configured dormancy (DetectionConfig.dormancy, 180 days by default). This is a behavioural
   ANOMALY: owners legitimately return to old wallets (cold storage, inheritance, long-term holding). It is useful
   context when combined with exposure or draining patterns. One alert per wallet per day.
+translations:
+  fr:
+    name: "Portefeuille dormant réactivé"
+    description: "Un portefeuille resté sans aucune activité pendant une longue période (180 jours par défaut) envoie de nouveau de la valeur."
+    documentation: |
+      Lève une alerte quand oci-intelligence émet un signal DORMANT_REACTIVATION : le portefeuille envoie de la valeur après
+      une interruption plus longue que la durée de dormance configurée (DetectionConfig.dormancy, 180 jours par défaut).
+      C'est une anomalie comportementale (ANOMALY) : des propriétaires reviennent légitimement à d'anciens portefeuilles
+      (stockage à froid, succession, détention à long terme). C'est un contexte utile en combinaison avec des schémas
+      d'exposition ou de vidage. Une alerte par portefeuille par jour.
 examples:
   - name: dormancy signal matches
     expect: MATCH

@@ -55,7 +55,8 @@ public final class RuleValidator {
 
     private static final Set<String> TOP = Set.of("apiVersion", "id", "version", "name", "description", "author",
             "enabled", "scope", "conditions", "aggregation", "sequence", "severity", "evidenceLevel", "actions",
-            "cooldown", "dedupKey", "documentation", "expectedConfidence", "tags", "examples", "tests");
+            "cooldown", "dedupKey", "documentation", "expectedConfidence", "tags", "examples", "tests", "translations");
+    static final int MAX_NAME = 200, MAX_DESCRIPTION = 4096, MAX_DOCUMENTATION = 64 * 1024;
 
     private final FieldCatalog catalog;
     private final RuleLimits limits;
@@ -92,8 +93,8 @@ public final class RuleValidator {
                 err("$.apiVersion", Code.UNSUPPORTED_API_VERSION, RuleMessage.UNSUPPORTED_API_VERSION, "found", api, "expected", Rule.API_VERSION);
             String id = pattern(root, "id", "$", true, SLUG, "lowercase slug (a-z, 0-9, '-'), max 64 chars");
             String version = pattern(root, "version", "$", true, SEMVER, "semantic version MAJOR.MINOR.PATCH");
-            String name = str(root, "name", "$", true, 200);
-            String description = str(root, "description", "$", false, 4096);
+            String name = str(root, "name", "$", true, MAX_NAME);
+            String description = str(root, "description", "$", false, MAX_DESCRIPTION);
             String author = str(root, "author", "$", true, 200);
             boolean enabled = bool(root, "enabled", "$", true);
             scope = scope(root.get("scope"), "$.scope");
@@ -127,7 +128,7 @@ public final class RuleValidator {
             if (dedupKey == null) dedupKey = Rule.DEFAULT_DEDUP_KEY;
             else try { DedupKeyTemplate.parse(dedupKey, catalog); }
             catch (IllegalArgumentException e) { err("$.dedupKey", Code.INVALID_TEMPLATE, RuleMessage.INVALID_DEDUP_TEMPLATE, "reason", e.getMessage()); }
-            String documentation = str(root, "documentation", "$", false, 64 * 1024);
+            String documentation = str(root, "documentation", "$", false, MAX_DOCUMENTATION);
             BigDecimal confidence = null;
             if (root.has("expectedConfidence")) {
                 confidence = decimal(root.get("expectedConfidence"), "$.expectedConfidence");
@@ -137,10 +138,41 @@ public final class RuleValidator {
             List<String> tags = stringList(root.get("tags"), "$.tags", 20, SLUG);
             List<RuleExample> examples = examples(root.get("examples"), "$.examples");
             List<RuleTestCase> tests = tests(root.get("tests"), "$.tests");
+            Map<String, RuleTranslation> translations = translations(root.get("translations"), "$.translations");
             if (!errors.isEmpty()) return null;
             return new Rule(api, id, version, name, description, author, enabled, scope, conditions, aggregation,
                     sequence, severity, evidenceLevel, actions, cooldown, dedupKey, documentation, confidence, tags,
-                    examples, tests);
+                    examples, tests, translations);
+        }
+
+        // ------------------------------------------------------------ translations
+
+        /** {@code translations: { fr: { name, description, documentation } }}: every text optional, never blank. */
+        Map<String, RuleTranslation> translations(JsonNode n, String path) {
+            if (n == null || n.isNull()) return Map.of();
+            if (!object(n, path)) return Map.of();
+            Map<String, RuleTranslation> out = new LinkedHashMap<>();
+            for (String lang : n.propertyNames()) {
+                String p = path + "." + lang;
+                if (!RuleTranslation.LANGUAGES.contains(lang)) {
+                    err(p, Code.INVALID_VALUE, RuleMessage.TRANSLATION_LANGUAGE, "language", lang,
+                            "supported", String.join(", ", RuleTranslation.LANGUAGES));
+                    continue;
+                }
+                JsonNode t = n.get(lang);
+                if (!object(t, p)) continue;
+                unknown(t, p, Set.of("name", "description", "documentation"));
+                out.put(lang, new RuleTranslation(translated(t, "name", p, MAX_NAME),
+                        translated(t, "description", p, MAX_DESCRIPTION), translated(t, "documentation", p, MAX_DOCUMENTATION)));
+            }
+            return out;
+        }
+
+        /** An optional translated text: absent falls back to the original, so a blank one is refused rather than shown. */
+        String translated(JsonNode parent, String key, String path, int maxLen) {
+            String s = str(parent, key, path, false, maxLen);
+            if (s != null && s.isBlank()) { err(path + "." + key, Code.REQUIRED, RuleMessage.KEY_MUST_NOT_BE_BLANK, "key", key); return null; }
+            return s;
         }
 
         // ------------------------------------------------------------ scope

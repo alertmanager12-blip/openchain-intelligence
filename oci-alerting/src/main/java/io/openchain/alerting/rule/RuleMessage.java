@@ -38,6 +38,7 @@ public enum RuleMessage {
     CONFIDENCE_OUT_OF_RANGE("rule.confidence_out_of_range", "must be between 0 and 1"),
     ID_MISMATCH("rule.id_differs_from_path", "id '{found}' does not match '{expected}'"),
     GENERIC("rule.generic", "{reason}"),
+    TRANSLATION_LANGUAGE("rule.translation_language", "unsupported translation language '{language}', expected one of {supported}"),
 
     // ---- scope -----------------------------------------------------------------------------------------------------
     UNKNOWN_NETWORK("rule.unknown_network", "unknown network '{network}'"),

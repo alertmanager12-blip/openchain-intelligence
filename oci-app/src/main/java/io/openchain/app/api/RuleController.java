@@ -440,7 +440,8 @@ public class RuleController {
                 rule.version(), v.compiledHash(), rule.tags(),
                 rule.scope().networks().stream().map(Network::id).sorted().toList(), r.origin(), r.createdAt(), r.updatedAt(),
                 RuleRegistry.unreachable(rule),
-                RuleRegistry.unreachableReasons(rule).stream().map(w -> new Dto.Coded(w.code(), w.params())).toList());
+                RuleRegistry.unreachableReasons(rule).stream().map(w -> new Dto.Coded(w.code(), w.params())).toList(),
+                rule.translations());
     }
 
     private static String sha256(String s) {

@@ -384,7 +384,8 @@ public class RuleRegistry {
         if (r.enabled()) return c;
         return compiler.compile(new Rule(r.apiVersion(), r.id(), r.version(), r.name(), r.description(), r.author(), true,
                 r.scope(), r.conditions(), r.aggregation(), r.sequence(), r.severity(), r.evidenceLevel(), r.actions(),
-                r.cooldown(), r.dedupKey(), r.documentation(), r.expectedConfidence(), r.tags(), r.examples(), r.tests()));
+                r.cooldown(), r.dedupKey(), r.documentation(), r.expectedConfidence(), r.tags(), r.examples(), r.tests(),
+                r.translations()));
     }
 
     private void syncEngine(StoredRule sr) {
