@@ -20,6 +20,7 @@ import { watchlist, prefixes as watchlistPrefixes } from './en/watchlist';
 import { integrations, prefixes as integrationsPrefixes } from './en/integrations';
 import { rules, prefixes as rulesPrefixes } from './en/rules';
 import { simulator, prefixes as simulatorPrefixes } from './en/simulator';
+import { settings, prefixes as settingsPrefixes } from './en/settings';
 import { ALERT_STATUSES, SEVERITIES } from '../models';
 
 /** Spec 2026-11-19 §1: dictionaries are split by area; a key lives in one area, under that area's prefixes. */
@@ -44,6 +45,7 @@ const AREAS: Record<string, { keys: string[]; prefixes: readonly string[] }> = {
   integrations: { keys: Object.keys(integrations), prefixes: integrationsPrefixes },
   rules: { keys: Object.keys(rules), prefixes: rulesPrefixes },
   simulator: { keys: Object.keys(simulator), prefixes: simulatorPrefixes },
+  settings: { keys: Object.keys(settings), prefixes: settingsPrefixes },
 };
 
 describe('dictionaries by area', () => {

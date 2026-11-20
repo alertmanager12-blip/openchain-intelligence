@@ -12,7 +12,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/landing/how-it-works.ts',
     'features/landing/investigation-preview.ts',
     'features/landing/landing.ts',
-    'features/settings/settings.html',
   ],
   tokens: [
     /^[A-Z0-9_.:\-/+]+$/,

@@ -18,6 +18,7 @@ import { watchlist } from './watchlist';
 import { integrations } from './integrations';
 import { rules } from './rules';
 import { simulator } from './simulator';
+import { settings } from './settings';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -41,4 +42,5 @@ export const en = {
   ...integrations,
   ...rules,
   ...simulator,
+  ...settings,
 } as const;
