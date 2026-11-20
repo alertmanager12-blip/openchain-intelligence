@@ -8,6 +8,9 @@ import { shared } from './shared';
 import { alerts } from './alerts';
 import { wallet } from './wallet';
 import { risk } from './risk';
+import { explorer } from './explorer';
+import { graph } from './graph';
+import { traces } from './traces';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -21,4 +24,7 @@ export const en = {
   ...alerts,
   ...wallet,
   ...risk,
+  ...explorer,
+  ...graph,
+  ...traces,
 } as const;

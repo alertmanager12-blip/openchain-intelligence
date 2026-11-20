@@ -8,6 +8,9 @@ import { shared } from './shared';
 import { alerts } from './alerts';
 import { wallet } from './wallet';
 import { risk } from './risk';
+import { explorer } from './explorer';
+import { graph } from './graph';
+import { traces } from './traces';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -22,4 +25,7 @@ export const fr: Dictionary = {
   ...alerts,
   ...wallet,
   ...risk,
+  ...explorer,
+  ...graph,
+  ...traces,
 };

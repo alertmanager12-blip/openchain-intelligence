@@ -5,11 +5,7 @@
 export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
   files: [
     'features/community/community.ts',
-    'features/explorer/explorer.ts',
     'features/integrations/integrations.html',
-    'features/investigation/graph-canvas.ts',
-    'features/investigation/graph-inspector.ts',
-    'features/investigation/investigation.ts',
     'features/investigations/investigations.ts',
     'features/landing/capabilities.ts',
     'features/landing/closing.ts',
@@ -29,7 +25,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/rule-code/stored-rules.ts',
     'features/settings/settings.html',
     'features/simulator/simulator.ts',
-    'features/traces/traces.ts',
     'features/watchlist/watchlist.ts',
   ],
   tokens: [
