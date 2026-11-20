@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { ApiError, errorText } from '../../core/api-error';
+import { ApiError, errorText, statusTitle } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EnabledNetworks } from '../../core/enabled-networks';
 import { fmtList, fmtPercent, LOCALE } from '../../core/i18n/format';
@@ -117,14 +117,14 @@ export class PredictionsPage {
 
   show(o: string): void {
     this.outcome.set(o);
-    this.api.predictions(o).subscribe({ next: (p) => this.items.set(p), error: (e: ApiError) => this.toasts.error(e.title, errorText(e, this.i18n.lang())) });
+    this.api.predictions(o).subscribe({ next: (p) => this.items.set(p), error: (e: ApiError) => this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())) });
   }
 
   simulate(): void {
     this.running.set(true);
     this.api.whatIf(this.network(), this.address(), this.category(), 2).subscribe({
       next: (r) => { this.running.set(false); this.sim.set(r); },
-      error: (e: ApiError) => { this.running.set(false); this.toasts.error(e.title, errorText(e, this.i18n.lang())); },
+      error: (e: ApiError) => { this.running.set(false); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 }

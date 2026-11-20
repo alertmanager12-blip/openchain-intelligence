@@ -2,7 +2,7 @@ import type { Entry } from '../i18n.service';
 import type { errors as enErrors } from '../en/errors';
 
 export const errors: Record<keyof typeof enErrors, Entry> = {
-  'error.alert.already_in_status': "l'alerte est déjà {status}",
+  'error.alert.already_in_status': 'l’alerte a déjà le statut «\u202f{status}\u202f»',
   'error.alert.assignee_too_long': 'le nom du responsable est trop long',
   'error.alert.comment_empty': 'le commentaire ne doit pas être vide',
   'error.alert.comment_too_long': 'le commentaire est limité à {max} caractères',
@@ -208,4 +208,20 @@ export const errors: Record<keyof typeof enErrors, Entry> = {
   'error.watchlist.name_too_long': '« name » est limité à {max} caractères',
   'error.watchlist.not_found': 'aucune entrée « {id} » dans la liste de surveillance',
   'error.webhook.not_found': "le webhook {id} n'existe pas",
+  // ---- titres et codes propres à la console (pas des codes serveur)
+  'error.status.0': 'Serveur injoignable',
+  'error.status.400': 'Requête invalide',
+  'error.status.401': 'Authentification requise',
+  'error.status.403': 'Action non autorisée',
+  'error.status.404': 'Introuvable',
+  'error.status.409': 'Conflit',
+  'error.status.422': 'Validation échouée',
+  'error.status.429': 'Trop de requêtes',
+  'error.status.500': 'Erreur serveur',
+  'error.status.502': 'Erreur du fournisseur amont',
+  'error.status.503': 'Service indisponible',
+  'error.status.504': 'Délai dépassé chez le fournisseur amont',
+  'error.status.other': 'Erreur HTTP {status}',
+  'error.status.unexpected': 'Erreur inattendue',
+  'error.client.unreachable': 'L’API n’a pas pu être jointe. Vérifiez votre connexion ou l’URL du backend.',
 };

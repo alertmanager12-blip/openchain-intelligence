@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatButton } from '@angular/material/button';
 import { RouterLink } from '@angular/router';
-import { ApiError, errorText } from '../../core/api-error';
+import { ApiError, errorText, fieldLine, statusTitle } from '../../core/api-error';
 import { I18nService, Key, Params } from '../../core/i18n/i18n.service';
 import { GraphEdge, GraphNode } from '../../core/models';
 import { EngineText } from '../../shared/engine-text';
@@ -33,7 +33,7 @@ export interface PathInfo { key?: Key; params?: Params; engine?: string; error?:
         <a matButton="outlined" class="sm" [routerLink]="['/wallets', n.network, n.address]">{{ i18n.t('graph.insp.open') }}</a>
       </div>
       @if (pathInfo(); as p) {
-        <p class="small ink-2" role="status">@if (p.error) { {{ p.error.title }}: {{ err(p.error) }} } @else {
+        <p class="small ink-2" role="status">@if (p.error) { {{ errLine(p.error) }} } @else {
           @if (p.key) { {{ i18n.t(p.key, p.params) }} } @if (p.engine) { <oci-engine-text [text]="p.engine" [plainInEnglish]="true" /> } }</p>
       }
       <p class="small muted">{{ i18n.t('graph.insp.intent') }}</p>
@@ -77,6 +77,7 @@ export class GraphInspector {
   readonly highlight = output<GraphNode>();
   protected readonly i18n = inject(I18nService);
   readonly units = (raw: string | null | undefined, decimals: number) => formatUnits(raw, decimals, 6, this.i18n.lang());
-  readonly err = (e: ApiError) => errorText(e, this.i18n.lang());
+  /** "Title: message" in the console's language (French sets U+202F before the colon). */
+  readonly errLine = (e: ApiError) => fieldLine(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang()), this.i18n.lang());
   readonly short = (h: string) => shortHash(h, 10, 8);
 }

@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ApiError, errorText, fieldErrorText, toApiError } from './api-error';
+import { ApiError, errorText, fieldErrorText, statusTitle, toApiError } from './api-error';
 import { ApiService } from './api.service';
 import { authInterceptor, errorInterceptor } from './interceptors';
 import { SettingsService } from './settings.service';
@@ -37,6 +37,7 @@ describe('toApiError', () => {
   it('maps network failures (status 0) to a retryable "unreachable" error', () => {
     const e = toApiError(new HttpErrorResponse({ status: 0, error: new ProgressEvent('error') }));
     expect(e.title).toBe('Backend unreachable');
+    expect(e.code).toBe('client.unreachable');
     expect(e.retryable).toBe(true);
   });
 
@@ -116,8 +117,16 @@ describe('errorText', () => {
     expect(errorText(e, 'fr')).not.toContain('error.');
   });
 
-  it('falls back to the title without code or detail', () => {
-    expect(errorText(new ApiError(500, 'Server error', null), 'fr')).toBe('Server error');
+  it('falls back to the status title, in the console language, without code or detail', () => {
+    expect(errorText(new ApiError(500, 'Server error', null), 'fr')).toBe('Erreur serveur');
+    expect(errorText(new ApiError(500, 'Server error', null), 'en')).toBe('Server error');
+  });
+
+  it('names an alert status by its translated name, never the raw enum', () => {
+    const e = problem({ code: 'alert.already_in_status', params: { status: 'OPEN' } });
+    expect(errorText(e, 'fr')).toBe('l’alerte a déjà le statut « Ouverte »');
+    expect(errorText(e, 'en')).toBe('alert is already Open');
+    expect(errorText(problem({ code: 'alert.already_in_status', params: { status: 'NEWER' } }), 'fr')).toContain('NEWER');
   });
 
   it('translates field errors by their code and keeps the message otherwise', () => {
@@ -133,5 +142,19 @@ describe('errorText', () => {
   it('renders list and number params as text', () => {
     const e = problem({ code: 'param.out_of_range', params: { param: 'limit', min: 1, max: 1000 } });
     expect(errorText(e, 'fr')).toBe('limit doit être compris entre 1 et 1\u202f000');
+  });
+});
+
+describe('statusTitle', () => {
+  it('titles an error by its status in the console language', () => {
+    expect(statusTitle(new ApiError(404, 'Resource not found', null), 'fr')).toBe('Introuvable');
+    expect(statusTitle(new ApiError(404, 'Resource not found', null), 'en')).toBe('Not found');
+    expect(statusTitle(new ApiError(0, 'Backend unreachable', null), 'fr')).toBe('Serveur injoignable');
+  });
+
+  it('falls back to the status class for a status it does not name, and never shows a raw key', () => {
+    expect(statusTitle(new ApiError(507, 'Insufficient Storage', null), 'fr')).toBe('Erreur serveur');
+    expect(statusTitle(new ApiError(418, 'Teapot', null), 'fr')).toBe('Erreur HTTP 418');
+    expect(statusTitle(new ApiError(-1, 'Unexpected error', 'boom'), 'fr')).toBe('Erreur inattendue');
   });
 });

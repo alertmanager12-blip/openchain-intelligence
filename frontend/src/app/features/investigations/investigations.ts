@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
-import { ApiError, errorText } from '../../core/api-error';
+import { ApiError, errorText, statusTitle } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { RouterLink } from '@angular/router';
 import { LOCALE, fmtNumber } from '../../core/i18n/format';
@@ -241,7 +241,7 @@ export class InvestigationsPage {
   readonly statusText = (s: string) => { const k = `traces.status.${s}`; return hasKey(k) ? this.i18n.t(k) : s.toLowerCase(); };
   /** Local date and time in the console's language (English keeps the US short form the date pipe gave). */
   readonly when = (iso: string) => new Date(iso).toLocaleString(this.i18n.lang() === 'en' ? 'en-US' : LOCALE.fr, { dateStyle: 'short', timeStyle: 'short' });
-  private err(e: ApiError): void { this.toasts.error(e.title, errorText(e, this.i18n.lang())); }
+  private err(e: ApiError): void { this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); }
   readonly short = (a: string) => (a.length > 14 ? `${a.slice(0, 8)}…${a.slice(-4)}` : a);
   readonly json = (a: unknown) => JSON.stringify(a, null, 2);
 
