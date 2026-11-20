@@ -1,18 +1,20 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormField, form, minLength, required, submit, validate } from '@angular/forms/signals';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, toApiError } from '../../core/api-error';
+import { ApiError, errorText, fieldErrorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { EvidenceLevel, Label, NETWORKS, NetworkId } from '../../core/models';
 import { detectQuery } from '../../core/network-detect';
+import { I18nService, hasKey, type Key, type Lang } from '../../core/i18n/i18n.service';
+import { fmtDate, fmtPercent } from '../../core/i18n/format';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
 import { timeAgo, netLabel } from '../../shared/format';
 import { MAT_BUTTONS, MAT_FORM, MAT_TABLE } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
 import { TableState } from '../../shared/table-state';
-import { UI, sentence } from '../../shared/ui';
+import { categoryName } from '../../shared/explain';
+import { UI } from '../../shared/ui';
 
 const EV_RANK: Record<EvidenceLevel, number> = { ANOMALY: 0, RISK_SIGNAL: 1, CONFIRMED_BY_SOURCE: 2 };
 const CATEGORIES = ['scam-report', 'phishing', 'mixer', 'exchange', 'bridge', 'defi-protocol', 'gambling', 'other'];
@@ -25,73 +27,71 @@ interface ReportModel {
   reference: string;
 }
 
-function reliabilityText(r: number): string {
-  if (r >= 0.9) return 'Highly reliable source, such as an official list. Weighs fully in scores.';
-  if (r >= 0.6) return 'Generally reliable source. Weighs in scores, with less weight than official lists.';
-  return 'Low reliability, for example an unreviewed community report. Treat as a lead, not a fact.';
+function reliabilityKey(r: number): Key {
+  return r >= 0.9 ? 'community.rel.high' : r >= 0.6 ? 'community.rel.mid' : 'community.rel.low';
 }
 
 @Component({
   selector: 'oci-community',
-  imports: [FormField, DatePipe, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
+  imports: [FormField, PageHeader, ...MAT_BUTTONS, ...MAT_FORM, ...MAT_TABLE, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
-      <oci-page-header heading="Community labels" lede="Labels come from sources of different reliability. Community reports are reviewed before they influence any score, and a label describes an address, never a person." />
+      <oci-page-header [heading]="i18n.t('community.title')" [lede]="i18n.t('community.lede')" />
 
       <div class="split">
         <section class="card card--flush" aria-labelledby="h-labels">
-          <div class="card-head"><h2 id="h-labels">Labels</h2>
+          <div class="card-head"><h2 id="h-labels">{{ i18n.t('community.labels') }}</h2>
             <p class="status-line">
-              <span><strong>{{ byEvidence().CONFIRMED_BY_SOURCE }}</strong> confirmed by a cited source</span>
-              <span><strong>{{ byEvidence().RISK_SIGNAL }}</strong> risk signals, a pattern rather than proof</span>
-              @if (pending()) { <span><strong>{{ pending() }}</strong> of your reports waiting for review</span> }
+              <span><strong>{{ byEvidence().CONFIRMED_BY_SOURCE }}</strong> {{ i18n.t('community.confirmed', { n: byEvidence().CONFIRMED_BY_SOURCE }) }}</span>
+              <span><strong>{{ byEvidence().RISK_SIGNAL }}</strong> {{ i18n.t('community.riskSignals', { n: byEvidence().RISK_SIGNAL }) }}</span>
+              @if (pending()) { <span><strong>{{ pending() }}</strong> {{ i18n.t('community.pending', { n: pending() }) }}</span> }
             </p></div>
           <div class="toolbar">
             <mat-form-field class="grow">
-              <mat-label>Filter</mat-label>
-              <input matInput type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" placeholder="Address, name, category or source" />
+              <mat-label>{{ i18n.t('community.filter') }}</mat-label>
+              <input matInput type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)"  [placeholder]="i18n.t('community.filterPlaceholder')" />
             </mat-form-field>
             <mat-form-field class="netf">
-              <mat-label>Network</mat-label>
-              <mat-select [value]="net()" (valueChange)="net.set($event)"><mat-option value="">All networks</mat-option>@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
+              <mat-label>{{ i18n.t('community.network') }}</mat-label>
+              <mat-select [value]="net()" (valueChange)="net.set($event)"><mat-option value="">{{ i18n.t('community.allNetworks') }}</mat-option>@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
             </mat-form-field>
-            <span class="small muted count" aria-live="polite">{{ t.view().length }} shown</span>
+            <span class="small muted count" aria-live="polite">{{ i18n.t('community.shown', { n: t.view().length }) }}</span>
           </div>
           <oci-state [loading]="labels.loading()" [error]="labels.error()" [hasData]="!!labels.value()" [empty]="t.view().length === 0" skeleton="table" [skeletonColumns]="[10, 80, 70, 50, 60, 50]"
-            emptyText="No label matches. Clear the filter or choose all networks." (retry)="labels.reload()">
+            [emptyText]="i18n.t('community.empty')" (retry)="labels.reload()">
             <div class="table-wrap"><table mat-table [dataSource]="t.view()" multiTemplateDataRows [trackBy]="byId" matSort matSortActive="rel" matSortDirection="desc" matSortDisableClear (matSortChange)="t.onSort($event)">
               <ng-container matColumnDef="x">
-                <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">Details</span></th>
-                <td mat-cell *matCellDef="let l" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open() === l.id" [attr.aria-controls]="'ld-' + l.id" [attr.aria-label]="'Details of ' + l.name" (click)="toggle(l.id)">
+                <th mat-header-cell *matHeaderCellDef scope="col" class="x"><span class="sr-only">{{ i18n.t('community.details') }}</span></th>
+                <td mat-cell *matCellDef="let l" class="x"><button matIconButton class="sm expander" type="button" [attr.aria-expanded]="open() === l.id" [attr.aria-controls]="'ld-' + l.id" [attr.aria-label]="i18n.t('community.detailsOf', { name: l.name })" (click)="toggle(l.id)">
                   <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 4 4 4-4 4"/></svg></button></td>
               </ng-container>
               <ng-container matColumnDef="address">
-                <th mat-header-cell *matHeaderCellDef scope="col">Address</th>
+                <th mat-header-cell *matHeaderCellDef scope="col">{{ i18n.t('community.address') }}</th>
                 <td mat-cell *matCellDef="let l"><oci-addr [address]="l.address" [network]="l.network" /><div class="sub"><oci-net [value]="l.network" /></div></td>
               </ng-container>
               <ng-container matColumnDef="category">
-                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="category" sortActionDescription="Sort by label">Label</th>
-                <td mat-cell *matCellDef="let l"><span class="strong">{{ l.name }}</span><div class="sub"><span class="chip">{{ l.category }}</span></div></td>
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="category" [sortActionDescription]="i18n.t('community.sortLabel')">{{ i18n.t('community.label') }}</th>
+                <td mat-cell *matCellDef="let l"><span class="strong">{{ l.name }}</span><div class="sub"><span class="chip">{{ catName(l.category) }}</span></div></td>
               </ng-container>
               <ng-container matColumnDef="source">
-                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="source" sortActionDescription="Sort by source">Source</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="source" [sortActionDescription]="i18n.t('community.sortSource')">{{ i18n.t('community.source') }}</th>
                 <td mat-cell *matCellDef="let l" class="small">{{ l.source }}</td>
               </ng-container>
               <ng-container matColumnDef="rel">
-                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="rel" arrowPosition="before" sortActionDescription="Sort by reliability">Reliability</th>
-                <td mat-cell *matCellDef="let l" class="right nowrap"><span class="rel" aria-hidden="true"><span [style.width.%]="l.reliability * 100"></span></span>{{ pct(l.reliability) }}%</td>
+                <th mat-header-cell *matHeaderCellDef scope="col" class="right" mat-sort-header="rel" arrowPosition="before" [sortActionDescription]="i18n.t('community.sortReliability')">{{ i18n.t('community.reliability') }}</th>
+                <td mat-cell *matCellDef="let l" class="right nowrap"><span class="rel" aria-hidden="true"><span [style.width.%]="l.reliability * 100"></span></span>{{ percent(l.reliability) }}</td>
               </ng-container>
               <ng-container matColumnDef="ev">
-                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="ev" sortActionDescription="Sort by evidence">Evidence</th>
+                <th mat-header-cell *matHeaderCellDef scope="col" mat-sort-header="ev" [sortActionDescription]="i18n.t('community.sortEvidence')">{{ i18n.t('community.evidence') }}</th>
                 <td mat-cell *matCellDef="let l"><oci-evidence [value]="l.evidenceLevel" /></td>
               </ng-container>
               <ng-container matColumnDef="detail">
                 <td mat-cell *matCellDef="let l" [attr.colspan]="cols.length" [id]="'ld-' + l.id">
                   @if (open() === l.id) {
                     <div class="detail">
-                      <dl class="kv"><dt>Address</dt><dd class="mono">{{ l.address }}</dd><dt>Label id</dt><dd class="mono">{{ l.id }}</dd><dt>Added</dt><dd>{{ l.createdAt | date: 'yyyy-MM-dd' : 'UTC' }}, {{ ago(l.createdAt) }}</dd></dl>
-                      <p class="ink-2">{{ relText(l.reliability) }}</p>
+                      <dl class="kv"><dt>{{ i18n.t('community.address') }}</dt><dd class="mono">{{ l.address }}</dd><dt>{{ i18n.t('community.labelId') }}</dt><dd class="mono">{{ l.id }}</dd><dt>{{ i18n.t('community.added') }}</dt><dd>{{ day(l.createdAt) }}, {{ ago(l.createdAt) }}</dd></dl>
+                      <p class="ink-2">{{ i18n.t(relKey(l.reliability)) }}</p>
                     </div>
                   }
                 </td>
@@ -105,46 +105,46 @@ function reliabilityText(r: number): string {
 
         <div class="stack side">
           <section class="card" aria-labelledby="h-report">
-            <h2 id="h-report">Report an address</h2>
+            <h2 id="h-report">{{ i18n.t('community.report') }}</h2>
             <form class="stack" (submit)="$event.preventDefault(); send()" novalidate>
               <mat-form-field>
-                <mat-label>Address</mat-label>
+                <mat-label>{{ i18n.t('community.address') }}</mat-label>
                 <input matInput class="mono" [formField]="report.address" autocomplete="off" spellcheck="false" [ociInvalid]="showErr(report.address)" />
                 <mat-error>{{ errs(report.address).join(' ') }}</mat-error>
               </mat-form-field>
               <div class="pair">
                 <mat-form-field>
-                  <mat-label>Network</mat-label>
+                  <mat-label>{{ i18n.t('community.network') }}</mat-label>
                   <mat-select [formField]="report.network">@for (n of networks; track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
                 </mat-form-field>
                 <mat-form-field>
-                  <mat-label>Category</mat-label>
-                  <mat-select [formField]="report.category">@for (c of categories; track c) { <mat-option [value]="c">{{ c }}</mat-option> }</mat-select>
+                  <mat-label>{{ i18n.t('community.category') }}</mat-label>
+                  <mat-select [formField]="report.category">@for (c of categories; track c) { <mat-option [value]="c">{{ catName(c) }}</mat-option> }</mat-select>
                 </mat-form-field>
               </div>
               <mat-form-field>
-                <mat-label>What did you observe?</mat-label>
-                <textarea matInput rows="4" [formField]="report.description" placeholder="Facts only: what happened, when, which transactions." [ociInvalid]="showErr(report.description)"></textarea>
+                <mat-label>{{ i18n.t('community.observed') }}</mat-label>
+                <textarea matInput rows="4" [formField]="report.description" [placeholder]="i18n.t('community.observedPlaceholder')" [ociInvalid]="showErr(report.description)"></textarea>
                 <mat-error>{{ errs(report.description).join(' ') }}</mat-error>
-                <mat-hint>At least 20 characters. {{ model().description.trim().length }} so far.</mat-hint>
+                <mat-hint>{{ i18n.t('community.observedHint', { n: model().description.trim().length }) }}</mat-hint>
               </mat-form-field>
               <mat-form-field>
-                <mat-label>Reference</mat-label>
-                <input matInput [formField]="report.reference" placeholder="URL, transaction hash or case id" />
+                <mat-label>{{ i18n.t('community.reference') }}</mat-label>
+                <input matInput [formField]="report.reference" [placeholder]="i18n.t('community.referencePlaceholder')" />
               </mat-form-field>
-              <p class="small muted">Do not include personal data about individuals. Reports are reviewed and may be rejected.</p>
-              @if (submitError(); as e) { <p class="field-error" role="alert">{{ e.title }}: {{ e.detail }}</p> }
-              <div><button matButton="filled" type="submit" [disabled]="busy()">{{ busy() ? 'Submitting…' : 'Submit report' }}</button></div>
+              <p class="small muted">{{ i18n.t('community.noPersonal') }}</p>
+              @if (submitError(); as e) { <p class="field-error" role="alert">{{ apiError(e) }}</p> }
+              <div><button matButton="filled" type="submit" [disabled]="busy()">{{ busy() ? i18n.t('community.submitting') : i18n.t('community.submit') }}</button></div>
             </form>
           </section>
           <section class="card" aria-labelledby="h-mine">
-            <h2 id="h-mine">My reports</h2>
+            <h2 id="h-mine">{{ i18n.t('community.mine') }}</h2>
             <oci-state [loading]="reports.loading()" [error]="reports.error()" [hasData]="!!reports.value()" [skeletonRows]="3" (retry)="reports.reload()">
               <ul class="reps">
                 @for (r of reports.value()?.items ?? []; track r.id) {
-                  <li><span class="status st-{{ repState(r.status) }}">{{ sentence(r.status ?? 'PENDING') }}</span>
-                    <span class="mono small" [attr.title]="r.address">{{ r.address.slice(0, 12) }}…</span><span class="small">{{ r.category }}</span><span class="small muted">{{ ago(r.createdAt) }}</span></li>
-                } @empty { <li class="muted small">You have not reported an address yet.</li> }
+                  <li><span class="status st-{{ repState(r.status) }}">{{ statusText(r.status) }}</span>
+                    <span class="mono small" [attr.title]="r.address">{{ r.address.slice(0, 12) }}…</span><span class="small">{{ catName(r.category) }}</span><span class="small muted">{{ ago(r.createdAt) }}</span></li>
+                } @empty { <li class="muted small">{{ i18n.t('community.mineEmpty') }}</li> }
               </ul>
             </oci-state>
           </section>
@@ -168,6 +168,7 @@ function reliabilityText(r: number): string {
 export class CommunityPage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
   readonly networks = NETWORKS;
   readonly netLabel = netLabel;
   readonly categories = CATEGORIES;
@@ -177,10 +178,17 @@ export class CommunityPage {
   readonly byId = (_: number, l: Label) => l.id;
   readonly busy = signal(false);
   readonly submitError = signal<ApiError | null>(null);
-  readonly ago = timeAgo;
-  readonly sentence = sentence;
-  readonly relText = reliabilityText;
-  readonly pct = (v: number) => (v * 100).toFixed(0);
+  readonly relKey = reliabilityKey;
+  protected ago(iso: string | null | undefined): string { return timeAgo(iso, Date.now(), this.i18n.lang()); }
+  protected day(iso: string): string { return fmtDate(iso, this.i18n.lang()); }
+  protected percent(v: number): string { return fmtPercent(v, this.i18n.lang()); }
+  /** Report categories have their own names; any other category goes through the shared category names. */
+  protected catName(c: string): string { const k = `community.cat.${c}`; return hasKey(k) ? this.i18n.t(k) : categoryName(c, this.i18n.lang() as Lang); }
+  protected statusText(s: string | undefined): string { const k = `community.status.${s ?? 'PENDING'}`; return hasKey(k) ? this.i18n.t(k) : (s ?? ''); }
+  protected apiError(e: ApiError): string {
+    const lang = this.i18n.lang();
+    return [errorText(e, lang), ...e.fieldErrors.map((f) => `${f.field}: ${fieldErrorText(f, lang)}`)].join(' ');
+  }
 
   readonly labels = apiResource({ params: () => ({ network: this.net() }), stream: (p) => this.api.labels(p), keepPrevious: true });
   readonly reports = apiResource({ params: () => ({}), stream: () => this.api.labelReports() });
@@ -201,17 +209,17 @@ export class CommunityPage {
   /** Report form (Signal Forms): the model is the single source of truth; rules derive validity from it. */
   readonly model = signal<ReportModel>({ address: '', network: 'ethereum', category: 'scam-report', description: '', reference: '' });
   readonly report = form(this.model, (s) => {
-    required(s.address, { message: 'Enter the address you are reporting.' });
+    required(s.address, { message: 'community.err.addressRequired' });
     validate(s.address, ({ value, valueOf }) => {
       const v = value().trim();
       if (!v) return undefined;
       const d = detectQuery(v);
-      if (d.kind !== 'address') return { kind: 'format', message: 'This is not a recognised address format.' };
+      if (d.kind !== 'address') return { kind: 'format', message: 'community.err.addressFormat' };
       const n = valueOf(s.network);
-      return d.candidates.includes(n) ? undefined : { kind: 'network', message: `This address format does not match ${n}.` };
+      return d.candidates.includes(n) ? undefined : { kind: 'network', message: 'community.err.addressNetwork' };
     });
-    required(s.description, { message: 'Describe what you observed.' });
-    minLength(s.description, 20, { message: 'Write at least 20 characters so a reviewer can check it.' });
+    required(s.description, { message: 'community.err.descriptionRequired' });
+    minLength(s.description, 20, { message: 'community.err.descriptionShort' });
   });
 
   toggle(id: string): void {
@@ -223,7 +231,8 @@ export class CommunityPage {
   }
 
   errs(f: () => { touched: () => boolean; errors: () => readonly { message?: string }[] }): string[] {
-    return f().touched() ? f().errors().map((e) => e.message ?? 'Invalid value') : [];
+    // validation messages are dictionary keys, so they follow a language switch
+    return f().touched() ? f().errors().map((e) => (e.message && hasKey(e.message) ? this.i18n.t(e.message, { network: netLabel(this.model().network) }) : this.i18n.t('community.err.invalid'))) : [];
   }
 
   repState(s: string | undefined): string {
@@ -243,7 +252,7 @@ export class CommunityPage {
         this.reports.update((p) => ({ items: [r, ...(p?.items ?? [])], nextCursor: p?.nextCursor ?? null }));
         this.model.update((x) => ({ ...x, address: '', description: '', reference: '' }));
         this.report().reset();
-        this.toasts.success('Report submitted', 'It stays pending until a reviewer accepts or rejects it.');
+        this.toasts.success(this.i18n.t('community.submitted'), this.i18n.t('community.submittedDetail'));
       } catch (e) {
         this.submitError.set(toApiError(e));
       } finally {

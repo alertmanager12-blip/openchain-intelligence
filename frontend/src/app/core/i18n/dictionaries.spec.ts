@@ -15,6 +15,9 @@ import { graph, prefixes as graphPrefixes } from './en/graph';
 import { traces, prefixes as tracesPrefixes } from './en/traces';
 import { investigations, prefixes as investigationsPrefixes } from './en/investigations';
 import { predictions, prefixes as predictionsPrefixes } from './en/predictions';
+import { community, prefixes as communityPrefixes } from './en/community';
+import { watchlist, prefixes as watchlistPrefixes } from './en/watchlist';
+import { integrations, prefixes as integrationsPrefixes } from './en/integrations';
 import { ALERT_STATUSES, SEVERITIES } from '../models';
 
 /** Spec 2026-11-19 §1: dictionaries are split by area; a key lives in one area, under that area's prefixes. */
@@ -34,6 +37,9 @@ const AREAS: Record<string, { keys: string[]; prefixes: readonly string[] }> = {
   traces: { keys: Object.keys(traces), prefixes: tracesPrefixes },
   investigations: { keys: Object.keys(investigations), prefixes: investigationsPrefixes },
   predictions: { keys: Object.keys(predictions), prefixes: predictionsPrefixes },
+  community: { keys: Object.keys(community), prefixes: communityPrefixes },
+  watchlist: { keys: Object.keys(watchlist), prefixes: watchlistPrefixes },
+  integrations: { keys: Object.keys(integrations), prefixes: integrationsPrefixes },
 };
 
 describe('dictionaries by area', () => {

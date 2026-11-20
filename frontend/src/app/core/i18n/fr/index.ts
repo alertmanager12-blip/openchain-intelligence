@@ -13,6 +13,9 @@ import { graph } from './graph';
 import { traces } from './traces';
 import { investigations } from './investigations';
 import { predictions } from './predictions';
+import { community } from './community';
+import { watchlist } from './watchlist';
+import { integrations } from './integrations';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -32,4 +35,7 @@ export const fr: Dictionary = {
   ...traces,
   ...investigations,
   ...predictions,
+  ...community,
+  ...watchlist,
+  ...integrations,
 };
