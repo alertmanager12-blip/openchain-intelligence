@@ -4,6 +4,7 @@ import io.openchain.alerting.engine.RuleEngine;
 import io.openchain.alerting.rule.Rule;
 import io.openchain.alerting.rule.RuleLoader;
 import io.openchain.alerting.rule.RuleParser.Format;
+import io.openchain.alerting.rule.RuleMessage;
 import io.openchain.alerting.rule.ValidationError;
 import io.openchain.alerting.rule.compile.CompiledRule;
 import io.openchain.alerting.rule.compile.RuleCompiler;
@@ -273,8 +274,8 @@ public class RuleRegistry {
         CompiledRule c = compile(source, format);
         if (!c.id().equals(id)) {
             throw new InvalidRuleException("rule id in the source does not match the path",
-                    List.of(new ValidationError("$.id", ValidationError.Code.CONFLICT,
-                            "id '" + c.id() + "' does not match '" + id + "'")));
+                    List.of(ValidationError.of("$.id", ValidationError.Code.CONFLICT,
+                            RuleMessage.ID_MISMATCH, "found", c.id(), "expected", id)));
         }
         Instant now = clock.instant();
         List<Version> versions = new ArrayList<>(old.versions());

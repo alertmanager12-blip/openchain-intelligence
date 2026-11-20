@@ -288,12 +288,152 @@
     "template": "decision is required"
   },
   {
+    "code": "rule.aggregation_and_sequence",
+    "template": "a rule cannot declare both aggregation and sequence"
+  },
+  {
+    "code": "rule.balance_field_misplaced",
+    "template": "balanceField only applies to RATIO_OF_BALANCE"
+  },
+  {
+    "code": "rule.balance_field_not_numeric",
+    "template": "balance field must be numeric"
+  },
+  {
+    "code": "rule.between_bounds_reversed",
+    "template": "BETWEEN low bound is greater than high bound"
+  },
+  {
+    "code": "rule.between_takes_pair",
+    "template": "BETWEEN takes [low, high]"
+  },
+  {
     "code": "rule.body_shape",
     "template": "expected {source}, {yaml} or a JSON rule document"
   },
   {
+    "code": "rule.conditions_required",
+    "template": "conditions are required (except for sequence rules)"
+  },
+  {
+    "code": "rule.confidence_out_of_range",
+    "template": "must be between 0 and 1"
+  },
+  {
+    "code": "rule.confirmed_needs_source_field",
+    "template": "CONFIRMED_BY_SOURCE requires a condition on a source-backed field (e.g. wallet.sanctioned)"
+  },
+  {
+    "code": "rule.cooldown_too_long",
+    "template": "cooldown exceeds {max}"
+  },
+  {
+    "code": "rule.count_takes_no_field",
+    "template": "COUNT takes no field"
+  },
+  {
+    "code": "rule.document_not_object",
+    "template": "rule document must be an object/mapping"
+  },
+  {
+    "code": "rule.document_too_large",
+    "template": "document larger than {max} bytes"
+  },
+  {
+    "code": "rule.duplicate_group_by",
+    "template": "duplicate groupBy field"
+  },
+  {
+    "code": "rule.duration_not_integer",
+    "template": "duration must be an integer"
+  },
+  {
+    "code": "rule.duration_out_of_range",
+    "template": "duration out of range"
+  },
+  {
+    "code": "rule.duration_pattern",
+    "template": "expected a duration like 30s, 5m, 1h, 24h, 7d"
+  },
+  {
+    "code": "rule.empty_document",
+    "template": "empty document"
+  },
+  {
+    "code": "rule.envelope_field",
+    "template": "envelope field; use type/network/time/block instead"
+  },
+  {
+    "code": "rule.event_network_required",
+    "template": "network is required when the rule scope has not exactly one network"
+  },
+  {
+    "code": "rule.event_type_required",
+    "template": "type is required when the rule scope has not exactly one event type"
+  },
+  {
+    "code": "rule.events_required",
+    "template": "events must be a non-empty array"
+  },
+  {
+    "code": "rule.exists_takes_boolean",
+    "template": "EXISTS takes a boolean (or no value)"
+  },
+  {
+    "code": "rule.expect_invalid",
+    "template": "expect must be MATCH or NO_MATCH"
+  },
+  {
+    "code": "rule.expected_boolean",
+    "template": "expected a boolean"
+  },
+  {
+    "code": "rule.expected_decimal",
+    "template": "expected an exact decimal number (number or numeric string)"
+  },
+  {
+    "code": "rule.expected_instant",
+    "template": "expected an ISO-8601 instant"
+  },
+  {
+    "code": "rule.expected_instant_string",
+    "template": "expected an ISO-8601 instant string"
+  },
+  {
+    "code": "rule.expected_integer",
+    "template": "expected an integer"
+  },
+  {
+    "code": "rule.expected_string",
+    "template": "expected a string (quote it in YAML)"
+  },
+  {
+    "code": "rule.field_not_numeric",
+    "template": "{function} requires a numeric field, '{field}' is {type}"
+  },
+  {
+    "code": "rule.function_needs_field",
+    "template": "{function} requires a field"
+  },
+  {
+    "code": "rule.generic",
+    "template": "{reason}"
+  },
+  {
+    "code": "rule.group_empty",
+    "template": "a condition group needs at least one rule or group"
+  },
+  {
+    "code": "rule.id_differs_from_path",
+    "template": "id '{found}' does not match '{expected}'"
+  },
+  {
     "code": "rule.id_mismatch",
     "template": "the proposed source must keep the rule id '{id}'"
+  },
+  {
+    "code": "rule.ignore_case_scope",
+    "template": "ignoreCase applies to STRING equality/IN/CONTAINS/STARTS_WITH only"
   },
   {
     "code": "rule.import_empty",
@@ -312,16 +452,140 @@
     "template": "{reason}"
   },
   {
+    "code": "rule.invalid_dedup_template",
+    "template": "{reason}"
+  },
+  {
+    "code": "rule.invalid_enum_value",
+    "template": "invalid {key} '{value}', expected one of {allowed}"
+  },
+  {
+    "code": "rule.invalid_iso_duration",
+    "template": "invalid ISO-8601 duration"
+  },
+  {
+    "code": "rule.invalid_regex",
+    "template": "{reason}"
+  },
+  {
+    "code": "rule.invalid_value",
+    "template": "invalid value"
+  },
+  {
+    "code": "rule.key_must_be_boolean",
+    "template": "{key} must be a boolean"
+  },
+  {
+    "code": "rule.key_must_be_non_negative_integer",
+    "template": "{key} must be a non-negative integer"
+  },
+  {
+    "code": "rule.key_must_be_string",
+    "template": "{key} must be a string"
+  },
+  {
+    "code": "rule.key_must_not_be_blank",
+    "template": "{key} must not be blank"
+  },
+  {
+    "code": "rule.key_pattern",
+    "template": "{key} must be a {expected}"
+  },
+  {
+    "code": "rule.key_too_long",
+    "template": "{key} longer than {max}"
+  },
+  {
+    "code": "rule.malformed_document",
+    "template": "malformed {format}: {reason}"
+  },
+  {
+    "code": "rule.malformed_yaml",
+    "template": "malformed YAML: {reason}"
+  },
+  {
+    "code": "rule.matches_takes_string",
+    "template": "MATCHES takes a regex string"
+  },
+  {
     "code": "rule.mode_unsupported",
     "template": "only mode DRY_RUN is supported"
+  },
+  {
+    "code": "rule.must_be_array",
+    "template": "must be an array"
+  },
+  {
+    "code": "rule.must_be_array_of_strings",
+    "template": "must be an array of strings"
+  },
+  {
+    "code": "rule.must_be_object",
+    "template": "must be an object"
+  },
+  {
+    "code": "rule.must_be_string",
+    "template": "must be a string"
+  },
+  {
+    "code": "rule.must_not_be_empty",
+    "template": "must not be empty"
+  },
+  {
+    "code": "rule.nested_too_deeply",
+    "template": "conditions nested deeper than {max}"
   },
   {
     "code": "rule.not_found",
     "template": "rule '{id}' does not exist"
   },
   {
+    "code": "rule.not_group_arity",
+    "template": "NOT groups take exactly one rule or group"
+  },
+  {
+    "code": "rule.not_object",
+    "template": "rule must be an object"
+  },
+  {
+    "code": "rule.number_too_precise",
+    "template": "number too large/precise"
+  },
+  {
+    "code": "rule.operator_not_allowed",
+    "template": "{operator} is not applicable to {type} field '{field}'"
+  },
+  {
+    "code": "rule.operator_takes_array",
+    "template": "{operator} takes a non-empty array"
+  },
+  {
+    "code": "rule.param_name_invalid",
+    "template": "invalid param name"
+  },
+  {
+    "code": "rule.param_too_long",
+    "template": "param too long"
+  },
+  {
+    "code": "rule.params_not_scalar",
+    "template": "params must be scalars"
+  },
+  {
+    "code": "rule.preset_or_duration",
+    "template": "use either preset or duration+unit"
+  },
+  {
     "code": "rule.proposed_source_required",
     "template": "'source' (the proposed rule) is required"
+  },
+  {
+    "code": "rule.repeat_range",
+    "template": "repeat must be 1..{max}"
+  },
+  {
+    "code": "rule.required",
+    "template": "{key} is required"
   },
   {
     "code": "rule.source_invalid",
@@ -332,8 +596,132 @@
     "template": "'source' (or 'yaml') is required"
   },
   {
+    "code": "rule.step_conditions_required",
+    "template": "step conditions are required"
+  },
+  {
+    "code": "rule.steps_minimum",
+    "template": "a sequence needs at least 2 steps"
+  },
+  {
+    "code": "rule.string_too_long",
+    "template": "string longer than {max}"
+  },
+  {
+    "code": "rule.threshold_negative",
+    "template": "threshold must be >= 0"
+  },
+  {
+    "code": "rule.threshold_operator_unsupported",
+    "template": "aggregation thresholds support GREATER_THAN and GREATER_THAN_OR_EQUAL"
+  },
+  {
+    "code": "rule.too_many_actions",
+    "template": "more than {max} actions"
+  },
+  {
+    "code": "rule.too_many_conditions",
+    "template": "too many conditions: {count} > {max}"
+  },
+  {
+    "code": "rule.too_many_entries",
+    "template": "more than {max} entries"
+  },
+  {
+    "code": "rule.too_many_events",
+    "template": "more than {max} events"
+  },
+  {
+    "code": "rule.too_many_examples",
+    "template": "too many examples"
+  },
+  {
+    "code": "rule.too_many_params",
+    "template": "more than {max} params"
+  },
+  {
+    "code": "rule.too_many_steps",
+    "template": "more than {max} steps"
+  },
+  {
+    "code": "rule.too_many_tests",
+    "template": "too many tests"
+  },
+  {
+    "code": "rule.too_many_values",
+    "template": "more than {max} values"
+  },
+  {
+    "code": "rule.unit_invalid",
+    "template": "unit must be SECONDS|MINUTES|HOURS|DAYS"
+  },
+  {
+    "code": "rule.unknown_event_type",
+    "template": "unknown event type '{type}'"
+  },
+  {
+    "code": "rule.unknown_field",
+    "template": "unknown field '{field}' (not in the field catalog)"
+  },
+  {
+    "code": "rule.unknown_field_plain",
+    "template": "unknown field '{field}'"
+  },
+  {
+    "code": "rule.unknown_network",
+    "template": "unknown network '{network}'"
+  },
+  {
+    "code": "rule.unknown_network_plain",
+    "template": "unknown network"
+  },
+  {
+    "code": "rule.unknown_property",
+    "template": "unknown property '{property}'"
+  },
+  {
+    "code": "rule.unsafe_regex",
+    "template": "{reason}"
+  },
+  {
+    "code": "rule.unsupported_api_version",
+    "template": "unsupported apiVersion '{found}', expected {expected}"
+  },
+  {
+    "code": "rule.value_required",
+    "template": "value is required"
+  },
+  {
     "code": "rule.version_not_found",
     "template": "rule {id} has no version {version}"
+  },
+  {
+    "code": "rule.window_too_long",
+    "template": "window exceeds maximum of {max}"
+  },
+  {
+    "code": "rule.window_too_short",
+    "template": "window shorter than {min}"
+  },
+  {
+    "code": "rule.yaml_aliases",
+    "template": "YAML aliases are not allowed (line {line}, column {column})"
+  },
+  {
+    "code": "rule.yaml_anchors",
+    "template": "YAML anchors are not allowed (line {line}, column {column})"
+  },
+  {
+    "code": "rule.yaml_multiple_documents",
+    "template": "only one YAML document is allowed (line {line}, column {column})"
+  },
+  {
+    "code": "rule.yaml_nested_too_deeply",
+    "template": "document nested too deeply (line {line}, column {column})"
+  },
+  {
+    "code": "rule.yaml_tags",
+    "template": "explicit YAML tags are not allowed: {tag} (line {line}, column {column})"
   },
   {
     "code": "simulation.no_exposure",

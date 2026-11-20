@@ -24,7 +24,74 @@ class RuleParserValidatorTest {
     private List<ValidationError> errors(String yaml) {
         RuleLoader.LoadResult r = loader.tryLoad(yaml, Format.YAML);
         assertThat(r.valid()).as("expected invalid rule").isFalse();
+        r.errors().forEach(RuleParserValidatorTest::assertKeyed);
         return r.errors();
+    }
+
+    /** The key is catalogued and its template, filled with the params, is exactly the English message. */
+    private static void assertKeyed(ValidationError e) {
+        String template = RuleMessages.templates().get(e.key());
+        assertThat(template).as("catalogued key %s for %s", e.key(), e).isNotNull();
+        RuleMessage m = java.util.Arrays.stream(RuleMessage.values()).filter(x -> x.key().equals(e.key())).findFirst().orElseThrow();
+        assertThat(m.fill(e.params())).as("message of %s", e.key()).isEqualTo(e.message());
+        assertThat(e.key()).startsWith("rule.");
+    }
+
+    @Test void everyErrorCarriesAKeyAndParamsThatFillItsTemplate() {
+        List<String> corpus = List.of(
+                SIMPLE.replace("rule/v1", "rule/v2"),
+                SIMPLE.replace("transaction.amount", "transaction.secret_field"),
+                SIMPLE + "script: \"x\"\n",
+                SIMPLE.replace("severity: HIGH", "severity: LOUD"),
+                SIMPLE.replace("name: ", "name: [a]\nx: "),
+                SIMPLE.replace("operator: GREATER_THAN", "operator: MATCHES").replace("\"100\"", "\"(a+)+$\""),
+                SIMPLE.replace("operator: GREATER_THAN", "operator: MATCHES").replace("\"100\"", "\"[\""),
+                SIMPLE.replace("\"100\"", "\"lots\""),
+                SIMPLE + "cooldown: 99d\n",
+                SIMPLE + "cooldown: nope\n",
+                SIMPLE + "dedupKey: \"{{nope.x}}\"\n",
+                SIMPLE + "expectedConfidence: 7\n",
+                SIMPLE + "scope: { networks: [nowhere], eventTypes: [NOPE] }\n",
+                header("t") + "conditions: { logic: AND, rules: [ { field: transaction.success, operator: GREATER_THAN, value: 1 },"
+                        + " { field: transaction.from, operator: BETWEEN, value: [a, b] },"
+                        + " { field: transaction.amount, operator: BETWEEN, value: [10, 1] },"
+                        + " { field: transaction.from, operator: IN, value: [] },"
+                        + " { field: transaction.from, operator: EXISTS, value: 3 },"
+                        + " { field: transaction.from, operator: CONTAINS, value: \"\" },"
+                        + " { field: transaction.from, operator: EQUALS, value: 12 },"
+                        + " { field: transaction.from, operator: EQUALS } ] }\n",
+                header("t") + "conditions: { logic: NOT, rules: [] }\n",
+                header("t") + "conditions: { logic: AND, rules: {} }\n",
+                header("t") + "aggregation: { groupBy: [transaction.from, transaction.from], function: SUM, operator: LESS_THAN,"
+                        + " field: transaction.success, balanceField: wallet.age_days }\n",
+                header("t") + "aggregation: { window: { preset: 5m, duration: 1 }, function: COUNT, field: transaction.amount,"
+                        + " operator: GREATER_THAN, threshold: -1 }\n",
+                header("t") + "sequence: { within: bogus, steps: [ { name: a } ] }\n",
+                header("t") + "sequence: { within: { duration: 1.5, unit: WEEKS }, steps: [ { name: a, conditions: { logic: AND, rules: [] } } ] }\n",
+                SIMPLE + "actions: [ { type: WEBHOOK, params: { 'bad name': x, ok: [1] } } ]\n",
+                SIMPLE + "tests: [ { name: a, events: [ { fields: { nope: 1, id: 2 }, repeat: 0 } ] }, { name: b } ]\n",
+                SIMPLE + "examples: [ { name: a, expect: MAYBE } ]\n",
+                SIMPLE + "tags: 3\n");
+        java.util.Set<String> seen = new java.util.TreeSet<>();
+        for (String yaml : corpus) {
+            RuleLoader.LoadResult r = loader.tryLoad(yaml, Format.YAML);
+            assertThat(r.valid()).as(yaml).isFalse();
+            r.errors().forEach(e -> { assertKeyed(e); seen.add(e.key()); });
+        }
+        for (String doc : List.of("", "[1]", "a: &x 1\nb: *x\n", "a: !!java/lang.Object {}\n", "a: 1\n---\nb: 2\n", "a: [", "{\"a\":")) {
+            RuleLoader.LoadResult r = loader.tryLoad(doc, doc.startsWith("{") ? Format.JSON : Format.YAML);
+            assertThat(r.valid()).isFalse();
+            r.errors().forEach(e -> { assertKeyed(e); seen.add(e.key()); });
+        }
+        assertThat(seen).hasSizeGreaterThan(40);
+    }
+
+    @Test void catalogueHasUniqueKeysAndDeclaredParams() {
+        assertThat(RuleMessages.templates()).hasSize(RuleMessage.values().length);
+        for (RuleMessage m : RuleMessage.values()) {
+            assertThat(m.key()).matches("rule\\.[a-z][a-z0-9_]*");
+            assertThat(m.template().replaceAll("\\{[A-Za-z][A-Za-z0-9]*}", "")).doesNotContain("{").doesNotContain("}");
+        }
     }
 
     private static boolean has(List<ValidationError> errs, String path, Code code) {

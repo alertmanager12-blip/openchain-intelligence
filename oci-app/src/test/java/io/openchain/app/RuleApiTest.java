@@ -86,7 +86,10 @@ class RuleApiTest extends ApiTestSupport {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value("https://openchain.io/problems/validation-error"))
                 .andExpect(jsonPath("$.errors.length()", greaterThan(0)))
-                .andExpect(jsonPath("$.errors[*].pointer", hasItem(startsWith("/"))));
+                .andExpect(jsonPath("$.errors[*].pointer", hasItem(startsWith("/"))))
+                .andExpect(jsonPath("$.errors[0].code", startsWith("rule.")))
+                .andExpect(jsonPath("$.errors[*].code", hasItem("rule.unknown_field")))
+                .andExpect(jsonPath("$.errors[?(@.code=='rule.unknown_field')].params.field", hasItem("transaction.not_a_field")));
         mvc.perform(post("/api/v1/rules/validate").header("X-API-Key", READER).contentType(MediaType.APPLICATION_JSON).content("{nope"))
                 .andExpect(status().isBadRequest());
     }

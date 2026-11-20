@@ -3,6 +3,7 @@ package io.openchain.app.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.openchain.alerting.rule.RuleMessages;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -18,11 +19,18 @@ class ApiCodeTest {
 
     @Test
     void everyCodeIsListedInDocsApiCodesJson() throws Exception {
-        String expected = ApiCode.catalogJson(Map.of());
+        String expected = ApiCode.catalogJson(RuleMessages.templates());
         Path file = Path.of("..", "docs", "api", "codes.json");
         if (!Files.exists(file)) file = Path.of("docs", "api", "codes.json");
         String actual = Files.exists(file) ? Files.readString(file) : "";
         assertThat(actual).as("docs/api/codes.json is out of date; expected content:\n=====\n%s=====\n", expected).isEqualTo(expected);
+    }
+
+    @Test
+    void ruleKeysDoNotCollideWithApiCodeIds() {
+        Set<String> ids = new HashSet<>();
+        for (ApiCode c : ApiCode.values()) ids.add(c.id());
+        assertThat(RuleMessages.templates().keySet()).allMatch(k -> k.startsWith("rule.")).doesNotContainAnyElementsOf(ids);
     }
 
     @Test
