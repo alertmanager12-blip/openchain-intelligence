@@ -58,7 +58,8 @@ public final class Dto {
 
         public static Coded of(ApiCode code, Object... kv) {
             java.util.Map<String, Object> p = new java.util.LinkedHashMap<>();
-            for (int i = 0; i < kv.length; i += 2) p.put((String) kv[i], kv[i + 1]);
+            if (kv.length % 2 != 0) throw new IllegalArgumentException("key/value pairs expected, got " + kv.length + " argument(s)");
+            for (int i = 0; i + 1 < kv.length; i += 2) p.put((String) kv[i], kv[i + 1]);
             return new Coded(code.id(), p);
         }
 
