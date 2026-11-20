@@ -11,6 +11,8 @@ import { risk } from './risk';
 import { explorer } from './explorer';
 import { graph } from './graph';
 import { traces } from './traces';
+import { investigations } from './investigations';
+import { predictions } from './predictions';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -28,4 +30,6 @@ export const fr: Dictionary = {
   ...explorer,
   ...graph,
   ...traces,
+  ...investigations,
+  ...predictions,
 };

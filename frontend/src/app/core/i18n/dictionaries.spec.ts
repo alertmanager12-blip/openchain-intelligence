@@ -13,6 +13,8 @@ import { risk, prefixes as riskPrefixes } from './en/risk';
 import { explorer, prefixes as explorerPrefixes } from './en/explorer';
 import { graph, prefixes as graphPrefixes } from './en/graph';
 import { traces, prefixes as tracesPrefixes } from './en/traces';
+import { investigations, prefixes as investigationsPrefixes } from './en/investigations';
+import { predictions, prefixes as predictionsPrefixes } from './en/predictions';
 import { ALERT_STATUSES, SEVERITIES } from '../models';
 
 /** Spec 2026-11-19 §1: dictionaries are split by area; a key lives in one area, under that area's prefixes. */
@@ -30,6 +32,8 @@ const AREAS: Record<string, { keys: string[]; prefixes: readonly string[] }> = {
   explorer: { keys: Object.keys(explorer), prefixes: explorerPrefixes },
   graph: { keys: Object.keys(graph), prefixes: graphPrefixes },
   traces: { keys: Object.keys(traces), prefixes: tracesPrefixes },
+  investigations: { keys: Object.keys(investigations), prefixes: investigationsPrefixes },
+  predictions: { keys: Object.keys(predictions), prefixes: predictionsPrefixes },
 };
 
 describe('dictionaries by area', () => {

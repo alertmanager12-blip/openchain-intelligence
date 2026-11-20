@@ -6,7 +6,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
   files: [
     'features/community/community.ts',
     'features/integrations/integrations.html',
-    'features/investigations/investigations.ts',
     'features/landing/capabilities.ts',
     'features/landing/closing.ts',
     'features/landing/developers.ts',
@@ -15,7 +14,6 @@ export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
     'features/landing/how-it-works.ts',
     'features/landing/investigation-preview.ts',
     'features/landing/landing.ts',
-    'features/predictions/predictions.ts',
     'features/rule-builder/actions-step.ts',
     'features/rule-builder/condition-group.ts',
     'features/rule-builder/rule-builder.ts',

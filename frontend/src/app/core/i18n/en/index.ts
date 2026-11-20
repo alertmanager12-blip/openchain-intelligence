@@ -11,6 +11,8 @@ import { risk } from './risk';
 import { explorer } from './explorer';
 import { graph } from './graph';
 import { traces } from './traces';
+import { investigations } from './investigations';
+import { predictions } from './predictions';
 
 /** English: the source of the keys, one file per area (fr/ must define every one). */
 export const en = {
@@ -27,4 +29,6 @@ export const en = {
   ...explorer,
   ...graph,
   ...traces,
+  ...investigations,
+  ...predictions,
 } as const;

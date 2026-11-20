@@ -1,0 +1,39 @@
+import type { Entry } from '../i18n.service';
+
+/** Key prefixes this area owns (checked by dictionaries.spec.ts). */
+export const prefixes = ['predictions.'] as const;
+
+export const predictions = {
+  'predictions.title': 'Predictions and what-if',
+  'predictions.lede': 'Hypotheses, not findings. A prediction says what a wallet may do before an expiry and is checked afterwards; a simulation says what would follow from an assumption. Neither changes a score, an alert or a label.',
+  'predictions.predictions': 'Predictions',
+  'predictions.noModel': 'No prediction model.',
+  'predictions.outcome.OPEN': 'open',
+  'predictions.outcome.REALISED': 'realised',
+  'predictions.outcome.NOT_REALISED': 'not realised',
+  'predictions.outcome.UNDETERMINED': 'undetermined',
+  'predictions.ifHolds': 'If the hypothesis holds:',
+  'predictions.expires': 'Expires {when}. Confidence: {confidence}.',
+  'predictions.uncalibrated': 'uncalibrated',
+  'predictions.transfers': '({count, plural, one {# transfer} other {# transfers}})',
+  'predictions.limits': 'Limits',
+  'predictions.none': 'No prediction in this state.',
+  'predictions.rateNone': '{type}: no evaluated prediction yet ({counts}).',
+  'predictions.rateEstablished': '{type}: realised {pct} of the time ({counts}).',
+  'predictions.rateSoFar': '{type}: {pct} so far, not established (fewer than {min} evaluated; {counts}).',
+  'predictions.counts': '{realised} realised, {notRealised} not realised, {undetermined} undetermined',
+  'predictions.whatIf': 'What-if exposure',
+  'predictions.network': 'Network',
+  'predictions.address': 'Address assumed listed',
+  'predictions.as': 'As',
+  'predictions.simulate': 'Simulate',
+  'predictions.coverage': 'Coverage of the address: {coverage}.',
+  'predictions.truncated': 'Only the first {count} wallets were examined.',
+  'predictions.stored': 'Nothing was stored.',
+  'predictions.coverage.COMPLETE': 'complete',
+  'predictions.coverage.PARTIAL': 'partial',
+  'predictions.coverage.UNAVAILABLE': 'unavailable',
+  'predictions.direct': 'direct',
+  'predictions.hops': '{count, plural, one {# hop} other {# hops}}',
+  'predictions.alreadyExposed': 'already exposed to it as {categories}',
+} as const satisfies Record<string, Entry>;
