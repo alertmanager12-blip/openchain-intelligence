@@ -38,7 +38,7 @@ type Menu = 'env' | 'user' | null;
       <div class="side-top">
         <div class="pop-wrap">
           <button class="env" type="button" (click)="toggle('env', $event)" [attr.aria-expanded]="menu() === 'env'" aria-controls="env-pop"
-            [attr.aria-label]="'ChainSentinel, ' + shell.env().label + '. Environment details'">
+            [attr.aria-label]="i18n.t('shell.envAria', { label: shell.env().label })">
             <svg class="mark" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="18" height="18" rx="5" class="mark-bg"/><path class="m-line" d="M5.4 13.6 8.8 6.6l5.2 3.6"/><circle class="m-bar" cx="5.4" cy="13.6" r="1.5"/><circle class="m-bar" cx="8.8" cy="6.6" r="1.5"/><circle class="m-ring" cx="14" cy="10.2" r="2.3"/></svg>
             <span class="env-text"><span class="product">ChainSentinel</span><span class="env-line"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span>{{ shell.env().label }}</span></span>
           </button>
@@ -46,10 +46,10 @@ type Menu = 'env' | 'user' | null;
             <div class="pop pop--env" id="env-pop" role="region" [attr.aria-label]="i18n.t('shell.environment')">
               <div class="pop-head"><span class="env-dot k-{{ shell.env().kind }}" aria-hidden="true"></span><strong>{{ shell.env().label }}</strong></div>
               <p class="pop-text">{{ shell.env().detail }}</p>
-              @if (shell.networkCount()) { <p class="pop-text">{{ shell.networkCount() }} networks configured@if (shell.simulatedNetworks()) {, {{ shell.simulatedNetworks() }} simulated}.</p> }
+              @if (shell.networkCount()) { <p class="pop-text">{{ networksLine() }}</p> }
               <div class="pop-sep"></div>
-              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">Connection settings</a>
-              <a class="pop-item" routerLink="/overview" (click)="menu.set(null)">Network health on Overview</a>
+              <a class="pop-item" routerLink="/settings" [queryParams]="{ section: 'connection' }" (click)="menu.set(null)">{{ i18n.t('shell.connectionSettings') }}</a>
+              <a class="pop-item" routerLink="/overview" (click)="menu.set(null)">{{ i18n.t('shell.networkHealth') }}</a>
             </div>
           }
         </div>
@@ -64,7 +64,7 @@ type Menu = 'env' | 'user' | null;
                 [attr.aria-keyshortcuts]="i.key ? 'G ' + i.key.toUpperCase() : null" [attr.title]="shell.collapsed() && docked() ? i18n.t(i.labelKey) : null">
                 <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="i.icon"/></svg>
                 <span class="nav-label">{{ i18n.t(i.labelKey) }}</span>
-                @if (count(i); as c) { <span class="nav-count" [attr.aria-label]="c + ' ' + countLabel(i)">{{ c }}</span> }
+                @if (count(i); as c) { <span class="nav-count" [attr.aria-label]="countLabel(i, c)">{{ c }}</span> }
                 @if (i.key) { <span class="nav-keys" aria-hidden="true"><kbd>G</kbd><kbd>{{ i.key.toUpperCase() }}</kbd></span> }
               </a>
             }
@@ -77,7 +77,7 @@ type Menu = 'env' | 'user' | null;
         <div class="user-row">
         <div class="pop-wrap">
           <button class="user" type="button" (click)="toggle('user', $event)" [attr.aria-expanded]="menu() === 'user'" aria-controls="user-pop"
-            [attr.aria-label]="'Credential: ' + shell.credential().label + (shell.credential().prefix ? ' ' + shell.credential().prefix : '') + '. Account menu'">
+            [attr.aria-label]="i18n.t('shell.userAria', { label: shell.credential().label + (shell.credential().prefix ? ' ' + shell.credential().prefix : '') })">
             <span class="avatar" [class.on]="shell.credential().signedIn" aria-hidden="true">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="5.5" cy="10.5" r="2.5"/><path d="m7.3 8.7 5.2-5.2M10.5 5.5l1.5 1.5M12 4l1.5 1.5"/></svg>
             </span>
@@ -158,13 +158,18 @@ export class App {
     });
   }
 
+  protected networksLine(): string {
+    const count = this.shell.networkCount(), sim = this.shell.simulatedNetworks();
+    return this.i18n.t(sim ? 'shell.networksConfiguredSim' : 'shell.networksConfigured', { count, sim });
+  }
+
   protected count(i: NavItem): number | null {
     const v = i.count === 'openAlerts' ? this.shell.openAlerts() : i.count === 'rulesEnabled' ? this.shell.rulesEnabled() : null;
     return v ? v : null;
   }
 
-  protected countLabel(i: NavItem): string {
-    return this.i18n.t(i.count === 'openAlerts' ? 'shell.countOpenAlerts' : 'shell.countEnabledRules');
+  protected countLabel(i: NavItem, count: number): string {
+    return this.i18n.t(i.count === 'openAlerts' ? 'shell.countOpenAlerts' : 'shell.countEnabledRules', { count });
   }
 
   protected toggle(m: Exclude<Menu, null>, e: Event): void {

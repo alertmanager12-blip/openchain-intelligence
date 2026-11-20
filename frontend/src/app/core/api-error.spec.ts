@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ApiError, toApiError } from './api-error';
+import { ApiError, errorText, fieldErrorText, statusTitle, toApiError } from './api-error';
 import { ApiService } from './api.service';
 import { authInterceptor, errorInterceptor } from './interceptors';
 import { SettingsService } from './settings.service';
@@ -37,6 +37,7 @@ describe('toApiError', () => {
   it('maps network failures (status 0) to a retryable "unreachable" error', () => {
     const e = toApiError(new HttpErrorResponse({ status: 0, error: new ProgressEvent('error') }));
     expect(e.title).toBe('Backend unreachable');
+    expect(e.code).toBe('client.unreachable');
     expect(e.retryable).toBe(true);
   });
 
@@ -96,5 +97,64 @@ describe('ApiService over HTTP', () => {
     const g = http.expectOne((r) => r.url === '/api/v1/graph/a%2Fb');
     expect(g.request.params.get('depth')).toBe('2');
     expect(g.request.params.has('token')).toBe(false);
+  });
+});
+
+describe('errorText', () => {
+  const problem = (extra: Record<string, unknown>) => toApiError(new HttpErrorResponse({
+    status: 422, headers: problemHeaders, error: { title: 'Request validation failed', status: 422, detail: 'server english', ...extra },
+  }));
+
+  it('translates a known code with its params, in either language', () => {
+    const e = problem({ code: 'network.not_enabled', params: { network: 'solana' } });
+    expect(errorText(e, 'en')).toBe("network 'solana' is not enabled on this instance");
+    expect(errorText(e, 'fr')).toBe('le réseau «\u202fsolana\u202f» n\'est pas activé sur cette instance');
+  });
+
+  it('shows the server detail, never a raw key, for a code this console does not know', () => {
+    const e = problem({ code: 'brand.new_code', params: {} });
+    expect(errorText(e, 'fr')).toBe('server english');
+    expect(errorText(e, 'fr')).not.toContain('error.');
+  });
+
+  it('falls back to the status title, in the console language, without code or detail', () => {
+    expect(errorText(new ApiError(500, 'Server error', null), 'fr')).toBe('Erreur serveur');
+    expect(errorText(new ApiError(500, 'Server error', null), 'en')).toBe('Server error');
+  });
+
+  it('names an alert status by its translated name, never the raw enum', () => {
+    const e = problem({ code: 'alert.already_in_status', params: { status: 'OPEN' } });
+    expect(errorText(e, 'fr')).toBe('l’alerte a déjà le statut « Ouverte »');
+    expect(errorText(e, 'en')).toBe('alert is already Open');
+    expect(errorText(problem({ code: 'alert.already_in_status', params: { status: 'NEWER' } }), 'fr')).toContain('NEWER');
+  });
+
+  it('translates field errors by their code and keeps the message otherwise', () => {
+    const e = problem({ errors: [
+      { pointer: '/network', code: 'field.unsupported_network', params: {}, message: 'network not enabled' },
+      { pointer: '/x', code: 'field.future', params: {}, message: 'future english' },
+      { pointer: '/y', message: 'plain' },
+    ] });
+    expect(e.fieldErrors.map((f) => fieldErrorText(f, 'fr'))).toEqual(['réseau non activé', 'future english', 'plain']);
+    expect(fieldErrorText(e.fieldErrors[0], 'en')).toBe('network not enabled');
+  });
+
+  it('renders list and number params as text', () => {
+    const e = problem({ code: 'param.out_of_range', params: { param: 'limit', min: 1, max: 1000 } });
+    expect(errorText(e, 'fr')).toBe('limit doit être compris entre 1 et 1\u202f000');
+  });
+});
+
+describe('statusTitle', () => {
+  it('titles an error by its status in the console language', () => {
+    expect(statusTitle(new ApiError(404, 'Resource not found', null), 'fr')).toBe('Introuvable');
+    expect(statusTitle(new ApiError(404, 'Resource not found', null), 'en')).toBe('Not found');
+    expect(statusTitle(new ApiError(0, 'Backend unreachable', null), 'fr')).toBe('Serveur injoignable');
+  });
+
+  it('falls back to the status class for a status it does not name, and never shows a raw key', () => {
+    expect(statusTitle(new ApiError(507, 'Insufficient Storage', null), 'fr')).toBe('Erreur serveur');
+    expect(statusTitle(new ApiError(418, 'Teapot', null), 'fr')).toBe('Erreur HTTP 418');
+    expect(statusTitle(new ApiError(-1, 'Unexpected error', 'boom'), 'fr')).toBe('Erreur inattendue');
   });
 });

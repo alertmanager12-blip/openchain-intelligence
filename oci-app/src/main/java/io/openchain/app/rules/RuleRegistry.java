@@ -4,6 +4,7 @@ import io.openchain.alerting.engine.RuleEngine;
 import io.openchain.alerting.rule.Rule;
 import io.openchain.alerting.rule.RuleLoader;
 import io.openchain.alerting.rule.RuleParser.Format;
+import io.openchain.alerting.rule.RuleMessage;
 import io.openchain.alerting.rule.ValidationError;
 import io.openchain.alerting.rule.compile.CompiledRule;
 import io.openchain.alerting.rule.compile.RuleCompiler;
@@ -71,7 +72,9 @@ public class RuleRegistry {
     }
 
     public static final class UnknownRuleException extends RuntimeException {
-        public UnknownRuleException(String id) { super("rule '" + id + "' does not exist"); }
+        private final String id;
+        public UnknownRuleException(String id) { super("rule '" + id + "' does not exist"); this.id = id; }
+        public String id() { return id; }
     }
 
     private final RuleLoader loader;
@@ -271,8 +274,8 @@ public class RuleRegistry {
         CompiledRule c = compile(source, format);
         if (!c.id().equals(id)) {
             throw new InvalidRuleException("rule id in the source does not match the path",
-                    List.of(new ValidationError("$.id", ValidationError.Code.CONFLICT,
-                            "id '" + c.id() + "' does not match '" + id + "'")));
+                    List.of(ValidationError.of("$.id", ValidationError.Code.CONFLICT,
+                            RuleMessage.ID_MISMATCH, "found", c.id(), "expected", id)));
         }
         Instant now = clock.instant();
         List<Version> versions = new ArrayList<>(old.versions());
@@ -318,6 +321,12 @@ public class RuleRegistry {
                 io.openchain.app.api.PopulatedFields.EVENT_TYPES);
     }
 
+    /** The same reasons as {@link #unreachable}, structured: stable code, params and the English sentence. */
+    public static List<io.openchain.alerting.rule.RuleReachability.Reason> unreachableReasons(io.openchain.alerting.rule.Rule rule) {
+        return io.openchain.alerting.rule.RuleReachability.reasons(rule, io.openchain.app.api.PopulatedFields.FIELDS,
+                io.openchain.app.api.PopulatedFields.EVENT_TYPES);
+    }
+
     /** Disables the enabled rules that can never fire (shipped or created before this check); returns their ids. */
     public synchronized List<String> disableUnreachable() {
         List<String> off = new ArrayList<>();
@@ -335,10 +344,10 @@ public class RuleRegistry {
     public synchronized StoredRule setEnabled(String id, boolean enabled) {
         StoredRule old = get(id);
         if (enabled) {
-            List<String> why = unreachable(old.current().rule());
+            var why = unreachableReasons(old.current().rule());
             if (!why.isEmpty()) {
                 throw new InvalidRuleException("rule '" + id + "' can never fire with the data this instance produces",
-                        why.stream().map(w -> new ValidationError("$", ValidationError.Code.CONFLICT, w)).toList());
+                        why.stream().map(w -> new ValidationError("$", ValidationError.Code.CONFLICT, w.code(), w.params(), w.message())).toList());
             }
         }
         StoredRule sr = new StoredRule(id, old.versions(), enabled, old.origin(), old.createdAt(), clock.instant());
@@ -375,7 +384,8 @@ public class RuleRegistry {
         if (r.enabled()) return c;
         return compiler.compile(new Rule(r.apiVersion(), r.id(), r.version(), r.name(), r.description(), r.author(), true,
                 r.scope(), r.conditions(), r.aggregation(), r.sequence(), r.severity(), r.evidenceLevel(), r.actions(),
-                r.cooldown(), r.dedupKey(), r.documentation(), r.expectedConfidence(), r.tags(), r.examples(), r.tests()));
+                r.cooldown(), r.dedupKey(), r.documentation(), r.expectedConfidence(), r.tags(), r.examples(), r.tests(),
+                r.translations()));
     }
 
     private void syncEngine(StoredRule sr) {

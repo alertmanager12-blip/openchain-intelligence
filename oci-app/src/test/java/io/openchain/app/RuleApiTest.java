@@ -86,7 +86,10 @@ class RuleApiTest extends ApiTestSupport {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type").value("https://openchain.io/problems/validation-error"))
                 .andExpect(jsonPath("$.errors.length()", greaterThan(0)))
-                .andExpect(jsonPath("$.errors[*].pointer", hasItem(startsWith("/"))));
+                .andExpect(jsonPath("$.errors[*].pointer", hasItem(startsWith("/"))))
+                .andExpect(jsonPath("$.errors[0].code", startsWith("rule.")))
+                .andExpect(jsonPath("$.errors[*].code", hasItem("rule.unknown_field")))
+                .andExpect(jsonPath("$.errors[?(@.code=='rule.unknown_field')].params.field", hasItem("transaction.not_a_field")));
         mvc.perform(post("/api/v1/rules/validate").header("X-API-Key", READER).contentType(MediaType.APPLICATION_JSON).content("{nope"))
                 .andExpect(status().isBadRequest());
     }
@@ -140,6 +143,23 @@ class RuleApiTest extends ApiTestSupport {
                 .andExpect(status().isOk()).andExpect(content().string(containsString("id: test-lifecycle")));
         mvc.perform(delete("/api/v1/rules/test-lifecycle").header("X-API-Key", ANALYST)).andExpect(status().isNoContent());
         mvc.perform(get("/api/v1/rules/test-lifecycle").header("X-API-Key", READER)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void ruleUsingAnUnpopulatedFieldCarriesUnreachableCodesAndEnableRefusesWithThem() throws Exception {
+        String yaml = VALID.replace("test-big-transfer", "test-unreachable").replace("transaction.amount\n", "transaction.amount_usd\n");
+        mvc.perform(post("/api/v1/rules").header("X-API-Key", ANALYST).contentType(MediaType.APPLICATION_JSON).content(json("yaml", yaml)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.unreachableReasons[0]").value("field 'transaction.amount_usd' is never populated"))
+                .andExpect(jsonPath("$.unreachableCodes.length()").value(1))
+                .andExpect(jsonPath("$.unreachableCodes[0].code").value("unreachable.field_not_produced"))
+                .andExpect(jsonPath("$.unreachableCodes[0].params.field").value("transaction.amount_usd"));
+        mvc.perform(post("/api/v1/rules/test-unreachable/enable").header("X-API-Key", ANALYST))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].code").value("unreachable.field_not_produced"))
+                .andExpect(jsonPath("$.errors[0].params.field").value("transaction.amount_usd"))
+                .andExpect(jsonPath("$.errors[0].message").value("field 'transaction.amount_usd' is never populated"));
+        mvc.perform(delete("/api/v1/rules/test-unreachable").header("X-API-Key", ANALYST)).andExpect(status().isNoContent());
     }
 
     @Test

@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: suspicious-approval
-version: 1.1.0
+version: 1.1.2
 name: Unlimited approval to a young or unverified contract
 description: An unlimited ERC-20 allowance granted to a contract spender that is less than 7 days old or unverified, excluding well-known routers.
 author: openchain-community
@@ -56,6 +56,20 @@ documentation: |
   "wallet drainer" kits. Known routers (Uniswap Universal Router, 1inch v5, Permit2) are excluded with a NOT group.
   New legitimate protocols also start young and sometimes unverified: this is a RISK_SIGNAL prompting the owner to
   review (and possibly revoke) the allowance, not evidence against the spender's operators.
+translations:
+  fr:
+    name: "Autorisation illimitée à un contrat récent ou non vérifié"
+    description: "Une autorisation ERC-20 illimitée accordée à un contrat bénéficiaire (spender) de moins de 7 jours ou non vérifié, hors routeurs bien connus."
+    documentation: |
+      1.1.0 (liste de surveillance) : tant que la liste de surveillance de l'opérateur est vide, tous les propriétaires sont
+      pris en compte ; dès qu'elle contient les portefeuilles de l'organisation, seules les autorisations accordées par un
+      portefeuille surveillé (wallet.watchlisted = le propriétaire) le sont.
+      Les autorisations illimitées à des contrats fraîchement déployés ou non vérifiés sont le principal vecteur des kits
+      d'hameçonnage par autorisation de type « wallet drainer ». Les routeurs connus (Uniswap Universal Router, 1inch v5,
+      Permit2) sont exclus avec un groupe NOT.
+      De nouveaux protocoles légitimes démarrent eux aussi jeunes et parfois non vérifiés : c'est un signal de risque
+      (RISK_SIGNAL) qui invite le propriétaire à examiner (et éventuellement révoquer) l'autorisation, pas un élément à charge
+      contre les opérateurs du bénéficiaire.
 examples:
   - name: with a watchlist, an approval granted by an unwatched owner is ignored
     expect: NO_MATCH

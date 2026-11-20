@@ -5,7 +5,7 @@ import { Routes } from '@angular/router';
  * together with the Material defaults they share (see features/feature.routes.ts).
  */
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', title: 'ChainSentinel – The open intelligence engine for blockchain',
+  { path: '', pathMatch: 'full', title: 'landing.docTitle',
     loadComponent: () => import('./features/landing/landing').then((m) => m.LandingPage) },
   { path: '', loadChildren: () => import('./features/feature.routes').then((m) => m.FEATURE_ROUTES) },
 ];

@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { fmtNumber } from '../../core/i18n/format';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
 import { ApiService } from '../../core/api.service';
 import { GraphCanvas } from '../investigation/graph-canvas';
 import { KeyedEdge } from '../investigation/graph-model';
@@ -9,118 +11,120 @@ import { EnabledNetworks } from '../../core/enabled-networks';
 import { detectQuery } from '../../core/network-detect';
 import { apiResource } from '../../shared/api-resource';
 import { formatUnits, timeAgo, netLabel } from '../../shared/format';
+import { EngineText } from '../../shared/engine-text';
+import { signalTypeTitle } from '../../shared/explain';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { PageHeader } from '../../shared/page-header';
-import { UI, sentence } from '../../shared/ui';
+import { UI } from '../../shared/ui';
 
-const EXAMPLES: { family: string; example: string }[] = [
-  { family: 'EVM address (Ethereum, BSC, Polygon)', example: '0x + 40 hex characters' },
-  { family: 'EVM transaction hash', example: '0x + 64 hex characters' },
-  { family: 'TRON address', example: 'T + 33 base58 characters' },
-  { family: 'TRON transaction id', example: '64 hex characters without 0x' },
+const EXAMPLES: { family: Key; example: Key }[] = [
+  { family: 'explorer.fmt.evmAddress', example: 'explorer.fmt.evmAddress.example' },
+  { family: 'explorer.fmt.evmTx', example: 'explorer.fmt.evmTx.example' },
+  { family: 'explorer.fmt.tronAddress', example: 'explorer.fmt.tronAddress.example' },
+  { family: 'explorer.fmt.tronTx', example: 'explorer.fmt.tronTx.example' },
 ];
 
 @Component({
   selector: 'oci-explorer',
-  imports: [RouterLink, PageHeader, GraphCanvas, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
+  imports: [RouterLink, PageHeader, GraphCanvas, EngineText, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="page">
-      <oci-page-header heading="Explorer" lede="Look up an address or a transaction. The network is detected from the format; EVM formats are shared, so confirm the network when asked." />
+      <oci-page-header [heading]="i18n.t('explorer.title')" [lede]="i18n.t('explorer.lede')" />
 
-      <form class="panel-raised search fields" (submit)="$event.preventDefault(); submit()" role="search" aria-label="Address or transaction lookup">
+      <form class="panel-raised search fields" (submit)="$event.preventDefault(); submit()" role="search" [attr.aria-label]="i18n.t('explorer.form')">
         <mat-form-field class="grow q">
-          <mat-label>Address or transaction hash</mat-label>
-          <input matInput name="q" class="mono" [value]="text()" (input)="text.set($any($event.target).value)" placeholder="0x…, T…, bc1… or a base58 address" autocomplete="off" spellcheck="false" />
+          <mat-label>{{ i18n.t('explorer.query') }}</mat-label>
+          <input matInput name="q" class="mono" [value]="text()" (input)="text.set($any($event.target).value)" [placeholder]="i18n.t('explorer.queryHint')" autocomplete="off" spellcheck="false" />
         </mat-form-field>
         <mat-form-field floatLabel="always" class="netf">
-          <mat-label>Network</mat-label>
+          <mat-label>{{ i18n.t('explorer.network') }}</mat-label>
           <mat-select [value]="net()" (valueChange)="net.set($event)" [placeholder]="detectLabel()">
             <mat-option [value]="null">{{ detectLabel() }}</mat-option>
             @for (n of networks(); track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }
           </mat-select>
         </mat-form-field>
-        <button matButton="filled" type="submit" [disabled]="det().kind === 'unknown'">Search</button>
+        <button matButton="filled" type="submit" [disabled]="det().kind === 'unknown'">{{ i18n.t('explorer.search') }}</button>
         @if (text().trim()) {
           <p class="small full detect" [class.warn]="det().kind === 'unknown'" [class.muted]="det().kind !== 'unknown'" aria-live="polite">
-            @if (det().kind !== 'unknown') { <span class="chip">{{ det().kind === 'address' ? 'Address' : 'Transaction' }}</span> }
-            {{ det().reason }}
+            @if (det().kind !== 'unknown') { <span class="chip">{{ i18n.t(det().kind === 'address' ? 'explorer.kindAddress' : 'explorer.kindTx') }}</span> }
+            {{ i18n.t(det().reasonKey) }}
           </p>
         }
       </form>
 
       @if (tx.status() !== 'idle') {
         <section class="section" aria-labelledby="h-tx">
-          <oci-state [loading]="tx.loading()" [error]="tx.error()" [hasData]="!!tx.value()" skeleton="readout" [skeletonRows]="4" loadingText="Loading the transaction" (retry)="tx.reload()">
+          <oci-state [loading]="tx.loading()" [error]="tx.error()" [hasData]="!!tx.value()" skeleton="readout" [skeletonRows]="4" [loadingText]="i18n.t('explorer.loadingTx')" (retry)="tx.reload()">
             @if (tx.value(); as a) {
               <div class="section-head">
-                <h2 id="h-tx">Transaction</h2>
+                <h2 id="h-tx">{{ i18n.t('explorer.tx') }}</h2>
                 <oci-net [value]="a.transaction.network" />
-                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Trace the sender</a></span>
+                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">{{ i18n.t('explorer.traceSender') }}</a></span>
               </div>
-              <p class="hash"><span class="mono">{{ a.transaction.hash }}</span><oci-copy [value]="a.transaction.hash" label="Copy transaction hash" /></p>
+              <p class="hash"><span class="mono">{{ a.transaction.hash }}</span><oci-copy [value]="a.transaction.hash" labelKey="state.copyHash" /></p>
 
               <dl class="well instrument">
-                <div class="readout"><dt>Status</dt><dd [class.bad]="!a.transaction.success"><span class="status" [class.st-ok]="a.transaction.success" [class.st-failed]="!a.transaction.success">{{ a.transaction.success ? 'Succeeded' : 'Failed' }}</span></dd></div>
-                <div class="readout"><dt>Value</dt><dd>{{ units(a.transaction.value, a.transaction.nativeDecimals ?? 18) }}<span class="unit">{{ a.transaction.nativeSymbol }}</span></dd></div>
-                <div class="readout"><dt>Fee</dt><dd>{{ units(a.transaction.fee, a.transaction.nativeDecimals ?? 18, 8) }}<span class="unit">{{ a.transaction.nativeSymbol }}</span></dd></div>
-                <div class="readout"><dt>Confirmations</dt><dd>{{ a.confirmations.toLocaleString('en-US') }}</dd>
-                  <span class="sub" [class.warn]="!a.finalized">{{ a.finalized ? 'Finalized' : 'Not final yet, a reorg is still possible' }}</span></div>
+                <div class="readout"><dt>{{ i18n.t('explorer.status') }}</dt><dd [class.bad]="!a.transaction.success"><span class="status" [class.st-ok]="a.transaction.success" [class.st-failed]="!a.transaction.success">{{ i18n.t(a.transaction.success ? 'explorer.succeeded' : 'explorer.failed') }}</span></dd></div>
+                <div class="readout"><dt>{{ i18n.t('explorer.value') }}</dt><dd>{{ units(a.transaction.value, a.transaction.nativeDecimals ?? 18) }}<span class="unit">{{ a.transaction.nativeSymbol }}</span></dd></div>
+                <div class="readout"><dt>{{ i18n.t('explorer.fee') }}</dt><dd>{{ units(a.transaction.fee, a.transaction.nativeDecimals ?? 18, 8) }}<span class="unit">{{ a.transaction.nativeSymbol }}</span></dd></div>
+                <div class="readout"><dt>{{ i18n.t('explorer.confirmations') }}</dt><dd>{{ num(a.confirmations) }}</dd>
+                  <span class="sub" [class.warn]="!a.finalized">{{ i18n.t(a.finalized ? 'explorer.finalized' : 'explorer.notFinal') }}</span></div>
               </dl>
 
               <dl class="kv parties">
-                <dt>From</dt><dd><oci-addr [address]="a.transaction.from" [network]="a.transaction.network" [full]="true" /></dd>
-                <dt>To</dt><dd>@if (a.transaction.to) { <oci-addr [address]="a.transaction.to" [network]="a.transaction.network" [full]="true" /> } @else { Contract creation }</dd>
-                <dt>Block</dt><dd>{{ a.transaction.blockNumber.toLocaleString('en-US') }} <span class="muted">{{ ago(a.transaction.timestamp) }}</span></dd>
-                @if (a.transaction.methodSelector) { <dt>Method</dt><dd class="mono">{{ a.transaction.methodSelector }}</dd> }
+                <dt>{{ i18n.t('explorer.from') }}</dt><dd><oci-addr [address]="a.transaction.from" [network]="a.transaction.network" [full]="true" /></dd>
+                <dt>{{ i18n.t('explorer.to') }}</dt><dd>@if (a.transaction.to) { <oci-addr [address]="a.transaction.to" [network]="a.transaction.network" [full]="true" /> } @else { {{ i18n.t('explorer.creation') }} }</dd>
+                <dt>{{ i18n.t('explorer.block') }}</dt><dd>{{ num(a.transaction.blockNumber) }} <span class="muted">{{ ago(a.transaction.timestamp) }}</span></dd>
+                @if (a.transaction.methodSelector) { <dt>{{ i18n.t('explorer.method') }}</dt><dd class="mono">{{ a.transaction.methodSelector }}</dd> }
               </dl>
 
               <div class="section">
-                <div class="section-head"><h3>Token transfers</h3><span class="small muted">{{ a.transfers.length }}</span></div>
+                <div class="section-head"><h3>{{ i18n.t('explorer.transfers') }}</h3><span class="small muted">{{ a.transfers.length }}</span></div>
                 @if (a.transfers.length) {
                   <ol class="transfers">
                     @for (t of a.transfers; track t.logIndex) {
                       <li>
                         <span class="amt">{{ units(t.rawAmount, t.token.decimals) }}<span class="sym">{{ t.token.symbol }}</span></span>
-                        <span class="flow">from <oci-addr [address]="t.from" [network]="t.network" />
+                        <span class="flow">{{ i18n.t('explorer.fromWord') }} <oci-addr [address]="t.from" [network]="t.network" />
                           <svg class="arr" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9.5 4.5 13 8l-3.5 3.5"/></svg>
-                          to <oci-addr [address]="t.to" [network]="t.network" /></span>
-                        <span class="log small muted">Log {{ t.logIndex }}</span>
+                          {{ i18n.t('explorer.toWord') }} <oci-addr [address]="t.to" [network]="t.network" /></span>
+                        <span class="log small muted">{{ i18n.t('explorer.log', { index: t.logIndex }) }}</span>
                       </li>
                     }
                   </ol>
-                } @else { <p class="muted">This transaction moved no token.</p> }
+                } @else { <p class="muted">{{ i18n.t('explorer.noTransfers') }}</p> }
               </div>
 
               <div class="section">
-                <div class="section-head"><h3>Signals</h3></div>
+                <div class="section-head"><h3>{{ i18n.t('explorer.signals') }}</h3></div>
                 @for (s of a.signals; track s.id) {
-                  <div class="sig"><oci-severity [value]="s.severity" /><oci-evidence [value]="s.evidenceLevel" /><strong>{{ sentence(s.type) }}</strong>
-                    <span class="ink-2 small">{{ s.evidence[0]?.description }}</span></div>
-                } @empty { <p class="muted">No detection signal on this transaction.</p> }
+                  <div class="sig"><oci-severity [value]="s.severity" /><oci-evidence [value]="s.evidenceLevel" /><strong>{{ signalName(s.type) }}</strong>
+                    @if (s.evidence[0]?.description; as d) { <span class="ink-2 small"><oci-engine-text [text]="d" [plainInEnglish]="true" /></span> }</div>
+                } @empty { <p class="muted">{{ i18n.t('explorer.noSignals') }}</p> }
               </div>
             }
           </oci-state>
           @if (tx.value(); as a) {
             <div class="mini-graph" aria-labelledby="h-g">
-              <div class="section-head"><h3 id="h-g" class="small strong">Flows of the sender, one hop</h3>
-                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">Open the full graph</a></span></div>
+              <div class="section-head"><h3 id="h-g" class="small strong">{{ i18n.t('explorer.senderFlows') }}</h3>
+                <span class="act"><a matButton="outlined" class="sm" [routerLink]="['/investigation']" [queryParams]="{ address: a.transaction.from, network: a.transaction.network }">{{ i18n.t('explorer.openGraph') }}</a></span></div>
               @if (graph.value(); as g) {
                 @if (g.nodes.length) {
                   @defer {
                     <oci-graph-canvas class="mini-canvas" [nodes]="g.nodes" [edges]="keyedEdges()" [root]="g.root" [theme]="theme.effective()" fileName="sender-flows.png" />
                   }
-                } @else { <p class="small muted">No transfer of the sender in the data held.</p> }
-              } @else if (graph.error()) { <p class="small muted">The graph could not be loaded.</p> }
-              @else { <p class="small muted">Loading the graph…</p> }
+                } @else { <p class="small muted">{{ i18n.t('explorer.noGraph') }}</p> }
+              } @else if (graph.error()) { <p class="small muted">{{ i18n.t('explorer.graphError') }}</p> }
+              @else { <p class="small muted">{{ i18n.t('explorer.graphLoading') }}</p> }
             </div>
           }
         </section>
       } @else {
         <section class="section" aria-labelledby="h-fmt">
-          <div class="section-head"><h2 id="h-fmt">What you can search</h2><p>Paste a full value. Partial addresses are not searched, so a typo never opens the wrong wallet.</p></div>
+          <div class="section-head"><h2 id="h-fmt">{{ i18n.t('explorer.formats') }}</h2><p>{{ i18n.t('explorer.formatsLede') }}</p></div>
           <dl class="formats">
-            @for (e of examples; track e.family) { <div><dt>{{ e.family }}</dt><dd class="muted">{{ e.example }}</dd></div> }
+            @for (e of examples; track e.family) { <div><dt>{{ i18n.t(e.family) }}</dt><dd class="muted">{{ i18n.t(e.example) }}</dd></div> }
           </dl>
         </section>
       }
@@ -155,6 +159,7 @@ const EXAMPLES: { family: string; example: string }[] = [
 })
 export class ExplorerPage {
   private readonly api = inject(ApiService);
+  protected readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly enabledNetworks = inject(EnabledNetworks);
   /** Bound from query params. */
@@ -168,17 +173,18 @@ export class ExplorerPage {
   readonly netLabel = netLabel;
   /** The automatic choice, as the selector shows it. */
   readonly detectLabel = computed(() => {
-    if (!this.text().trim()) return 'Detect from the format';
+    if (!this.text().trim()) return this.i18n.t('explorer.detect');
     const d = this.detected();
-    return d ? `Detect (${netLabel(d)})` : 'No enabled network matches';
+    return d ? this.i18n.t('explorer.detectNet', { network: netLabel(d) }) : this.i18n.t('explorer.noNetwork');
   });
   readonly examples = EXAMPLES;
   readonly text = signal('');
   readonly net = signal<NetworkId | null>(null);
   readonly det = computed(() => detectQuery(this.text()));
-  readonly ago = timeAgo;
-  readonly units = formatUnits;
-  readonly sentence = sentence;
+  readonly ago = (iso: string | null | undefined) => timeAgo(iso, Date.now(), this.i18n.lang());
+  readonly units = (raw: string | null | undefined, decimals: number, max = 6) => formatUnits(raw, decimals, max, this.i18n.lang());
+  readonly num = (n: number) => fmtNumber(n, this.i18n.lang());
+  readonly signalName = (type: string) => signalTypeTitle(type, this.i18n.lang());
 
   /** The transaction named by the URL (?q=&network=); idle when the URL holds no transaction. */
   readonly tx = apiResource({

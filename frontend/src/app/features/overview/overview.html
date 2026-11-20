@@ -35,7 +35,7 @@
           @if (last24h(); as l) {
             <section class="card" aria-labelledby="h-24">
               <h2 id="h-24">{{ t('overview.last24h') }}</h2>
-              <p class="big">{{ n(l.total) }} <span class="unit">{{ t('overview.alertsUnit') }}</span></p>
+              <p class="big">{{ n(l.total) }} <span class="unit">{{ t('overview.alertsUnit', { count: l.total }) }}</span></p>
               <ul class="by-rule">
                 @for (r of l.rules; track r.ruleId) {
                   <li><span class="name">{{ r.name }}</span><span class="num">{{ n(r.count) }}</span>

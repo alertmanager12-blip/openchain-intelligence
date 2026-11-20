@@ -6,9 +6,10 @@ import { NetworkId, Severity } from '../core/models';
 import { EnabledNetworks } from '../core/enabled-networks';
 import { detectQuery } from '../core/network-detect';
 import { apiResource } from '../shared/api-resource';
-import { shortHash } from '../shared/format';
+import { severityName, shortHash } from '../shared/format';
 import { NAV_ITEMS } from './navigation';
 import { I18nService } from '../core/i18n/i18n.service';
+import { ruleName } from '../shared/rule-text';
 
 export interface PaletteOption {
   id: string;
@@ -39,24 +40,24 @@ const NET_LABEL: Record<NetworkId, string> = { ethereum: 'Ethereum', tron: 'TRON
             [placeholder]="i18n.t('palette.placeholder')" [value]="q()" (input)="setQuery($any($event.target).value)" />
           <kbd>Esc</kbd>
         </div>
-        @if (detection(); as d) { <p class="det" [class.bad]="d.kind === 'unknown'">{{ d.reason }}</p> }
+        @if (detection(); as d) { <p class="det" [class.bad]="d.kind === 'unknown'">{{ i18n.t(d.reasonKey) }}</p> }
         <div class="list" id="palette-list" role="listbox" [attr.aria-label]="i18n.t('palette.results')">
           @for (g of groups(); track g.name) {
             <div role="group" [attr.aria-labelledby]="'pg-' + $index">
               <div class="g" [id]="'pg-' + $index" role="presentation">{{ groupName(g.name) }}</div>
               @for (o of g.options; track o.id) {
                 <div class="opt" role="option" [id]="o.id" [attr.aria-selected]="o.id === activeId()" (click)="choose(o)" (mousemove)="hover(o.id)">
-                  @if (o.severity) { <span class="badge sev-{{ o.severity.toLowerCase() }}">{{ o.severity.charAt(0) + o.severity.slice(1).toLowerCase() }}</span> }
+                  @if (o.severity) { <span class="badge sev-{{ o.severity.toLowerCase() }}">{{ severityLabel(o.severity) }}</span> }
                   <span class="l">{{ o.label }}</span>
                   @if (o.hint) { <span class="h" [class.mono]="o.group !== 'Pages'">{{ o.hint }}</span> }
                 </div>
               }
             </div>
           } @empty {
-            <p class="none" role="status">Nothing matches. Paste a full address or transaction hash, or type a page name.</p>
+            <p class="none" role="status">{{ i18n.t('palette.none') }}</p>
           }
         </div>
-        <div class="foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span></div>
+        <div class="foot" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> {{ i18n.t('palette.move') }}</span><span><kbd>Enter</kbd> {{ i18n.t('palette.open') }}</span></div>
       </div>
     </ng-template>
   `,
@@ -85,8 +86,9 @@ export class CommandPalette {
   private readonly router = inject(Router);
   protected readonly i18n = inject(I18nService);
   protected groupName(g: string): string {
-    return g === 'Pages' ? this.i18n.t('palette.pages') : g === 'Recent alerts' ? this.i18n.t('palette.recentAlerts') : g;
+    return g === 'Pages' ? this.i18n.t('palette.pages') : g === 'Recent alerts' ? this.i18n.t('palette.recentAlerts') : g === 'Go to address or transaction' ? this.i18n.t('palette.group.address') : g;
   }
+  protected severityLabel(s: Severity): string { return severityName(s, this.i18n.lang()); }
   private readonly api = inject(ApiService);
   private readonly networks = inject(EnabledNetworks);
   readonly open = model(false);
@@ -116,14 +118,14 @@ export class CommandPalette {
         const names = d.candidates.map((n) => NET_LABEL[n]).join(', ');
         out.push({
           id: 'po-go-none', group: 'Go to address or transaction',
-          label: `No enabled network for this ${d.kind}`, hint: `${names}: not enabled on this instance`,
+          label: this.i18n.t('palette.noNetwork', { kind: this.i18n.t(d.kind === 'address' ? 'palette.kindAddress' : 'palette.kindTx') }), hint: this.i18n.t('palette.notEnabled', { names }),
           run: () => this.router.navigate(['/settings']),
         });
       }
       for (const n of usable) {
         out.push({
           id: `po-go-${n}`, group: 'Go to address or transaction',
-          label: `${d.kind === 'address' ? 'Open address' : 'Open transaction'} on ${NET_LABEL[n]}`, hint: shortHash(d.normalized, 10, 8),
+          label: this.i18n.t(d.kind === 'address' ? 'palette.openAddress' : 'palette.openTx', { network: NET_LABEL[n] }), hint: shortHash(d.normalized, 10, 8),
           run: () => (d.kind === 'address'
             ? this.router.navigate(['/wallets', n, d.normalized])
             : this.router.navigate(['/explorer'], { queryParams: { q: d.normalized, network: n } })),
@@ -137,8 +139,9 @@ export class CommandPalette {
       }
     }
     for (const a of this.alerts.value()?.items ?? []) {
-      if (!t || `${a.ruleName} ${a.id} ${a.address ?? ''}`.toLowerCase().includes(t)) {
-        out.push({ id: `po-al-${a.id}`, group: 'Recent alerts', label: a.ruleName, hint: a.id, severity: a.severity, run: () => this.router.navigate(['/alerts'], { queryParams: { id: a.id } }) });
+      const name = ruleName(a, this.i18n.lang());
+      if (!t || `${name} ${a.ruleName} ${a.id} ${a.address ?? ''}`.toLowerCase().includes(t)) {
+        out.push({ id: `po-al-${a.id}`, group: 'Recent alerts', label: name, hint: a.id, severity: a.severity, run: () => this.router.navigate(['/alerts'], { queryParams: { id: a.id } }) });
       }
     }
     return out;
@@ -165,7 +168,7 @@ export class CommandPalette {
           this.q.set('');
           this.active.set(0);
           this.ref = this.dialog.open(this.tpl(), {
-            ariaLabel: 'Command palette', panelClass: 'palette-panel', width: '640px', maxWidth: 'calc(100vw - 24px)',
+            ariaLabel: this.i18n.t('palette.dialog'), panelClass: 'palette-panel', width: '640px', maxWidth: 'calc(100vw - 24px)',
             position: { top: 'min(14vh, 120px)' }, autoFocus: 'input', restoreFocus: true, ariaModal: true,
           });
           this.ref.afterClosed().subscribe(() => {

@@ -5,6 +5,7 @@ import io.openchain.app.prediction.PredictionStore;
 import io.openchain.intelligence.prediction.Prediction;
 import io.openchain.intelligence.prediction.Predictions;
 import java.time.Instant;
+import java.util.Map;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -36,9 +37,9 @@ public class PredictionController {
 
     @GetMapping
     public List<PredictionDto> list(@RequestParam(required = false) String outcome, @RequestParam(defaultValue = "50") int limit) {
-        if (limit < 1 || limit > 200) throw ApiException.badRequest("limit must be between 1 and 200");
+        if (limit < 1 || limit > 200) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "limit", "min", 1, "max", 200));
         String o = outcome == null || outcome.isBlank() ? null : outcome.trim().toUpperCase(Locale.ROOT);
-        if (o != null && !OUTCOMES.contains(o)) throw ApiException.badRequest("outcome must be OPEN, REALISED, NOT_REALISED or UNDETERMINED");
+        if (o != null && !OUTCOMES.contains(o)) throw ApiException.badRequest(ApiCode.PREDICTION_OUTCOME_INVALID);
         return predictions.list(o, limit).stream().map(PredictionController::dto).toList();
     }
 

@@ -5,11 +5,13 @@ import io.openchain.alerting.alert.AlertService;
 import io.openchain.alerting.alert.AlertStatus;
 import io.openchain.alerting.alert.AlertSubject;
 import io.openchain.alerting.alert.IllegalAlertTransitionException;
+import io.openchain.app.api.ApiCode;
 import io.openchain.app.api.ApiException;
 import io.openchain.app.api.ApiMapper;
 import io.openchain.app.api.Dto;
 import io.openchain.app.chain.EventHistory;
 import io.openchain.app.demo.DemoScenarios;
+import io.openchain.app.rules.RuleRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import io.openchain.core.event.ChainEvent;
 import java.time.Instant;
@@ -49,26 +51,27 @@ public class AlertFacade {
     private final AlertService alerts;
     private final EventHistory history;
     private final ObjectProvider<DemoScenarios> demo;
+    private final RuleRegistry rules;
 
-    public AlertFacade(AlertService alerts, EventHistory history, ObjectProvider<DemoScenarios> demo) {
+    public AlertFacade(AlertService alerts, EventHistory history, ObjectProvider<DemoScenarios> demo, RuleRegistry rules) {
         this.alerts = alerts;
         this.history = history;
         this.demo = demo;
+        this.rules = rules;
     }
 
     public static String apiStatus(AlertStatus s) { return OPEN.contains(s) ? "OPEN" : s.name(); }
 
     /** Parses an API status; {@code IN_PROGRESS} is an alias of INVESTIGATING (docs/api). */
     public static AlertStatus parseTarget(String s) {
-        if (s == null || s.isBlank()) throw ApiException.badRequest("status is required");
+        if (s == null || s.isBlank()) throw ApiException.badRequest(ApiCode.ALERT_STATUS_REQUIRED);
         return switch (s.trim().toUpperCase(Locale.ROOT)) {
             case "ACKNOWLEDGED" -> AlertStatus.ACKNOWLEDGED;
             case "INVESTIGATING", "IN_PROGRESS" -> AlertStatus.INVESTIGATING;
             case "RESOLVED" -> AlertStatus.RESOLVED;
             case "FALSE_POSITIVE" -> AlertStatus.FALSE_POSITIVE;
-            case "OPEN" -> throw ApiException.conflict("re-opening alerts is not supported: RESOLVED and FALSE_POSITIVE are "
-                    + "terminal; a new trigger opens a new alert");
-            default -> throw ApiException.badRequest("unknown status '" + s + "'");
+            case "OPEN" -> throw ApiException.conflict(ApiCode.ALERT_REOPEN_UNSUPPORTED);
+            default -> throw ApiException.badRequest(ApiCode.ALERT_STATUS_UNKNOWN, Map.of("status", s));
         };
     }
 
@@ -114,14 +117,14 @@ public class AlertFacade {
     }
 
     public Alert get(String id) {
-        return alerts.find(id).orElseThrow(() -> ApiException.notFound("alert " + id + " does not exist"));
+        return alerts.find(id).orElseThrow(() -> ApiException.notFound(ApiCode.ALERT_NOT_FOUND, Map.of("id", id)));
     }
 
     public Dto.AlertDto acknowledge(String id, String actor) { return moveTo(id, AlertStatus.ACKNOWLEDGED, actor, "acknowledged"); }
 
     public synchronized Dto.AlertDto moveTo(String id, AlertStatus target, String actor, String reason) {
         Alert a = get(id);
-        if (a.status() == target) throw ApiException.conflict("alert is already " + target);
+        if (a.status() == target) throw ApiException.conflict(ApiCode.ALERT_ALREADY_IN_STATUS, Map.of("status", target));
         List<AlertStatus> path = path(a.status(), target);
         if (path == null) throw new IllegalAlertTransitionException(id, a.status(), target);
         Alert cur = a;
@@ -156,15 +159,15 @@ public class AlertFacade {
     public Dto.AlertDto assign(String id, String assignee, String actor) {
         get(id);
         String who = assignee == null || assignee.isBlank() ? null : assignee.trim();
-        if (who != null && who.length() > 200) throw ApiException.badRequest("assignee too long");
+        if (who != null && who.length() > 200) throw ApiException.badRequest(ApiCode.ALERT_ASSIGNEE_TOO_LONG);
         return dto(alerts.assign(id, who, actor));
     }
 
     public Dto.AlertDto comment(String id, String body, String actor) {
         get(id);
         String text = body == null ? "" : body.strip();
-        if (text.isEmpty()) throw ApiException.badRequest("comment body must not be empty");
-        if (text.length() > 4000) throw ApiException.badRequest("comment body is limited to 4000 characters");
+        if (text.isEmpty()) throw ApiException.badRequest(ApiCode.ALERT_COMMENT_EMPTY);
+        if (text.length() > 4000) throw ApiException.badRequest(ApiCode.ALERT_COMMENT_TOO_LONG, Map.of("max", 4000));
         // stored and returned as plain text; clients must render it as text (never as HTML)
         return dto(alerts.comment(id, actor, text));
     }
@@ -207,7 +210,13 @@ public class AlertFacade {
                 a.firstSeen(), a.lastSeen(), a.createdAt(), a.updatedAt(), a.matchedEventIds(), matched,
                 ApiMapper.jsonSafe(a.evidence()), comments, hist, demoScenario(a), subject == null ? null : subject.counterparty(),
                 subject == null ? null : subject.blockNumber(), AlertNarrative.explain(a, fields), a.evidenceState().name(),
-                a.withdrawnEventIds());
+                a.withdrawnEventIds(), ruleTranslations(a.ruleId()));
+    }
+
+    /** The current version's translations of the rule, so lists show its translated name without {@code rules:read}. */
+    private Map<String, io.openchain.alerting.rule.RuleTranslation> ruleTranslations(String ruleId) {
+        if (ruleId == null) return Map.of();
+        return rules.find(ruleId).map(r -> r.current().rule().translations()).orElse(Map.of());
     }
 
     private String demoScenario(Alert a) {

@@ -35,7 +35,7 @@ describe('WatchlistPage', () => {
     await settle(f);
     expect(f.componentInstance.network()).toBe('ethereum'); // detected from the 0x format
     expect(el.textContent).toContain('Hot wallet');
-    expect(el.querySelector('[data-testid="scope"]')?.textContent).toContain('only look at these 1 wallet(s)');
+    expect(el.querySelector('[data-testid="scope"]')?.textContent).toContain('only look at this wallet');
 
     expect(f.componentInstance.address()).toBe(''); // the form is cleared after a successful add
     f.componentInstance.onAddress('0x00000000000000000000000000000000000000ab');

@@ -44,9 +44,12 @@ public final class RuleParser {
     /** A document that cannot be turned into a tree. */
     public static final class RuleParseException extends RuntimeException {
         private final ValidationError error;
-        RuleParseException(Code code, String message) {
-            super(message);
-            this.error = new ValidationError("$", code, message);
+        RuleParseException(Code code, RuleMessage m, Object... kv) {
+            this(ValidationError.of("$", code, m, kv));
+        }
+        private RuleParseException(ValidationError error) {
+            super(error.message());
+            this.error = error;
         }
         public ValidationError error() { return error; }
     }
@@ -78,17 +81,17 @@ public final class RuleParser {
     public RuleParser() { this(RuleLimits.defaults()); }
 
     public JsonNode parse(String source, Format format) {
-        if (source == null || source.isBlank()) throw new RuleParseException(Code.SYNTAX, "empty document");
+        if (source == null || source.isBlank()) throw new RuleParseException(Code.SYNTAX, RuleMessage.EMPTY_DOCUMENT);
         if (source.getBytes(StandardCharsets.UTF_8).length > maxSourceBytes)
-            throw new RuleParseException(Code.LIMIT_EXCEEDED, "document larger than " + maxSourceBytes + " bytes");
+            throw new RuleParseException(Code.LIMIT_EXCEEDED, RuleMessage.DOCUMENT_TOO_LARGE, "max", maxSourceBytes);
         if (format == Format.YAML) prescanYaml(source);
         try {
             JsonNode root = (format == Format.YAML ? yamlMapper : jsonMapper).readTree(source);
             if (root == null || root.isMissingNode() || !root.isObject())
-                throw new RuleParseException(Code.TYPE, "rule document must be an object/mapping");
+                throw new RuleParseException(Code.TYPE, RuleMessage.DOCUMENT_NOT_OBJECT);
             return root;
         } catch (JacksonException e) {
-            throw new RuleParseException(Code.SYNTAX, "malformed " + format + ": " + e.getOriginalMessage());
+            throw new RuleParseException(Code.SYNTAX, RuleMessage.MALFORMED_DOCUMENT, "format", format, "reason", e.getOriginalMessage());
         }
     }
 
@@ -98,31 +101,34 @@ public final class RuleParser {
         try {
             for (Event ev : new Parse(yamlSettings).parseString(source)) {
                 switch (ev.getEventId()) {
-                    case Alias -> throw unsafe("YAML aliases are not allowed", ev);
-                    case DocumentStart -> { if (++documents > 1) throw unsafe("only one YAML document is allowed", ev); }
-                    case MappingStart, SequenceStart -> { if (++depth > MAX_NESTING) throw unsafe("document nested too deeply", ev); }
+                    case Alias -> throw unsafe(RuleMessage.YAML_ALIASES, ev);
+                    case DocumentStart -> { if (++documents > 1) throw unsafe(RuleMessage.YAML_MULTIPLE_DOCUMENTS, ev); }
+                    case MappingStart, SequenceStart -> { if (++depth > MAX_NESTING) throw unsafe(RuleMessage.YAML_NESTED_TOO_DEEPLY, ev); }
                     case MappingEnd, SequenceEnd -> depth--;
                     default -> { }
                 }
                 if (ev instanceof NodeEvent ne && ne.getAnchor().isPresent())
-                    throw unsafe("YAML anchors are not allowed", ev);
+                    throw unsafe(RuleMessage.YAML_ANCHORS, ev);
                 List<String> tags = ev instanceof ScalarEvent s ? s.getTag().stream().toList()
                         : ev instanceof CollectionStartEvent c ? c.getTag().stream().toList() : List.of();
-                if (!tags.isEmpty()) throw unsafe("explicit YAML tags are not allowed: " + tags.getFirst(), ev);
+                if (!tags.isEmpty()) throw unsafe(RuleMessage.YAML_TAGS, ev, "tag", tags.getFirst());
             }
         } catch (RuleParseException e) {
             throw e;
         } catch (RuntimeException e) { // snakeyaml-engine YamlEngineException and friends
-            throw new RuleParseException(Code.SYNTAX, "malformed YAML: " + firstLine(e.getMessage()));
+            throw new RuleParseException(Code.SYNTAX, RuleMessage.MALFORMED_YAML, "reason", firstLine(e.getMessage()));
         }
     }
 
-    private static RuleParseException unsafe(String msg, Event ev) {
-        String where = ev.getStartMark().map(RuleParser::position).orElse("");
-        return new RuleParseException(Code.UNSAFE_DOCUMENT, msg + where);
+    private static RuleParseException unsafe(RuleMessage m, Event ev, Object... extra) {
+        Mark mark = ev.getStartMark().orElse(null);
+        Object[] kv = java.util.Arrays.copyOf(extra, extra.length + 4);
+        kv[extra.length] = "line";
+        kv[extra.length + 1] = mark == null ? 0 : mark.getLine() + 1;
+        kv[extra.length + 2] = "column";
+        kv[extra.length + 3] = mark == null ? 0 : mark.getColumn() + 1;
+        return new RuleParseException(Code.UNSAFE_DOCUMENT, m, kv);
     }
-
-    private static String position(Mark m) { return " (line " + (m.getLine() + 1) + ", column " + (m.getColumn() + 1) + ")"; }
 
     private static String firstLine(String s) {
         if (s == null) return "unknown error";

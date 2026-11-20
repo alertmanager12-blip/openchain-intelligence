@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { I18nService, translate, type Lang } from '../core/i18n/i18n.service';
 import { RiskLevel } from '../core/models';
 
 /**
@@ -30,8 +31,8 @@ export function riskBand(score: number | null | undefined): RiskLevel {
   return 'LOW';
 }
 
-export function levelLabel(l: RiskLevel): string {
-  return l === 'UNKNOWN' ? 'Not scored' : l.charAt(0) + l.slice(1).toLowerCase();
+export function levelLabel(l: RiskLevel, lang: Lang = 'en'): string {
+  return translate(lang, `enum.risk.${l}`);
 }
 
 /**
@@ -48,14 +49,14 @@ export function levelLabel(l: RiskLevel): string {
     'aria-valuemax': '100',
     '[attr.aria-valuenow]': 'value()',
     '[attr.aria-valuetext]': 'valueText()',
-    '[attr.aria-label]': 'label()',
+    '[attr.aria-label]': 'labelText()',
     '[attr.title]': "size() === 'sm' ? valueText() : null",
     '[class]': "'gauge gauge--' + size() + ' lv-' + level().toLowerCase()",
   },
   template: `
     @if (size() === 'lg') {
       <div class="readout" aria-hidden="true">
-        <span class="score">{{ value() ?? '–' }}</span><span class="of">/ 100</span>
+        <span class="score">{{ value() ?? '–' }}</span><span class="of">{{ i18n.t('gauge.of') }}</span>
         <span class="lvl">{{ levelText() }}</span>
       </div>
     } @else {
@@ -107,13 +108,16 @@ export class RiskGauge {
   /** Level from the backend; derived from the score when absent. */
   readonly levelIn = input<RiskLevel | null | undefined>(null, { alias: 'level' });
   readonly size = input<'lg' | 'sm'>('sm');
-  readonly label = input('Risk score');
+  private readonly i18n = inject(I18nService);
+  /** Spoken name of the meter; the console's "Risk score" when absent. */
+  readonly label = input<string | null>(null);
+  readonly labelText = computed(() => this.label() ?? this.i18n.t('gauge.label'));
 
   readonly ticks = [0, RISK_THRESHOLDS.MEDIUM, RISK_THRESHOLDS.HIGH, RISK_THRESHOLDS.CRITICAL, 100];
   readonly value = computed(() => clampScore(this.score()));
   readonly level = computed<RiskLevel>(() => (this.value() === null ? 'UNKNOWN' : (this.levelIn() ?? riskBand(this.value()))));
-  readonly levelText = computed(() => levelLabel(this.level()));
-  readonly valueText = computed(() => (this.value() === null ? 'Not scored' : `${this.value()} of 100, ${this.levelText().toLowerCase()} risk`));
+  readonly levelText = computed(() => levelLabel(this.level(), this.i18n.lang()));
+  readonly valueText = computed(() => (this.value() === null ? levelLabel('UNKNOWN', this.i18n.lang()) : this.i18n.t('gauge.valueText', { score: this.value()!, level: this.levelText().toLowerCase() })));
   readonly segments = computed(() => {
     const v = this.value() ?? 0;
     return RISK_BANDS.map((b) => ({ ...b, fill: Math.max(0, Math.min(100, ((v - b.from) / (b.to - b.from)) * 100)) }));

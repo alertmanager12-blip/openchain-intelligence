@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { EngineText } from './engine-text';
 import { I18nService } from '../core/i18n/i18n.service';
 import { Level, levelWord } from './levels';
 
@@ -8,13 +9,14 @@ import { Level, levelWord } from './levels';
  */
 @Component({
   selector: 'oci-evidence-line',
+  imports: [EngineText],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="line lvl-{{ level().toLowerCase() }}">
       <span class="lvl">{{ word() }}</span>
-      <span class="text">{{ text() }}</span>
+      <span class="text">@if (textLang() === 'en') { <oci-engine-text [text]="text()" /> } @else { {{ text() }} }</span>
       @if (detail()) { <span class="detail">{{ detail() }}</span> }
-      @if (original()) { <details class="orig"><summary>{{ i18n.t('evidence.original') }}</summary>{{ original() }}</details> }
+      @if (original()) { <oci-engine-text class="orig" mode="collapsed" [text]="original()!" /> }
       @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }
     </div>`,
   styles: `
@@ -24,8 +26,7 @@ import { Level, levelWord } from './levels';
     .text { flex: 1 1 260px; }
     .detail { font-size: var(--fs-12); color: var(--ink-2); }
     .cite { font: inherit; font-size: var(--fs-12); color: var(--ink-2); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; }
-    .orig { flex-basis: 100%; font-size: var(--fs-12); color: var(--ink-2); }
-    .orig summary { cursor: pointer; width: fit-content; }
+    .orig { display: block; flex-basis: 100%; font-size: var(--fs-12); color: var(--ink-2); }
     .cite:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     .lvl-observed { border-left-color: var(--lvl-observed); } .lvl-observed .lvl { color: var(--lvl-observed); }
     .lvl-inferred { border-left-color: var(--lvl-inferred-rule); } .lvl-inferred .lvl { color: var(--lvl-inferred); }
@@ -39,6 +40,8 @@ export class EvidenceLine {
   readonly text = input.required<string>();
   readonly detail = input<string | null>(null);
   readonly cite = input<string | null>(null);
+  /** Language of the text when it differs from the page's (the engine's English wording). */
+  readonly textLang = input<string | null>(null);
   readonly citeClick = output<string>();
   protected readonly i18n = inject(I18nService);
   /** The engine's own wording (English), kept reachable when the line is written in the console's language. */

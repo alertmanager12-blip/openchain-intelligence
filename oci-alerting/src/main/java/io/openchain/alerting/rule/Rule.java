@@ -19,6 +19,8 @@ import java.util.Set;
  * @param aggregation nullable; mutually exclusive with {@code sequence}
  * @param sequence    nullable; mutually exclusive with {@code aggregation}
  * @param conditions  never null (an empty AND group matches every in-scope event)
+ * @param translations user-facing texts per language ({@link RuleTranslation#LANGUAGES}); never null, never used
+ *                     by detection
  */
 public record Rule(
         String apiVersion,
@@ -41,7 +43,8 @@ public record Rule(
         BigDecimal expectedConfidence,
         List<String> tags,
         List<RuleExample> examples,
-        List<RuleTestCase> tests) {
+        List<RuleTestCase> tests,
+        Map<String, RuleTranslation> translations) {
 
     public static final String API_VERSION = "openchain.io/rule/v1";
     public static final String DEFAULT_DEDUP_KEY = "{{rule.id}}:{{group.key}}";
@@ -51,6 +54,7 @@ public record Rule(
         tags = List.copyOf(tags);
         examples = List.copyOf(examples);
         tests = List.copyOf(tests);
+        translations = translations == null ? Map.of() : Map.copyOf(translations);
     }
 
     /** "id@version", the identifier carried by alerts and signals. */

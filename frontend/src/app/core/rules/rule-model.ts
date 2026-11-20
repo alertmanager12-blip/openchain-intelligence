@@ -1,4 +1,5 @@
 import { EvidenceLevel, FieldDef, FieldType, NetworkId, Severity } from '../models';
+import { Lang, hasKey, translate } from '../i18n/i18n.service';
 import { YamlValue } from './yaml';
 
 /**
@@ -99,11 +100,21 @@ export const OPERATORS_BY_TYPE: Record<FieldType, Operator[]> = {
   timestamp: ['gt', 'gte', 'lt', 'lte', 'eq', 'neq', 'between', 'exists'],
 };
 
-export const OPERATOR_LABELS: Record<Operator, string> = {
-  eq: 'equals', neq: 'not equals', gt: '>', gte: '>=', lt: '<', lte: '<=', between: 'between',
-  in: 'is one of', not_in: 'is not one of', contains: 'contains', starts_with: 'starts with',
-  matches: 'matches (safe regex)', exists: 'is present',
-};
+/** Operator name in the console's language (the DSL operator and the symbols stay as they are). */
+export function operatorLabel(op: Operator, lang: Lang): string {
+  return translate(lang, `rules.op.${op}`);
+}
+
+/** Description of a catalog field in the console's language; a field this console does not know keeps the server's own text. */
+export function fieldDescription(f: FieldDef, lang: Lang): string {
+  const k = `rules.field.${f.path}`;
+  return hasKey(k) ? translate(lang, k) : f.description;
+}
+
+/** Name of a field type (string, amount...) in the console's language. */
+export function fieldTypeName(t: FieldType, lang: Lang): string {
+  return translate(lang, `rules.type.${t}`);
+}
 
 export const DURATION = /^[1-9]\d*(s|m|h|d)$/;
 export const DECIMAL = /^-?\d+(\.\d+)?$/;
@@ -192,8 +203,8 @@ export const DEFAULT_FIELDS: FieldDef[] = CATALOG.map((f) => ({ ...f, available:
 export const AVAILABLE_EVENT_TYPES: readonly string[] = ['TOKEN_TRANSFER', 'NATIVE_TRANSFER', 'APPROVAL', 'STABLECOIN_FREEZE', 'STABLECOIN_UNFREEZE', 'DETECTION_SIGNAL'];
 
 /** UI suffix for catalog entries the backend does not populate yet. */
-export function availabilityNote(available: boolean | undefined): string {
-  return available === false ? ' - not yet available' : '';
+export function availabilityNote(available: boolean | undefined, lang: Lang = 'en'): string {
+  return available === false ? translate(lang, 'rules.notAvailable') : '';
 }
 
 let seq = 0;

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,12 +21,15 @@ public final class Problems {
 
     private Problems() {}
 
-    public static ProblemDetail problem(int status, String type, String title, String detail, String instance,
-                                        List<ApiException.FieldError> errors) {
+    public static ProblemDetail problem(int status, String type, String title, ApiCode code, Map<String, Object> params,
+                                        String instance, List<ApiException.FieldError> errors) {
+
         ProblemDetail p = ProblemDetail.forStatus(status);
         p.setType(URI.create(TYPE_BASE + type));
         p.setTitle(title);
-        p.setDetail(detail);
+        p.setDetail(code.fill(params));
+        p.setProperty("code", code.id());
+        p.setProperty("params", params == null ? Map.of() : params);
         if (instance != null) p.setInstance(URI.create(instance));
         p.setProperty("traceId", traceId());
         if (errors != null && !errors.isEmpty()) p.setProperty("errors", errors.stream().map(ApiException.FieldError::toMap).toList());
@@ -38,8 +42,8 @@ public final class Problems {
 
     /** For filters / security handlers that run outside Spring MVC. */
     public static void write(HttpServletRequest req, HttpServletResponse res, JsonMapper json, HttpStatus status, String type,
-                             String title, String detail) throws IOException {
-        ProblemDetail p = problem(status.value(), type, title, detail, req.getRequestURI(), null);
+                             String title, ApiCode code) throws IOException {
+        ProblemDetail p = problem(status.value(), type, title, code, Map.of(), req.getRequestURI(), null);
         res.setStatus(status.value());
         res.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         if (status == HttpStatus.UNAUTHORIZED) res.setHeader("WWW-Authenticate", "Bearer realm=\"oci\"");

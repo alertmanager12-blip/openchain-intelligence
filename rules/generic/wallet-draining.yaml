@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: wallet-draining
-version: 1.2.0
+version: 1.2.1
 name: Wallet drained (>80% of balance out in 2 minutes)
 description: Outgoing transfers from one wallet exceed 80% of its starting balance within a 2 minute window.
 author: openchain-community
@@ -62,6 +62,24 @@ documentation: |
   whole (small) ETH balance: in production 642 alerts in about an hour, median balance 0.026 ETH, 99% below 1.83 ETH.
   Other tokens never match (no price feed): copy the rule and add your own thresholds. Large deposit-address sweeps
   still match; exclude known exchange addresses with labels or a NOT group in your copy.
+translations:
+  fr:
+    name: "Portefeuille vidé (plus de 80 % du solde sorti en 2 minutes)"
+    description: "Les transferts sortants d'un portefeuille dépassent 80 % de son solde de départ sur une fenêtre de 2 minutes."
+    documentation: |
+      Pour chaque couple (expéditeur, jeton), additionne les montants sortants sur une fenêtre de 2 minutes en temps des
+      événements et divise la somme par le wallet.balance du premier transfert de la fenêtre (le solde AVANT la première
+      sortie). Se déclenche au-delà de 80 %.
+      Typique de clés compromises ou de scripts de vidage (drainers) qui balaient un portefeuille, mais aussi
+      d'utilisateurs qui regroupent leurs fonds ou changent de portefeuille. Arithmétique décimale exacte ; un solde nul ou
+      absent ne déclenche jamais la règle.
+      Solde minimum (1.2.0) : seuls les portefeuilles détenant au moins 1 ETH/WETH, 3 BNB/WBNB, 10 000 TRX ou
+      2 000 USDT/USDC/DAI avant la sortie. Sans ce minimum, sur le mainnet Ethereum, la règle se déclenchait surtout sur des
+      adresses de dépôt de plateformes d'échange qui balayaient tout leur (petit) solde en ETH : en production, 642 alertes
+      en une heure environ, solde médian 0,026 ETH, 99 % en dessous de 1,83 ETH.
+      Les autres jetons ne correspondent jamais (pas de flux de prix) : copiez la règle et ajoutez vos propres seuils. Les
+      gros balayages d'adresses de dépôt correspondent toujours ; excluez les adresses connues de plateformes d'échange avec
+      des étiquettes ou un groupe NOT dans votre copie.
 examples:
   - name: outgoing transfer with a known balance passes the filter
     expect: MATCH

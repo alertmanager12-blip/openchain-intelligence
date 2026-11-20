@@ -87,6 +87,12 @@
       "description": "Placeholders: {{rule.id}}, {{rule.version}}, {{group.key}}, {{network}}, {{event.<catalog field>}}."
     },
     "documentation": { "type": "string", "maxLength": 65536 },
+    "translations": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "User-facing texts in other languages, keyed by language. Documentation only: never used by detection. An absent text falls back to the rule's own.",
+      "properties": { "fr": { "$ref": "#/$defs/translation" } }
+    },
     "expectedConfidence": { "type": ["number", "string"], "description": "0..1" },
     "examples": {
       "type": "array", "maxItems": 50,
@@ -113,6 +119,15 @@
     }
   },
   "$defs": {
+    "translation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "\\S" },
+        "documentation": { "type": "string", "minLength": 1, "maxLength": 65536, "pattern": "\\S" }
+      }
+    },
     "slug": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$" },
     "fieldName": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,40}(\\.[a-z][a-z0-9_]{0,40}){0,5}$", "description": "Must exist in the field catalog." },
     "decimal": { "type": ["number", "string"], "description": "Exact decimal; strings recommended for large or fractional values." },

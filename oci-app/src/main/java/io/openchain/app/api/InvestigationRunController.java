@@ -61,24 +61,24 @@ public class InvestigationRunController {
                                       Instant createdAt, Instant completedAt, int frozenFlows, @JsonRawValue String assertions,
                                       @JsonRawValue String diff, InvestigationReport.Report report) {}
 
-    private static final String NOT_FOUND = "no such investigation";
+    private static final ApiCode NOT_FOUND = ApiCode.INVESTIGATION_NOT_FOUND;
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public InvestigationDetail create(@RequestBody InvestigationRequest r, Authentication auth) {
-        if (r == null) throw ApiException.badRequest("body is required");
+        if (r == null) throw ApiException.badRequest(ApiCode.BODY_REQUIRED);
         Network n = investigation.network(r.network());
         var subject = investigation.address(n, r.address());
         try {
             return detail(runs.submitInvestigation(ClientScope.of(auth), subject, auth.getName()));
         } catch (TraceArtifactService.BudgetExceeded e) {
-            throw new ApiException(429, "too-many-requests", "Too many requests", e.getMessage(), null);
+            throw ApiException.tooManyRequests(ApiCode.GENERIC_TOO_MANY_REQUESTS, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 
     @GetMapping
     public List<TraceController.TraceSummary> list(@RequestParam(defaultValue = "50") int limit, Authentication auth) {
-        if (limit < 1 || limit > 200) throw ApiException.badRequest("limit must be between 1 and 200");
+        if (limit < 1 || limit > 200) throw ApiException.badRequest(ApiCode.PARAM_OUT_OF_RANGE, Map.of("param", "limit", "min", 1, "max", 200));
         return runs.list(ClientScope.of(auth), limit, TraceArtifact.Kind.INVESTIGATION).stream().map(TraceController::summary).toList();
     }
 
@@ -89,7 +89,7 @@ public class InvestigationRunController {
     @GetMapping("/{id}/report")
     public InvestigationReport.Report report(@PathVariable String id, Authentication auth) {
         TraceArtifact a = find(id, auth);
-        if (a.resultJson() == null) throw ApiException.conflict("the investigation has not finished");
+        if (a.resultJson() == null) throw ApiException.conflict(ApiCode.INVESTIGATION_NOT_FINISHED);
         ApiKeyService.AUDIT.info("investigation.report id={} clientScope={} actor={}", id, a.clientScope(), auth.getName());
         return InvestigationReport.build(a.network() + ":" + a.seed(), TraceJson.assertions(a.resultJson()));
     }
@@ -100,7 +100,7 @@ public class InvestigationRunController {
         try {
             return detail(runs.submitInvestigationRerun(ClientScope.of(auth), id, auth.getName()).orElseThrow(() -> ApiException.notFound(NOT_FOUND)));
         } catch (TraceArtifactService.BudgetExceeded e) {
-            throw new ApiException(429, "too-many-requests", "Too many requests", e.getMessage(), null);
+            throw ApiException.tooManyRequests(ApiCode.GENERIC_TOO_MANY_REQUESTS, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 
@@ -124,23 +124,23 @@ public class InvestigationRunController {
     @PostMapping("/{id}/assertions/{assertionId}/reviews")
     @ResponseStatus(HttpStatus.CREATED)
     public ReviewDto review(@PathVariable String id, @PathVariable String assertionId, @RequestBody ReviewRequest r, Authentication auth) {
-        if (r == null || r.decision() == null || r.decision().isBlank()) throw ApiException.badRequest("decision is required");
+        if (r == null || r.decision() == null || r.decision().isBlank()) throw ApiException.badRequest(ApiCode.REVIEW_DECISION_REQUIRED);
         AssertionReview.Decision d;
         try {
             d = AssertionReview.Decision.valueOf(r.decision().trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("decision must be ACCEPTED, REJECTED or NEEDS_EVIDENCE");
+            throw ApiException.badRequest(ApiCode.REVIEW_DECISION_INVALID);
         }
         try {
             return dto(reviews.review(ClientScope.of(auth), id, assertionId, d, r.comment(), auth.getName()));
         } catch (AssertionReviewService.NotFound e) {
-            throw ApiException.notFound(e.getMessage());
+            throw ApiException.notFound(ApiCode.GENERIC_NOT_FOUND, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (AssertionReviewService.NotFinished e) {
-            throw ApiException.conflict(e.getMessage());
+            throw ApiException.conflict(ApiCode.GENERIC_CONFLICT, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (AssertionReviewService.FourEyes e) {
-            throw new ApiException(403, "forbidden", "Forbidden", e.getMessage(), null);
+            throw ApiException.forbidden(ApiCode.GENERIC_FORBIDDEN, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest(e.getMessage());
+            throw ApiException.badRequest(ApiCode.GENERIC_BAD_REQUEST, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 
@@ -171,7 +171,7 @@ public class InvestigationRunController {
         } catch (AssertionReviewService.NotFound e) {
             throw ApiException.notFound(NOT_FOUND);
         } catch (AssertionReviewService.NotFinished e) {
-            throw ApiException.conflict(e.getMessage());
+            throw ApiException.conflict(ApiCode.GENERIC_CONFLICT, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 
@@ -189,19 +189,19 @@ public class InvestigationRunController {
     @PostMapping("/{id}/summaries")
     @ResponseStatus(HttpStatus.CREATED)
     public SummaryDto summarize(@PathVariable String id, @RequestBody(required = false) SummaryRequest r, Authentication auth) {
-        if (r == null || r.provider() == null || r.provider().isBlank()) throw ApiException.badRequest("provider is required");
+        if (r == null || r.provider() == null || r.provider().isBlank()) throw ApiException.badRequest(ApiCode.SUMMARY_PROVIDER_REQUIRED);
         try {
             return summary(summaries.request(ClientScope.of(auth), id, r.provider().trim(), auth.getName()));
         } catch (AssertionReviewService.NotFound e) {
             throw ApiException.notFound(NOT_FOUND);
         } catch (AssertionReviewService.NotFinished e) {
-            throw ApiException.conflict(e.getMessage());
+            throw ApiException.conflict(ApiCode.GENERIC_CONFLICT, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (InvestigationSummaryService.Disabled e) {
-            throw ApiException.conflict(e.getMessage());
+            throw ApiException.conflict(ApiCode.GENERIC_CONFLICT, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (InvestigationSummaryService.UnknownProvider e) {
-            throw ApiException.badRequest(e.getMessage());
+            throw ApiException.badRequest(ApiCode.GENERIC_BAD_REQUEST, Map.of("reason", String.valueOf(e.getMessage())));
         } catch (InvestigationSummaryService.DailyCapReached e) {
-            throw new ApiException(429, "too-many-requests", "Too many requests", e.getMessage(), null);
+            throw ApiException.tooManyRequests(ApiCode.GENERIC_TOO_MANY_REQUESTS, Map.of("reason", String.valueOf(e.getMessage())));
         }
     }
 

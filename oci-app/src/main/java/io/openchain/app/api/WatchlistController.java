@@ -4,6 +4,7 @@ import io.openchain.app.analysis.InvestigationService;
 import io.openchain.app.watchlist.WatchlistRepository;
 import io.openchain.app.watchlist.WatchlistService;
 import io.openchain.core.model.Address;
+import java.util.Map;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,17 +33,17 @@ public class WatchlistController {
 
     @PostMapping
     public ResponseEntity<WatchlistRepository.Entry> add(@RequestBody AddRequest req, Authentication auth) {
-        if (req == null || req.network() == null || req.address() == null) throw ApiException.badRequest("'network' and 'address' are required");
-        if (req.name() != null && req.name().length() > 120) throw ApiException.badRequest("'name' is limited to 120 characters");
+        if (req == null || req.network() == null || req.address() == null) throw ApiException.badRequest(ApiCode.WATCHLIST_FIELDS_REQUIRED);
+        if (req.name() != null && req.name().length() > 120) throw ApiException.badRequest(ApiCode.WATCHLIST_NAME_TOO_LONG, Map.of("max", 120));
         Address a = investigation.address(investigation.network(req.network()), req.address()); // validated, canonical
         return watchlist.add(a, req.name(), auth == null ? null : auth.getName())
                 .map(e -> ResponseEntity.status(HttpStatus.CREATED).body(e))
-                .orElseThrow(() -> ApiException.conflict("this wallet is already on the watchlist"));
+                .orElseThrow(() -> ApiException.conflict(ApiCode.WATCHLIST_DUPLICATE));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> remove(@PathVariable String id, Authentication auth) {
-        if (!watchlist.remove(id, auth == null ? null : auth.getName())) throw ApiException.notFound("no watchlist entry '" + id + "'");
+        if (!watchlist.remove(id, auth == null ? null : auth.getName())) throw ApiException.notFound(ApiCode.WATCHLIST_NOT_FOUND, Map.of("id", id));
         return ResponseEntity.noContent().build();
     }
 }

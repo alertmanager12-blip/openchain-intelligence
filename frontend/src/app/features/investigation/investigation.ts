@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, linkedSignal, signal } from '@angular/core';
-import { provideNativeDateAdapter } from '@angular/material/core';
+import { DateAdapter, provideNativeDateAdapter } from '@angular/material/core';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { Router } from '@angular/router';
-import { ApiError } from '../../core/api-error';
+import { ApiError, errorText, statusTitle } from '../../core/api-error';
+import { LOCALE } from '../../core/i18n/format';
+import { hasKey, I18nService } from '../../core/i18n/i18n.service';
 import { ApiService } from '../../core/api.service';
 import { EnabledNetworks } from '../../core/enabled-networks';
 import { Graph, GraphDirection, GraphNode, GraphStop, NETWORKS, NetworkId, RiskLevel } from '../../core/models';
@@ -12,7 +14,7 @@ import { detectQuery } from '../../core/network-detect';
 import { ThemeService } from '../../core/theme.service';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
-import { shortHash, netLabel } from '../../shared/format';
+import { shortHash, netLabel, sentence } from '../../shared/format';
 import { levelLabel } from '../../shared/risk-gauge';
 import { MAT_BUTTONS, MAT_FORM } from '../../shared/material';
 import { Skeleton } from '../../shared/skeleton';
@@ -20,7 +22,8 @@ import { Crumb, PageHeader } from '../../shared/page-header';
 import { UI } from '../../shared/ui';
 import { GraphCanvas } from './graph-canvas';
 import { GraphCommand, GraphSelection, KeyedEdge } from './graph-model';
-import { GraphInspector } from './graph-inspector';
+import { EngineText } from '../../shared/engine-text';
+import { GraphInspector, PathInfo } from './graph-inspector';
 
 const TOKENS: Record<NetworkId, string[]> = {
   ethereum: ['ETH', 'USDT', 'USDC'], tron: ['TRX', 'USDT'], bsc: ['BNB', 'USDT'], polygon: ['POL', 'USDC'], bitcoin: ['BTC'], solana: ['SOL', 'USDC'],
@@ -50,43 +53,43 @@ export function structuralStops(stops: GraphStop[] | null | undefined): GraphSto
 
 @Component({
   selector: 'oci-investigation',
-  imports: [PageHeader, GraphCanvas, GraphInspector, Skeleton, MatButtonToggleModule, MatDatepickerModule, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
+  imports: [PageHeader, GraphCanvas, GraphInspector, EngineText, Skeleton, MatButtonToggleModule, MatDatepickerModule, MatProgressBar, ...MAT_BUTTONS, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Date range picker on JS Dates; only this page needs a date adapter.
   providers: [provideNativeDateAdapter()],
   template: `
     <div class="page wide graph-page">
-      <oci-page-header heading="Fund flow graph" [titleHidden]="true" [crumbs]="crumbs()" />
-      <section class="canvas-card" aria-label="Graph">
-        <form class="root-form" (submit)="$event.preventDefault(); submit()" aria-label="Graph root">
+      <oci-page-header [heading]="i18n.t('graph.title')" [titleHidden]="true" [crumbs]="crumbs()" />
+      <section class="canvas-card" [attr.aria-label]="i18n.t('graph.section')">
+        <form class="root-form" (submit)="$event.preventDefault(); submit()" [attr.aria-label]="i18n.t('graph.rootForm')">
         <mat-form-field class="addr">
-          <mat-label>Root address</mat-label>
-          <input matInput name="a" class="mono" [value]="addr()" (input)="addr.set($any($event.target).value)" placeholder="0x…, T… or a base58 address" autocomplete="off" spellcheck="false" />
+          <mat-label>{{ i18n.t('graph.root') }}</mat-label>
+          <input matInput name="a" class="mono" [value]="addr()" (input)="addr.set($any($event.target).value)" [placeholder]="i18n.t('graph.rootHint')" autocomplete="off" spellcheck="false" />
         </mat-form-field>
         <mat-form-field class="netf">
-          <mat-label>Network</mat-label>
+          <mat-label>{{ i18n.t('graph.network') }}</mat-label>
           <mat-select [value]="net()" (valueChange)="net.set($event)">@for (n of networks(); track n) { <mat-option [value]="n">{{ netLabel(n) }}</mat-option> }</mat-select>
         </mat-form-field>
-        <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">Load graph</button>
+        <button matButton="filled" type="submit" [disabled]="!addr().trim() || graph.loading()">{{ i18n.t('graph.load') }}</button>
       </form>
-        <div class="tools" role="toolbar" aria-label="Graph options">
-          <mat-button-toggle-group aria-label="Direction" [value]="direction()" (change)="direction.set($event.value)">
-            <mat-button-toggle value="out" title="Where value sent by the root went">Out</mat-button-toggle>
-            <mat-button-toggle value="in" title="Where value received by the root came from">In</mat-button-toggle>
-            <mat-button-toggle value="both" title="Both sides, each with its own depth">Both</mat-button-toggle>
+        <div class="tools" role="toolbar" [attr.aria-label]="i18n.t('graph.options')">
+          <mat-button-toggle-group [attr.aria-label]="i18n.t('graph.direction')" [value]="direction()" (change)="direction.set($event.value)">
+            <mat-button-toggle value="out" [title]="i18n.t('graph.outTip')">{{ i18n.t('graph.out') }}</mat-button-toggle>
+            <mat-button-toggle value="in" [title]="i18n.t('graph.inTip')">{{ i18n.t('graph.in') }}</mat-button-toggle>
+            <mat-button-toggle value="both" [title]="i18n.t('graph.bothTip')">{{ i18n.t('graph.both') }}</mat-button-toggle>
           </mat-button-toggle-group>
-          <mat-button-toggle-group aria-label="Depth" [value]="depth()" (change)="depth.set($event.value)">
-            @for (d of [1, 2, 3]; track d) { <mat-button-toggle [value]="d">{{ d }} {{ d === 1 ? 'hop' : 'hops' }}</mat-button-toggle> }
+          <mat-button-toggle-group [attr.aria-label]="i18n.t('graph.depth')" [value]="depth()" (change)="depth.set($event.value)">
+            @for (d of [1, 2, 3]; track d) { <mat-button-toggle [value]="d">{{ i18n.t('graph.hops', { count: d }) }}</mat-button-toggle> }
           </mat-button-toggle-group>
           <mat-form-field class="tool tok">
-            <mat-label>Token</mat-label>
-            <mat-select [value]="token()" (valueChange)="token.set($event)"><mat-option value="">All tokens</mat-option>@for (t of tokenOptions(); track t) { <mat-option [value]="t">{{ t }}</mat-option> }</mat-select>
+            <mat-label>{{ i18n.t('graph.token') }}</mat-label>
+            <mat-select [value]="token()" (valueChange)="token.set($event)"><mat-option value="">{{ i18n.t('graph.allTokens') }}</mat-option>@for (t of tokenOptions(); track t) { <mat-option [value]="t">{{ t }}</mat-option> }</mat-select>
           </mat-form-field>
           <mat-form-field class="tool dates">
-            <mat-label>Transfers between</mat-label>
+            <mat-label>{{ i18n.t('graph.dates') }}</mat-label>
             <mat-date-range-input [rangePicker]="range" [max]="today">
-              <input matStartDate placeholder="From" [value]="from()" (dateChange)="from.set($event.value)" aria-label="From date" />
-              <input matEndDate placeholder="To" [value]="to()" (dateChange)="to.set($event.value)" aria-label="To date" />
+              <input matStartDate [placeholder]="i18n.t('graph.fromHint')" [value]="from()" (dateChange)="from.set($event.value)" [attr.aria-label]="i18n.t('graph.fromDate')" />
+              <input matEndDate [placeholder]="i18n.t('graph.toHint')" [value]="to()" (dateChange)="to.set($event.value)" [attr.aria-label]="i18n.t('graph.toDate')" />
             </mat-date-range-input>
             <mat-datepicker-toggle matIconSuffix [for]="range">
               <svg matDatepickerToggleIcon viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></svg>
@@ -95,55 +98,55 @@ export function structuralStops(stops: GraphStop[] | null | undefined): GraphSto
           </mat-form-field>
           <p class="status-line stats" aria-live="polite">
             @if (nodes().length) {
-              <span><strong>{{ nodes().length }}</strong> wallets</span><span><strong>{{ edges().length }}</strong> transfers</span><span><strong>{{ maxHop() }}</strong> {{ maxHop() === 1 ? 'hop' : 'hops' }} deep</span>
-              @if (truncated()) { <span class="warn"><strong>Truncated</strong>: narrow the token or dates</span> }
-              @if (stops().length) { <span class="warn"><strong>Partial</strong>: {{ stops().length }} {{ stops().length === 1 ? 'stop' : 'stops' }}</span> }
+              <span><strong>{{ nodes().length }}</strong> {{ i18n.t('graph.walletsWord', { count: nodes().length }) }}</span><span><strong>{{ edges().length }}</strong> {{ i18n.t('graph.transfersWord', { count: edges().length }) }}</span><span><strong>{{ maxHop() }}</strong> {{ i18n.t('graph.hopsDeep', { count: hopCount() }) }}</span>
+              @if (truncated()) { <span class="warn"><strong>{{ i18n.t('graph.truncated') }}</strong>{{ i18n.t('graph.truncatedHint') }}</span> }
+              @if (stops().length) { <span class="warn"><strong>{{ i18n.t('graph.partial') }}</strong>{{ i18n.t('graph.partialHint', { count: stops().length }) }}</span> }
             }
           </p>
-          <button matButton="outlined" class="sm" type="button" (click)="verify()" [disabled]="!edges().length || verifying()" title="Check whether transfers shown are still held (chain reorganisation)">Check for changes</button>
-          <button matButton="outlined" class="sm" type="button" (click)="saveTrace()" [disabled]="!root() || direction() === 'both' || saving()" title="Keep this trace with the evidence it reads (choose Out or In first)">Save trace</button>
-          <button matButton="outlined" class="sm" type="button" (click)="cmd('fit')" [disabled]="!nodes().length">Fit to view</button>
-          <button matButton="outlined" class="sm" type="button" (click)="cmd('png')" [disabled]="!nodes().length">Export PNG</button>
+          <button matButton="outlined" class="sm" type="button" (click)="verify()" [disabled]="!edges().length || verifying()" [title]="i18n.t('graph.verifyTip')">{{ i18n.t('graph.verify') }}</button>
+          <button matButton="outlined" class="sm" type="button" (click)="saveTrace()" [disabled]="!root() || direction() === 'both' || saving()" [title]="i18n.t('graph.saveTraceTip')">{{ i18n.t('graph.saveTrace') }}</button>
+          <button matButton="outlined" class="sm" type="button" (click)="cmd('fit')" [disabled]="!nodes().length">{{ i18n.t('graph.fit') }}</button>
+          <button matButton="outlined" class="sm" type="button" (click)="cmd('png')" [disabled]="!nodes().length">{{ i18n.t('graph.exportPng') }}</button>
         </div>
         @if (nodes().length) {
-          <p class="small muted explain">Only links value could have taken are shown: each transfer follows the direction of value and happens after the one that brought it. Wallets linked only the other way are not shown; switch the direction to see them. A link is not shared intent.</p>
+          <p class="small muted explain">{{ i18n.t('graph.explain') }}</p>
           @if (stops().length) {
-            <details class="stops small"><summary>Where the graph stops ({{ stops().length }})</summary>
-              <ul>@for (s of stops(); track s.reason + s.address + (s.token ?? '')) { <li><span class="mono">{{ short(s.address) }}</span>: {{ s.reason }}, {{ s.detail }}</li> }</ul>
+            <details class="stops small"><summary>{{ i18n.t('graph.stops', { count: stops().length }) }}</summary>
+              <ul>@for (s of stops(); track s.reason + s.address + (s.token ?? '')) { <li><span class="mono">{{ short(s.address) }}</span>: {{ stopName(s.reason) }}, <oci-engine-text [text]="s.detail" [plainInEnglish]="true" /></li> }</ul>
             </details>
           }
         }
         <div class="stage">
           @defer (when nodes().length > 0) {
             <oci-graph-canvas class="canvas" [nodes]="nodes()" [edges]="edges()" [root]="root()" [theme]="theme.effective()" [command]="command()" [fileName]="fileName()"
-              (selected)="select($event)" (expandRequested)="expandById($event)" (pathResult)="pathInfo.set($event)" (exported)="toasts.success('Graph exported', fileName())" />
+              (selected)="select($event)" (expandRequested)="expandById($event)" (pathResult)="pathInfo.set({ key: 'graph.path.missing', params: { count: $event } })" (exported)="toasts.success(i18n.t('graph.toast.exported'), fileName())" />
           } @placeholder {
             <div class="canvas"></div>
           } @loading (after 100ms; minimum 300ms) {
-            <div class="canvas"><oci-skeleton kind="lines" [rows]="6" label="Loading the graph view" /></div>
+            <div class="canvas"><oci-skeleton kind="lines" [rows]="6" [label]="i18n.t('graph.loadingView')" /></div>
           }
-          @if (expanding()) { <mat-progress-bar class="expanding" mode="indeterminate" aria-label="Expanding counterparties" /> }
-          @if (graph.loading()) { <div class="overlay"><oci-skeleton kind="lines" [rows]="4" label="Loading the graph" class="sk" /></div> }
+          @if (expanding()) { <mat-progress-bar class="expanding" mode="indeterminate" [attr.aria-label]="i18n.t('graph.expandingBar')" /> }
+          @if (graph.loading()) { <div class="overlay"><oci-skeleton kind="lines" [rows]="4" [label]="i18n.t('graph.loading')" class="sk" /></div> }
           @else if (graph.error() ?? expandError(); as e) {
-            <div class="overlay err" role="alert"><strong>{{ e.title }}</strong><span>{{ e.detail }}</span><button matButton="outlined" class="sm" type="button" (click)="graph.reload()">Retry</button></div>
+            <div class="overlay err" role="alert"><strong>{{ errTitle(e) }}</strong><span>{{ err(e) }}</span><button matButton="outlined" class="sm" type="button" (click)="graph.reload()">{{ i18n.t('state.retry') }}</button></div>
           } @else if (!nodes().length) {
-            <div class="overlay"><div class="empty"><strong>No graph yet</strong><span>Enter a root address above and load the graph. Transfers in and out of that wallet appear here, hop by hop. A connection to a flagged wallet does not mean shared intent.</span></div></div>
+            <div class="overlay"><div class="empty"><strong>{{ i18n.t('graph.emptyTitle') }}</strong><span>{{ i18n.t('graph.emptyBody') }}</span></div></div>
           }
-          <aside class="inspector" aria-label="Inspector">
+          <aside class="inspector" [attr.aria-label]="i18n.t('graph.inspector')">
             <oci-graph-inspector [node]="selectedNode()" [edge]="selectedEdge()" [from]="edgeFrom()" [to]="edgeTo()" [expanding]="expanding()" [pathInfo]="pathInfo()"
               (expand)="expand($event)" (highlight)="highlight($event)" />
           </aside>
-          <div class="legend" aria-label="Legend">
-            @for (l of legend; track l) { <span><i class="dot-l bg-{{ l.toLowerCase() }}" aria-hidden="true"></i>{{ levelLabel(l) }}</span> }
-            <span><i class="shape dia" aria-hidden="true"></i>Labelled</span>
-            <span><i class="shape sq" aria-hidden="true"></i>Contract</span>
-            <span><i class="shape root" aria-hidden="true"></i>Root, rings are hops</span>
+          <div class="legend" [attr.aria-label]="i18n.t('graph.legend')">
+            @for (l of legend; track l) { <span><i class="dot-l bg-{{ l.toLowerCase() }}" aria-hidden="true"></i>{{ levelLabel(l, i18n.lang()) }}</span> }
+            <span><i class="shape dia" aria-hidden="true"></i>{{ i18n.t('graph.legend.labelled') }}</span>
+            <span><i class="shape sq" aria-hidden="true"></i>{{ i18n.t('graph.legend.contract') }}</span>
+            <span><i class="shape root" aria-hidden="true"></i>{{ i18n.t('graph.legend.root') }}</span>
             <span class="sep" aria-hidden="true"></span>
-            <span><i class="flow in" aria-hidden="true"></i>Into the root</span>
-            <span><i class="flow out" aria-hidden="true"></i>Out of the root</span>
-            <span><i class="flow hop" aria-hidden="true"></i>Between other wallets</span>
-            <span><i class="flow flag" aria-hidden="true"></i>Counterparty scored high or critical (not proof of shared intent)</span>
-            <span><svg class="weight" viewBox="0 0 26 10" aria-hidden="true"><path d="M1 5h6" stroke-width="1"/><path d="M10 5h6" stroke-width="2.5"/><path d="M19 5h6" stroke-width="4.5"/></svg>Line thickness: amount relative to the largest transfer of the same token</span>
+            <span><i class="flow in" aria-hidden="true"></i>{{ i18n.t('graph.legend.in') }}</span>
+            <span><i class="flow out" aria-hidden="true"></i>{{ i18n.t('graph.legend.out') }}</span>
+            <span><i class="flow hop" aria-hidden="true"></i>{{ i18n.t('graph.legend.hop') }}</span>
+            <span><i class="flow flag" aria-hidden="true"></i>{{ i18n.t('graph.legend.flag') }}</span>
+            <span><svg class="weight" viewBox="0 0 26 10" aria-hidden="true"><path d="M1 5h6" stroke-width="1"/><path d="M10 5h6" stroke-width="2.5"/><path d="M19 5h6" stroke-width="4.5"/></svg>{{ i18n.t('graph.legend.weight') }}</span>
           </div>
         </div>
       </section>
@@ -199,6 +202,7 @@ export function structuralStops(stops: GraphStop[] | null | undefined): GraphSto
 })
 export class InvestigationPage {
   private readonly api = inject(ApiService);
+  protected readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
   private readonly enabledNetworks = inject(EnabledNetworks);
   protected readonly theme = inject(ThemeService);
@@ -211,11 +215,15 @@ export class InvestigationPage {
   readonly networks = computed<NetworkId[]>(() => this.enabledNetworks.enabled() ?? [...NETWORKS]);
   readonly crumbs = computed<Crumb[]>(() => {
     const r = this.root();
-    return r ? [{ label: 'Fund flow graph', link: '/investigation' }, { label: shortHash(r, 6, 4), mono: true }] : [{ label: 'Fund flow graph' }];
+    return r ? [{ label: this.i18n.t('graph.title'), link: '/investigation' }, { label: shortHash(r, 6, 4), mono: true }] : [{ label: this.i18n.t('graph.title') }];
   });
   readonly netLabel = netLabel;
   readonly legend = LEGEND;
   readonly levelLabel = levelLabel;
+  readonly hopCount = computed(() => Number(this.maxHop()) || 0);
+  readonly stopName = (reason: string) => { const k = `graph.stop.${reason}`; return hasKey(k) ? this.i18n.t(k) : sentence(reason); };
+  readonly err = (e: ApiError) => errorText(e, this.i18n.lang());
+  readonly errTitle = (e: ApiError) => statusTitle(e, this.i18n.lang());
 
   readonly addr = signal('');
   readonly net = signal<NetworkId>('ethereum');
@@ -271,11 +279,15 @@ export class InvestigationPage {
 
   readonly expanding = signal(false);
   readonly expandError = signal<ApiError | null>(null);
-  readonly pathInfo = signal<string | null>(null);
+  readonly pathInfo = signal<PathInfo | null>(null);
   readonly command = signal<GraphCommand | null>(null);
   private seq = 0;
 
+  private readonly dates = inject<DateAdapter<Date>>(DateAdapter);
+
   constructor() {
+    // The date picker writes its month and weekday names in the console's language.
+    effect(() => this.dates.setLocale(LOCALE[this.i18n.lang()]));
     // Mirror the URL into the editable form.
     effect(() => {
       const a = this.address();
@@ -311,13 +323,13 @@ export class InvestigationPage {
     const root = this.root();
     if (!root) return;
     const toward = n.side !== 'in';
-    this.pathInfo.set('Looking for a path value could have taken…');
+    this.pathInfo.set({ key: 'graph.path.looking' });
     this.api.graphPath(toward ? root : n.address, toward ? n.address : root, n.network, this.token() || undefined).subscribe({
       next: (p) => {
-        this.pathInfo.set(p.outcome === 'FOUND' ? `${p.hops.length} ${p.hops.length === 1 ? 'transfer' : 'transfers'}: ${p.note}` : p.note);
+        this.pathInfo.set(p.outcome === 'FOUND' ? { key: 'graph.path.found', params: { count: p.hops.length }, engine: p.note } : { engine: p.note });
         this.command.set({ kind: p.outcome === 'FOUND' ? 'path' : 'clear', hops: p.hops.map((h) => ({ source: h.from, target: h.to })), n: ++this.seq });
       },
-      error: (e: ApiError) => this.pathInfo.set(`${e.title}: ${e.detail}`),
+      error: (e: ApiError) => this.pathInfo.set({ error: e }),
     });
   }
 
@@ -332,10 +344,10 @@ export class InvestigationPage {
     this.api.createTrace({ network: this.network() ?? this.net(), seed: root, direction: dir, depth: this.depth() }).subscribe({
       next: (t) => {
         this.saving.set(false);
-        this.toasts.success('Trace queued', 'Kept with its evidence on the Stored traces page.');
+        this.toasts.success(this.i18n.t('graph.toast.queued'), this.i18n.t('graph.toast.queuedBody'));
         this.router.navigate(['/traces'], { queryParams: { id: t.id } });
       },
-      error: (e: ApiError) => { this.saving.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+      error: (e: ApiError) => { this.saving.set(false); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 
@@ -347,10 +359,10 @@ export class InvestigationPage {
     this.api.verifyGraph(this.network() ?? this.net(), ids).subscribe({
       next: (r) => {
         this.verifying.set(false);
-        if (r.missing.length) this.toasts.error(`${r.missing.length} ${r.missing.length === 1 ? 'transfer is' : 'transfers are'} no longer held`, `${r.note}`);
-        else this.toasts.success('No change', `${r.checked} ${r.checked === 1 ? 'transfer' : 'transfers'} still held`);
+        if (r.missing.length) this.toasts.error(this.i18n.t('graph.toast.missing', { count: r.missing.length }), `${r.note}`);
+        else this.toasts.success(this.i18n.t('graph.toast.noChange'), this.i18n.t('graph.toast.stillHeld', { count: r.checked }));
       },
-      error: (e: ApiError) => { this.verifying.set(false); this.toasts.error(e.title, e.detail ?? undefined); },
+      error: (e: ApiError) => { this.verifying.set(false); this.toasts.error(statusTitle(e, this.i18n.lang()), errorText(e, this.i18n.lang())); },
     });
   }
 
@@ -384,7 +396,7 @@ export class InvestigationPage {
         const more = structuralStops(g.stops).filter((s) => !this.stops().some((x) => x.reason === s.reason && x.address === s.address));
         if (more.length) this.stops.update((l) => [...l, ...more]);
         this.expanding.set(false);
-        this.toasts.success('Counterparties expanded', `${added.length} new ${added.length === 1 ? 'wallet' : 'wallets'}, ${newEdges.length} new ${newEdges.length === 1 ? 'transfer' : 'transfers'}`);
+        this.toasts.success(this.i18n.t('graph.toast.expanded'), this.i18n.t('graph.toast.expandedBody', { wallets: added.length, transfers: newEdges.length }));
       },
       error: (e: ApiError) => {
         if (this.graph.value() === startedOn) this.expandError.set(e);

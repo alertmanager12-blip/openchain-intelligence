@@ -4,6 +4,7 @@ import { filter } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ApiService } from '../core/api.service';
 import { Dashboard } from '../core/models';
+import { I18nService } from '../core/i18n/i18n.service';
 import { AuthMode, SettingsService, readStorage, writeStorage } from '../core/settings.service';
 
 /** True when a key press is meant for a text field, a select or an editable element (single-key shortcuts must not fire). */
@@ -38,6 +39,7 @@ export class Shell {
   private readonly api = inject(ApiService);
   private readonly settings = inject(SettingsService);
   private readonly router = inject(Router);
+  private readonly i18n = inject(I18nService);
 
   readonly collapsed = signal<boolean>(readStorage<{ v: boolean }>(COLLAPSED_KEY, { v: false }).v);
   readonly drawerOpen = signal(false);
@@ -55,19 +57,19 @@ export class Shell {
 
   readonly env = computed<EnvironmentInfo>(() => {
     if (environment.allowMock && this.settings.connection().mock) {
-      return { kind: 'mock', label: 'Mock data', detail: 'Fictitious data generated in this browser. Development build only.' };
+      return { kind: 'mock', label: this.i18n.t('shell.envMock'), detail: this.i18n.t('shell.envMockDetail') };
     }
     const sim = this.simulatedNetworks();
     if (sim > 0) {
-      return { kind: 'demo', label: 'Demo', detail: `${sim} of ${this.networkCount()} networks read the simulated demo ledger, not a real chain.` };
+      return { kind: 'demo', label: this.i18n.t('shell.envDemo'), detail: this.i18n.t('shell.envDemoDetail', { sim, total: this.networkCount() }) };
     }
-    return { kind: 'api', label: this.apiHost(), detail: `Backend at ${this.apiHost()}${environment.apiBaseUrl}` };
+    return { kind: 'api', label: this.apiHost(), detail: this.i18n.t('shell.envApiDetail', { host: `${this.apiHost()}${environment.apiBaseUrl}` }) };
   });
 
   /** The stored credential, described without its secret: mode and the first characters of the key only. */
   readonly credential = computed(() => {
     const { authMode, token } = this.settings.connection();
-    const mode: Record<AuthMode, string> = { none: 'No credential', apiKey: 'API key', bearer: 'Bearer token (OIDC)' };
+    const mode: Record<AuthMode, string> = { none: this.i18n.t('shell.credNone'), apiKey: this.i18n.t('shell.credApiKey'), bearer: this.i18n.t('shell.credBearer') };
     // at most 8 characters, and never more than a quarter of the value
     const prefix = token && authMode !== 'none' ? token.slice(0, Math.min(8, Math.floor(token.length / 4))) + '…' : null;
     return { mode: authMode, label: mode[authMode], prefix, signedIn: authMode !== 'none' && !!token };

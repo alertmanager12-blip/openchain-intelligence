@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, Injector, effect, injec
 import { MatIconButton } from '@angular/material/button';
 import type { MatSnackBarRef } from '@angular/material/snack-bar';
 import { Toasts } from '../core/toasts';
+import { I18nService } from '../core/i18n/i18n.service';
 
 /**
  * The toast stack shown inside a Material snack bar. The snack bar provides the overlay, the bottom-end position and
@@ -12,7 +13,7 @@ import { Toasts } from '../core/toasts';
   imports: [MatIconButton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <ol class="stack" aria-label="Notifications">
+    <ol class="stack" [attr.aria-label]="i18n.t('toast.notifications')">
       @for (t of toasts.items(); track t.id) {
         <li class="toast t-{{ t.tone }}" (mouseenter)="toasts.pause(t.id)" (mouseleave)="toasts.resume(t.id)" (focusin)="toasts.pause(t.id)" (focusout)="toasts.resume(t.id)">
           <span class="ico" aria-hidden="true">
@@ -20,7 +21,7 @@ import { Toasts } from '../core/toasts';
             @else { <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3.5 8.4 3 3 6-6.6"/></svg> }
           </span>
           <div class="txt"><strong>{{ t.message }}</strong>@if (t.detail) { <span>{{ t.detail }}</span> }</div>
-          <button matIconButton class="sm" type="button" (click)="toasts.dismiss(t.id)" aria-label="Dismiss notification">
+          <button matIconButton class="sm" type="button" (click)="toasts.dismiss(t.id)" [attr.aria-label]="i18n.t('toast.dismiss')">
             <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 4 8 8M12 4l-8 8"/></svg>
           </button>
         </li>
@@ -45,6 +46,7 @@ import { Toasts } from '../core/toasts';
 })
 export class ToastStack {
   protected readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
 }
 
 /**

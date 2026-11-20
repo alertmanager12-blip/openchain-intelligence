@@ -2,6 +2,7 @@ package io.openchain.app.security;
 
 import static io.openchain.app.security.Scopes.authority;
 
+import io.openchain.app.api.ApiCode;
 import io.openchain.app.api.Problems;
 import io.openchain.app.config.OciProperties;
 import java.util.ArrayList;
@@ -66,9 +67,9 @@ public class SecurityConfiguration {
                 .addFilterBefore(new ApiKeyAuthenticationFilter(keys, json, oidc), AnonymousAuthenticationFilter.class)
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) -> Problems.write(req, res, json, HttpStatus.UNAUTHORIZED,
-                                "unauthenticated", "Authentication required", "missing or invalid credentials"))
+                                "unauthenticated", "Authentication required", ApiCode.AUTH_MISSING_CREDENTIALS))
                         .accessDeniedHandler((req, res, ex) -> Problems.write(req, res, json, HttpStatus.FORBIDDEN,
-                                "forbidden", "Forbidden", "missing permission for this operation")))
+                                "forbidden", "Forbidden", ApiCode.AUTH_MISSING_PERMISSION)))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
@@ -143,7 +144,7 @@ public class SecurityConfiguration {
                         return token != null && token.startsWith("oci_") ? null : token;
                     })
                     .authenticationEntryPoint((req, res, ex) -> Problems.write(req, res, json, HttpStatus.UNAUTHORIZED,
-                            "unauthenticated", "Authentication required", "invalid bearer token"))
+                            "unauthenticated", "Authentication required", ApiCode.AUTH_INVALID_BEARER))
                     .jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(jwt -> new ScopedJwtAuthentication(jwt,
                             jwtAuthorities(jwt, rolesClaim), ClientScope.ofJwt(jwt, multiClient, scopeClaim, clientScopes)))));
         }

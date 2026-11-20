@@ -1,6 +1,8 @@
-import { ChangeDetectionStrategy, Component, ViewEncapsulation, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, effect, inject, signal } from '@angular/core';
 import { Meta } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
+import { I18nService, Key } from '../../core/i18n/i18n.service';
+import { LangSwitch } from '../../layout/lang-switch';
 import { CapabilitiesSection } from './capabilities';
 import { ClosingSections } from './closing';
 import { DevelopersSection } from './developers';
@@ -11,10 +13,6 @@ import { CsMark } from './mark';
 import { ProblemSection } from './problem';
 import { publicLinks } from './public-links';
 
-export const LANDING_DESCRIPTION =
-  'ChainSentinel is an open source, self-hosted blockchain intelligence platform: it indexes TRON and Ethereum, profiles wallets, ' +
-  'explains risk signals, traces fund flows and turns your rules into alerts.';
-
 /**
  * Public landing page ('/'), outside the console shell. Dark by design whatever the console theme. The page tokens and
  * the shared primitives (.cs-*) are declared here without encapsulation, scoped under `.cs`; each section keeps its own
@@ -22,7 +20,7 @@ export const LANDING_DESCRIPTION =
  */
 @Component({
   selector: 'oci-landing',
-  imports: [RouterLink, CsMark, HeroSection, ProblemSection, CapabilitiesSection, HowItWorksSection, InvestigationPreview, DevelopersSection, ClosingSections],
+  imports: [RouterLink, LangSwitch, CsMark, HeroSection, ProblemSection, CapabilitiesSection, HowItWorksSection, InvestigationPreview, DevelopersSection, ClosingSections],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   host: { class: 'cs', '(keydown.escape)': 'menuOpen.set(false)' },
@@ -82,9 +80,11 @@ export const LANDING_DESCRIPTION =
     .cs-burger { display: none; width: 40px; height: 40px; margin-left: auto; border: 1px solid var(--cs-line-2); border-radius: 8px; background: none; color: var(--cs-text); cursor: pointer; }
     .cs-burger svg { width: 18px; height: 18px; }
     .cs-sheet { display: none; }
+    .cs oci-lang-switch { --line: var(--cs-line-2); --muted: var(--cs-muted); --accent: var(--cs-accent); --accent-tint: rgba(61, 220, 151, 0.12); --focus: var(--cs-accent); }
     @media (max-width: 900px) {
       .cs-nav, .cs-actions { display: none; }
-      .cs-burger { display: inline-grid; place-items: center; }
+      .cs-top oci-lang-switch { margin-left: auto; }
+      .cs-burger { display: inline-grid; place-items: center; margin-left: 0; }
       .cs-sheet { display: block; border-top: 1px solid var(--cs-line); background: var(--cs-bg); padding: 8px var(--cs-gutter) 20px; }
       .cs-sheet[hidden] { display: none; }
       .cs-sheet a:not(.cs-btn) { display: block; padding: 12px 4px; color: var(--cs-text); text-decoration: none; border-bottom: 1px solid var(--cs-line); font-size: 16px; }
@@ -105,31 +105,32 @@ export const LANDING_DESCRIPTION =
   template: `
     <header class="cs-top">
       <div class="cs-wrap">
-        <a class="cs-brand" href="#top" aria-label="ChainSentinel, back to top"><oci-cs-mark [size]="26" />ChainSentinel</a>
-        <nav class="cs-nav" aria-label="Primary">
-          @for (l of sections; track l.href) { <a [href]="l.href">{{ l.label }}</a> }
-          @if (links.docs; as d) { <a [href]="d" rel="noopener" target="_blank">Documentation</a> }
+        <a class="cs-brand" href="#top" [attr.aria-label]="i18n.t('landing.brandAria')"><oci-cs-mark [size]="26" />ChainSentinel</a>
+        <nav class="cs-nav" [attr.aria-label]="i18n.t('landing.navPrimary')">
+          @for (l of sections; track l.href) { <a [href]="l.href">{{ i18n.t(l.label) }}</a> }
+          @if (links.docs; as d) { <a [href]="d" rel="noopener" target="_blank">{{ i18n.t('landing.nav.docs') }}</a> }
         </nav>
         <div class="cs-actions">
-          @if (links.repository; as r) { <a class="cs-signin" [href]="r" rel="noopener" target="_blank">GitHub</a> }
-          <a class="cs-signin" routerLink="/settings" [queryParams]="{ section: 'connection' }">Sign in</a>
-          <a class="cs-btn cs-btn--primary cs-btn--sm" routerLink="/overview">Get started</a>
+          @if (links.repository; as r) { <a class="cs-signin" [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.github') }}</a> }
+          <a class="cs-signin" routerLink="/settings" [queryParams]="{ section: 'connection' }">{{ i18n.t('landing.signIn') }}</a>
+          <a class="cs-btn cs-btn--primary cs-btn--sm" routerLink="/overview">{{ i18n.t('landing.getStarted') }}</a>
         </div>
-        <button class="cs-burger" type="button" (click)="menuOpen.update((o) => !o)" [attr.aria-expanded]="menuOpen()" aria-controls="cs-sheet"
-          [attr.aria-label]="menuOpen() ? 'Close menu' : 'Open menu'">
+        <oci-lang-switch />
+        <button class="cs-burger" type="button" (click)="toggleMenu()" [attr.aria-expanded]="menuOpen()" aria-controls="cs-sheet"
+          [attr.aria-label]="menuOpen() ? i18n.t('landing.menuClose') : i18n.t('landing.menuOpen')">
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
             @if (menuOpen()) { <path d="m4 4 10 10M14 4 4 14"/> } @else { <path d="M3 5.5h12M3 9h12M3 12.5h12"/> }
           </svg>
         </button>
       </div>
       <div class="cs-sheet" id="cs-sheet" [hidden]="!menuOpen()">
-        <nav aria-label="Mobile">
-          @for (l of sections; track l.href) { <a [href]="l.href" (click)="menuOpen.set(false)">{{ l.label }}</a> }
-          @if (links.docs; as d) { <a [href]="d" rel="noopener" target="_blank">Documentation</a> }
-          @if (links.repository; as r) { <a [href]="r" rel="noopener" target="_blank">GitHub</a> }
-          <a routerLink="/settings" [queryParams]="{ section: 'connection' }">Sign in</a>
+        <nav [attr.aria-label]="i18n.t('landing.navMobile')">
+          @for (l of sections; track l.href) { <a [href]="l.href" (click)="menuOpen.set(false)">{{ i18n.t(l.label) }}</a> }
+          @if (links.docs; as d) { <a [href]="d" rel="noopener" target="_blank">{{ i18n.t('landing.nav.docs') }}</a> }
+          @if (links.repository; as r) { <a [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.github') }}</a> }
+          <a routerLink="/settings" [queryParams]="{ section: 'connection' }">{{ i18n.t('landing.signIn') }}</a>
         </nav>
-        <div class="cs-sheet-cta"><a class="cs-btn cs-btn--primary" routerLink="/overview">Get started</a></div>
+        <div class="cs-sheet-cta"><a class="cs-btn cs-btn--primary" routerLink="/overview">{{ i18n.t('landing.getStarted') }}</a></div>
       </div>
     </header>
 
@@ -147,56 +148,62 @@ export const LANDING_DESCRIPTION =
         <div class="cs-foot-grid">
           <div class="cs-foot-about">
             <a class="cs-brand" href="#top"><oci-cs-mark [size]="24" />ChainSentinel</a>
-            <p>The open intelligence engine for blockchain. Self-hosted, explainable, Apache-2.0.</p>
+            <p>{{ i18n.t('landing.foot.about') }}</p>
           </div>
-          <nav aria-labelledby="f-platform"><h2 id="f-platform">Platform</h2>
-            <ul>@for (l of sections; track l.href) { <li><a [href]="l.href">{{ l.label }}</a></li> }</ul>
+          <nav aria-labelledby="f-platform"><h2 id="f-platform">{{ i18n.t('landing.foot.platform') }}</h2>
+            <ul>@for (l of sections; track l.href) { <li><a [href]="l.href">{{ i18n.t(l.label) }}</a></li> }</ul>
           </nav>
-          <nav aria-labelledby="f-console"><h2 id="f-console">Console</h2>
+          <nav aria-labelledby="f-console"><h2 id="f-console">{{ i18n.t('landing.foot.console') }}</h2>
             <ul>
-              <li><a routerLink="/overview">Overview</a></li>
-              <li><a routerLink="/alerts">Alerts</a></li>
-              <li><a routerLink="/investigation">Fund flow graph</a></li>
-              <li><a routerLink="/rules/builder">Rule builder</a></li>
-              <li><a routerLink="/settings" [queryParams]="{ section: 'keys' }">API keys</a></li>
+              <li><a routerLink="/overview">{{ i18n.t('landing.foot.overview') }}</a></li>
+              <li><a routerLink="/alerts">{{ i18n.t('landing.foot.alerts') }}</a></li>
+              <li><a routerLink="/investigation">{{ i18n.t('landing.foot.graph') }}</a></li>
+              <li><a routerLink="/rules/builder">{{ i18n.t('landing.foot.builder') }}</a></li>
+              <li><a routerLink="/settings" [queryParams]="{ section: 'keys' }">{{ i18n.t('landing.foot.keys') }}</a></li>
             </ul>
           </nav>
-          <nav aria-labelledby="f-community"><h2 id="f-community">Community</h2>
+          <nav aria-labelledby="f-community"><h2 id="f-community">{{ i18n.t('landing.foot.community') }}</h2>
             <ul>
               @if (links.repository; as r) {
-                <li><a [href]="r" rel="noopener" target="_blank">GitHub</a></li>
-                <li><a [href]="links.docs" rel="noopener" target="_blank">Documentation</a></li>
-                <li><a [href]="links.contributing" rel="noopener" target="_blank">Contribution guide</a></li>
-                <li><a [href]="links.issues" rel="noopener" target="_blank">Issues</a></li>
+                <li><a [href]="r" rel="noopener" target="_blank">{{ i18n.t('landing.github') }}</a></li>
+                <li><a [href]="links.docs" rel="noopener" target="_blank">{{ i18n.t('landing.nav.docs') }}</a></li>
+                <li><a [href]="links.contributing" rel="noopener" target="_blank">{{ i18n.t('landing.foot.contributing') }}</a></li>
+                <li><a [href]="links.issues" rel="noopener" target="_blank">{{ i18n.t('landing.foot.issues') }}</a></li>
               } @else {
-                <li><a href="#community">Contributing</a></li>
+                <li><a href="#community">{{ i18n.t('landing.foot.contribute') }}</a></li>
               }
-              <li><a href="#open-source">License: Apache-2.0</a></li>
+              <li><a href="#open-source">{{ i18n.t('landing.foot.license') }}</a></li>
             </ul>
           </nav>
         </div>
         <div class="cs-foot-base">
-          <span>© {{ year }} ChainSentinel contributors</span>
-          <span>Signals are evidence for review, not proof of wrongdoing.</span>
+          <span>{{ i18n.t('landing.foot.copyright', { year }) }}</span>
+          <span>{{ i18n.t('landing.foot.caveat') }}</span>
         </div>
       </div>
     </footer>
   `,
 })
 export class LandingPage {
+  protected readonly i18n = inject(I18nService);
   protected readonly links = publicLinks();
   protected readonly menuOpen = signal(false);
   protected readonly year = new Date().getFullYear();
-  protected readonly sections = [
-    { href: '#platform', label: 'Platform' },
-    { href: '#capabilities', label: 'Features' },
-    { href: '#how-it-works', label: 'How it works' },
-    { href: '#community', label: 'Community' },
+  protected readonly sections: readonly { href: string; label: Key }[] = [
+    { href: '#platform', label: 'landing.nav.platform' },
+    { href: '#capabilities', label: 'landing.nav.features' },
+    { href: '#how-it-works', label: 'landing.nav.how' },
+    { href: '#community', label: 'landing.nav.community' },
   ];
+
+  protected toggleMenu(): void { this.menuOpen.update((o) => !o); }
 
   constructor() {
     const meta = inject(Meta);
-    meta.updateTag({ name: 'description', content: LANDING_DESCRIPTION });
-    meta.updateTag({ property: 'og:description', content: LANDING_DESCRIPTION });
+    effect(() => {
+      const description = this.i18n.t('landing.description');
+      meta.updateTag({ name: 'description', content: description });
+      meta.updateTag({ property: 'og:description', content: description });
+    });
   }
 }

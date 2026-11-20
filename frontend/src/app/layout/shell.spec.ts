@@ -9,6 +9,8 @@ import { SettingsService } from '../core/settings.service';
 import { I18nService } from '../core/i18n/i18n.service';
 import { NAV_ITEMS } from './navigation';
 import { Shell } from './shell';
+import { StateComponent } from '../shared/ui';
+import { ApiError } from '../core/api-error';
 import { SHORTCUTS } from './shortcut-help';
 
 const SECRET = 'oci_demo_7f3a_9c1d2e3f4a5b6c7d8e9f';
@@ -135,6 +137,27 @@ describe('App shell', () => {
     expect(pop.textContent).toContain('Mock data');
     expect(pop.textContent?.toLowerCase()).not.toContain('workspace');
     f.destroy();
+  });
+
+  it('writes the environment popover and the state retry button in French', async () => {
+    TestBed.inject(I18nService).set('fr');
+    const f = await mount();
+    const el = f.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('button.env')!.click();
+    await settle(f, 50);
+    const pop = el.querySelector('#env-pop')!;
+    expect(pop.textContent).toContain('Données fictives');
+    expect(pop.textContent).toContain('Réglages de connexion');
+    expect(pop.textContent).toContain("État des réseaux sur la vue d'ensemble");
+    expect(pop.textContent).not.toContain('Connection settings');
+    expect(el.querySelector('button.env')?.getAttribute('aria-label')).toContain("Détails de l'environnement");
+    expect(el.querySelector('button.user')?.getAttribute('aria-label')).toMatch(/^Identifiant\u202f: .*Menu du compte$/);
+    f.destroy();
+
+    const s = TestBed.createComponent(StateComponent);
+    s.componentRef.setInput('error', new ApiError(502, 'Boom', null));
+    await s.whenStable();
+    expect((s.nativeElement as HTMLElement).querySelector('.state--error button')?.textContent).toContain('Réessayer');
   });
 
   describe('on the public landing page', () => {

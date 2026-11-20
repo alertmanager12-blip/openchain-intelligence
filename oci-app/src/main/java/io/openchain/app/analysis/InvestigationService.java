@@ -1,5 +1,6 @@
 package io.openchain.app.analysis;
 
+import io.openchain.app.api.ApiCode;
 import io.openchain.app.api.ApiException;
 import io.openchain.app.api.ApiMapper;
 import io.openchain.app.api.Dto;
@@ -65,22 +66,21 @@ public class InvestigationService {
      * Simulated (demo) chains have none of them.
      */
     public List<String> limitations(Network n) {
+        return limitationCodes(n).stream().map(Dto.Coded::text).toList();
+    }
+
+    /** The limitations of {@link #limitations} as stable codes (same order); the English text is built from them. */
+    public List<Dto.Coded> limitationCodes(Network n) {
         var rt = chains.runtime(n);
         if (rt.isEmpty() || rt.get().simulator().isPresent()) return List.of();
-        List<String> out = new ArrayList<>();
+        List<Dto.Coded> out = new ArrayList<>();
         long seen = chains.observedDays(n), need = chains.ageWarmup().toDays();
-        if (seen < need) {
-            out.add("Address age and activity fields (wallet.age_days, wallet.tx_count, counterparty.age_days, "
-                    + "approval.spender_age_days) are measured from the platform's first observation: they are withheld until "
-                    + need + " days of observation (" + seen + " so far), so rules using them do not fire yet.");
-        }
+        if (seen < need) out.add(Dto.Coded.of(ApiCode.LIMITATION_AGE_WARMUP, "need", need, "seen", seen));
         if (n == Network.TRON) {
-            out.add("No historical balance from TronGrid: wallet.balance is absent, so balance-based rules (wallet-draining) and "
-                    + "the rapid-drain detector do not run on this network.");
-            out.add("TRC-10 assets and internal transactions are not indexed.");
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_TRON_NO_BALANCE));
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_TRON_NOT_INDEXED));
         } else {
-            out.add("Internal transactions (value moved by contracts during execution) are not indexed: such flows are invisible "
-                    + "to exposure and drain detection.");
+            out.add(Dto.Coded.of(ApiCode.LIMITATION_NO_INTERNAL_TRANSACTIONS));
         }
         return out;
     }
@@ -113,32 +113,32 @@ public class InvestigationService {
 
     /** Parses {@code network}; 400 when unknown, 422 when known but not enabled on this instance. */
     public Network network(String id) {
-        if (id == null || id.isBlank()) throw ApiException.badRequest("query parameter 'network' is required");
+        if (id == null || id.isBlank()) throw ApiException.badRequest(ApiCode.NETWORK_REQUIRED);
         Network n;
         try {
             n = Network.fromId(id.trim());
         } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("unknown network '" + id + "'");
+            throw ApiException.badRequest(ApiCode.NETWORK_UNKNOWN, Map.of("network", id));
         }
         if (chains.runtime(n).isEmpty()) {
-            throw ApiException.validation("network '" + n.id() + "' is not enabled on this instance",
-                    List.of(new ApiException.FieldError("/network", "unsupported_network", "network not enabled")));
+            throw ApiException.validation(ApiCode.NETWORK_NOT_ENABLED, Map.of("network", n.id()),
+                    List.of(ApiException.FieldError.of("/network", ApiCode.FIELD_UNSUPPORTED_NETWORK, Map.of())));
         }
         return n;
     }
 
     public Address address(Network n, String value) {
-        if (value == null || !ADDRESS.matcher(value).matches()) throw ApiException.badRequest("invalid address");
+        if (value == null || !ADDRESS.matcher(value).matches()) throw ApiException.badRequest(ApiCode.WALLET_INVALID_ADDRESS);
         return new Address(n, value);
     }
 
     public String txHash(String value) {
-        if (value == null || !HASH.matcher(value).matches()) throw ApiException.badRequest("invalid transaction hash");
+        if (value == null || !HASH.matcher(value).matches()) throw ApiException.badRequest(ApiCode.TX_INVALID_HASH);
         return value;
     }
 
     private BlockchainProvider provider(Network n) {
-        return chains.provider(n).orElseThrow(() -> ApiException.validation("network not enabled", List.of()));
+        return chains.provider(n).orElseThrow(() -> ApiException.validation(ApiCode.NETWORK_NOT_ENABLED_GENERIC, List.of()));
     }
 
     // ---- risk / labels ------------------------------------------------------------------------------------------
@@ -213,7 +213,7 @@ public class InvestigationService {
         return new Dto.WalletAnalysisDto(a.value(), a.network().id(), p.firstActivity(), p.lastActivity(), p.transactionCount(),
                 contract, labels.findByAddress(a).stream().map(ApiMapper::label).toList(), balances, flowDtos,
                 counterparties(a, flows), activity(a, flows), signals, risk, profile, risk, freshness, DISCLAIMER,
-                history.coverage(a), limitations(a.network()));
+                history.coverage(a), limitations(a.network()), limitationCodes(a.network()));
     }
 
     private List<Dto.CounterpartyDto> counterparties(Address self, List<ValueFlow> flows) {
@@ -423,7 +423,7 @@ public class InvestigationService {
     public Dto.TxAnalysisDto transaction(Network n, String hash) {
         BlockchainProvider p = provider(n);
         BlockchainProvider.TransactionReceipt r = p.getTransactionReceipt(hash)
-                .orElseThrow(() -> ApiException.notFound("transaction " + hash + " not found on " + n.id()));
+                .orElseThrow(() -> ApiException.notFound(ApiCode.TX_NOT_FOUND, Map.of("hash", hash, "network", n.id())));
         long head = chains.runtime(n).map(chains::status).map(s -> s.headBlock()).orElse(r.transaction().blockNumber());
         long confirmations = Math.max(0, head - r.transaction().blockNumber());
         Set<Address> parties = new java.util.LinkedHashSet<>();

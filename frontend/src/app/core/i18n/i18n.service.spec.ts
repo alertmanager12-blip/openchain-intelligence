@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { en } from './en';
 import { fr } from './fr';
-import { I18nService, Key, Lang } from './i18n.service';
+import { isWellFormedIcu } from './icu';
+import { I18nService, Key, Lang, translate } from './i18n.service';
 
 /** Spec 2026-11-19 §1: language from the stored choice, else the browser; switched live; every key in both languages. */
 describe('I18nService', () => {
@@ -59,7 +60,7 @@ describe('I18nService', () => {
 
 describe('dictionaries', () => {
   const keys = Object.keys(en) as Key[];
-  const sample = { count: 2, n: 2, name: 'x', network: 'TRON', when: 'x', what: 'x', value: 'x', id: 'x' };
+  const sample = { count: 2, n: 2, name: 'x', network: 'TRON', when: 'x', what: 'x', value: 'x', id: 'x', label: 'x', host: 'x', sim: 1, total: 3 };
   const render = (e: unknown, lang: Lang) => (typeof e === 'function' ? (e as (p: object, l: Lang) => string)(sample, lang) : String(e));
 
   it('has every English key in French, never empty', () => {
@@ -71,10 +72,20 @@ describe('dictionaries', () => {
 
   it('leaves no parameter unfilled once rendered', () => {
     for (const k of keys) {
-      for (const [lang, d] of [['en', en], ['fr', fr]] as const) {
-        const raw = render(d[k], lang);
-        const filled = raw.replace(/\{(\w+)\}/g, (_, p: string) => (p in sample ? 'ok' : `{${p}}`));
+      for (const lang of ['en', 'fr'] as const) {
+        // server codes carry their own placeholders (error.*): fill whatever the English template names
+        const own = Object.fromEntries((typeof en[k] === 'string' ? (en[k].match(/\{(\w+)\}/g) ?? []) : []).map((m) => [m.slice(1, -1), 'x']));
+        const filled = translate(lang, k, { ...own, ...sample });
         expect(filled, `${lang} ${k}`).not.toMatch(/\{\w+\}/);
+      }
+    }
+  });
+
+  it('every entry is a well-formed message', () => {
+    for (const [lang, d] of [['en', en], ['fr', fr]] as const) {
+      for (const k of keys) {
+        const e = d[k];
+        if (typeof e === 'string') expect(isWellFormedIcu(e), `${lang} ${k}`).toBe(true);
       }
     }
   });

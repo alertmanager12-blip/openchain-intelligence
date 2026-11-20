@@ -3,8 +3,9 @@ import { FormField, form, required, submit, validate } from '@angular/forms/sign
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, toApiError } from '../../core/api-error';
+import { ApiError, apiErrorText, errorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
+import { I18nService, hasKey, type Key } from '../../core/i18n/i18n.service';
 import { ConnectorType, Webhook } from '../../core/models';
 import { Toasts } from '../../core/toasts';
 import { apiResource } from '../../shared/api-resource';
@@ -15,12 +16,13 @@ import { PageHeader } from '../../shared/page-header';
 import { UI } from '../../shared/ui';
 import { maskTarget } from './connector-target';
 
-const TYPES: { type: ConnectorType; label: string; target: string; placeholder: string; help: string; available?: false }[] = [
-  { type: 'WEBHOOK', label: 'Webhook', target: 'HTTPS endpoint', placeholder: 'https://soc.example.com/hooks/oci', help: 'Signed JSON POST (HMAC-SHA256 in X-OCI-Signature). The signing secret is shown once.' },
-  { type: 'SLACK', label: 'Slack', target: 'Incoming webhook URL', placeholder: 'https://hooks.slack.com/services/…', help: 'Posts a compact alert card to the channel bound to the webhook.' },
-  { type: 'DISCORD', label: 'Discord', target: 'Channel webhook URL', placeholder: 'https://discord.com/api/webhooks/…', help: 'Posts an embed per alert.' },
-  { type: 'TELEGRAM', label: 'Telegram', target: 'Chat id', placeholder: '-1001234567890', help: 'Requires OCI_TELEGRAM_BOT_TOKEN on the server; enter the destination chat id.' },
-  { type: 'EMAIL', label: 'Email', target: 'Recipient address', placeholder: 'soc@example.com', help: 'Not available in this version: the server has no mail transport yet.', available: false },
+/** Connector types: the product names and example values stay as they are; the console's words around them are in the dictionary. */
+const TYPES: { type: ConnectorType; label: string; targetKey: Key; helpKey: Key; placeholder: string; available?: false }[] = [
+  { type: 'WEBHOOK', label: 'Webhook', targetKey: 'integrations.type.WEBHOOK.target', helpKey: 'integrations.type.WEBHOOK.help', placeholder: 'https://soc.example.com/hooks/oci' },
+  { type: 'SLACK', label: 'Slack', targetKey: 'integrations.type.SLACK.target', helpKey: 'integrations.type.SLACK.help', placeholder: 'https://hooks.slack.com/services/…' },
+  { type: 'DISCORD', label: 'Discord', targetKey: 'integrations.type.DISCORD.target', helpKey: 'integrations.type.DISCORD.help', placeholder: 'https://discord.com/api/webhooks/…' },
+  { type: 'TELEGRAM', label: 'Telegram', targetKey: 'integrations.type.TELEGRAM.target', helpKey: 'integrations.type.TELEGRAM.help', placeholder: '-1001234567890' },
+  { type: 'EMAIL', label: 'Email', targetKey: 'integrations.type.EMAIL.target', helpKey: 'integrations.type.EMAIL.help', placeholder: 'soc@example.com', available: false },
 ];
 
 @Component({
@@ -33,6 +35,7 @@ const TYPES: { type: ConnectorType; label: string; target: string; placeholder: 
 export class IntegrationsPage {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
+  protected readonly i18n = inject(I18nService);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
   readonly types = TYPES;
@@ -43,22 +46,26 @@ export class IntegrationsPage {
   readonly meta = computed(() => TYPES.find((t) => t.type === this.type())!);
   readonly model = signal({ name: '', target: '' });
   readonly connector = form(this.model, (p) => {
-    required(p.name, { message: 'Give the connector a name.' });
-    required(p.target, { message: 'Enter where alerts are delivered.' });
+    // validation messages are dictionary keys (shown through errText), so they follow a language switch
+    required(p.name, { message: 'integrations.err.name' });
+    required(p.target, { message: 'integrations.err.target' });
     validate(p.target, ({ value }) => {
       const v = value().trim();
       if (!v) return undefined;
       return this.type() === 'TELEGRAM'
-        ? (/^-?\d+$/.test(v) ? undefined : { kind: 'chat-id', message: 'A Telegram chat id is a number, for example -1001234567890.' })
-        : (/^https:\/\//i.test(v) ? undefined : { kind: 'https', message: 'Use an https:// URL.' });
+        ? (/^-?\d+$/.test(v) ? undefined : { kind: 'chat-id', message: 'integrations.err.chatId' })
+        : (/^https:\/\//i.test(v) ? undefined : { kind: 'https', message: 'integrations.err.https' });
     });
   });
   readonly busy = signal(false);
   readonly createError = signal<ApiError | null>(null);
   readonly secret = signal<string | null>(null);
   readonly testing = signal<string | null>(null);
-  readonly lastTest = signal<{ id: string; ok: boolean; message: string } | null>(null);
-  readonly ago = timeAgo;
+  /** Result of the last test: the server's own wording (English) with its HTTP status, or the console's error text. */
+  readonly lastTest = signal<{ id: string; ok: boolean; message: string; status: number | null; fromServer: boolean } | null>(null);
+  protected ago(iso: string | null | undefined): string { return timeAgo(iso, Date.now(), this.i18n.lang()); }
+  protected errText(m: { message?: string } | undefined): string { return m?.message && hasKey(m.message) ? this.i18n.t(m.message) : this.i18n.t('integrations.err.invalid'); }
+  protected apiError(e: ApiError): string { return apiErrorText(e, this.i18n.lang()); }
   readonly mask = maskTarget;
 
   readonly stats = computed(() => {
@@ -83,7 +90,7 @@ export class IntegrationsPage {
         this.connector().reset();
         const { secret: _omit, ...stored } = w;
         this.list.update((l) => [...(l ?? []), stored]);
-        this.toasts.success('Connector created', `${w.name} (${w.id})`);
+        this.toasts.success(this.i18n.t('integrations.toast.created'), `${w.name} (${w.id})`);
       } catch (err) {
         this.createError.set(toApiError(err));
       } finally {
@@ -97,33 +104,36 @@ export class IntegrationsPage {
     this.lastTest.set(null);
     try {
       const r = await firstValueFrom(this.api.testWebhook(w.id));
-      const message = r.message + (r.statusCode ? ` (HTTP ${r.statusCode})` : '');
-      this.lastTest.set({ id: w.id, ok: r.delivered, message });
-      if (r.delivered) this.toasts.success('Test sent', `${w.name}: ${message}`);
-      else this.toasts.error('Test not delivered', `${w.name}: ${message}`);
+      const message = r.message + (r.statusCode ? ` ${this.i18n.t('integrations.http', { code: r.statusCode })}` : '');
+      this.lastTest.set({ id: w.id, ok: r.delivered, message: r.message, status: r.statusCode ?? null, fromServer: true });
+      if (r.delivered) this.toasts.success(this.i18n.t('integrations.toast.testSent'), `${w.name}: ${message}`);
+      else this.toasts.error(this.i18n.t('integrations.toast.testFailed'), `${w.name}: ${message}`);
       this.list.reload();
     } catch (err) {
       const e = toApiError(err);
-      this.lastTest.set({ id: w.id, ok: false, message: `${e.title}: ${e.detail ?? ''}` });
-      this.toasts.error('Test not delivered', e.detail ?? e.title);
+      this.lastTest.set({ id: w.id, ok: false, message: errorText(e, this.i18n.lang()), status: null, fromServer: false });
+      this.toasts.error(this.i18n.t('integrations.toast.testFailed'), errorText(e, this.i18n.lang()));
     } finally {
       this.testing.set(null);
     }
   }
 
   async remove(w: Webhook): Promise<void> {
-    const ok = await confirmAction(this.dialog, this.injector, { title: `Delete connector "${w.name}"?`, message: `Rules referencing ${w.id} will stop delivering to it.`, confirm: 'Delete connector', danger: true });
+    const ok = await confirmAction(this.dialog, this.injector, {
+      title: { key: 'integrations.confirm.title', params: { name: w.name } }, message: { key: 'integrations.confirm.message', params: { id: w.id } },
+      confirm: { key: 'integrations.confirm.action' }, danger: true,
+    });
     if (!ok) return;
     this.api.deleteWebhook(w.id).subscribe({
       next: () => {
         this.list.update((l) => (l ?? []).filter((x) => x.id !== w.id));
-        this.toasts.success('Connector deleted', w.name);
+        this.toasts.success(this.i18n.t('integrations.toast.deleted'), w.name);
       },
-      error: (e: ApiError) => this.toasts.error(e.title, e.detail ?? undefined),
+      error: (e: ApiError) => this.toasts.error(this.i18n.t('integrations.toast.deleteFailed'), errorText(e, this.i18n.lang())),
     });
   }
 
   copy(s: string): void {
-    void navigator.clipboard?.writeText(s).then(() => this.toasts.success('Secret copied')).catch(() => undefined);
+    void navigator.clipboard?.writeText(s).then(() => this.toasts.success(this.i18n.t('integrations.toast.copied'))).catch(() => undefined);
   }
 }

@@ -55,7 +55,7 @@ describe('OverviewPage', () => {
   it('shows the band, at most 5 verdicts and the link to every open alert, in French', async () => {
     const f = await render(busy, 'fr');
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('oci-reliability-band')?.textContent).toContain('Ma surveillance est-elle fiable ?');
+    expect(el.querySelector('oci-reliability-band')?.textContent).toContain('Ma surveillance est-elle fiable ?');
     expect(el.textContent).toContain('À traiter maintenant');
     expect(el.textContent).toContain('24 dernières heures');
     expect(el.querySelectorAll('oci-verdict').length).toBe(5);

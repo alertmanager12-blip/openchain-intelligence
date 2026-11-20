@@ -3,8 +3,19 @@ import type { Lang } from './i18n.service';
 /** BCP 47 locale per console language (English dates read "19 Nov 2026", as the console wrote them before). */
 export const LOCALE: Record<Lang, string> = { en: 'en-GB', fr: 'fr-FR' };
 
-export function fmtNumber(n: number, lang: Lang, maxFraction = 2): string {
-  return new Intl.NumberFormat(LOCALE[lang], { maximumFractionDigits: maxFraction }).format(n);
+export function fmtNumber(n: number, lang: Lang, maxFraction = 2, minFraction = 0): string {
+  return new Intl.NumberFormat(LOCALE[lang], { maximumFractionDigits: maxFraction, minimumFractionDigits: minFraction }).format(n);
+}
+
+/** A ratio as a whole percentage: "70%" / "70 %" (narrow no-break space before the sign in French). */
+export function fmtPercent(ratio: number, lang: Lang): string {
+  return `${new Intl.NumberFormat(LOCALE[lang], { maximumFractionDigits: 0 }).format(ratio * 100)}${lang === 'fr' ? '\u202f' : ''}%`;
+}
+
+/** "Nov 19, 14:05" / "19 nov., 14:05" in UTC (the caller adds "UTC"); seconds on request. */
+export function fmtStamp(iso: string, lang: Lang, seconds = false): string {
+  return new Date(iso).toLocaleString(lang === 'en' ? 'en-US' : LOCALE[lang], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23', timeZone: 'UTC' });
 }
 
 /** Day, short month, year, in UTC: "19 nov. 2026" / "19 Nov 2026". */
@@ -36,4 +47,9 @@ export function fmtDuration(ms: number, _lang: Lang): string {
 /** Singular or plural by the language's rules (French: 0 and 1 are singular). */
 export function plural(n: number, lang: Lang, forms: { one: string; other: string }): string {
   return new Intl.PluralRules(LOCALE[lang]).select(n) === 'one' ? forms.one : forms.other;
+}
+
+/** "a", "a and b", "a, b and c" / "a, b et c". */
+export function fmtList(items: readonly string[], lang: Lang): string {
+  return items.length <= 1 ? (items[0] ?? '') : new Intl.ListFormat(LOCALE[lang], { style: 'long', type: 'conjunction' }).format(items);
 }

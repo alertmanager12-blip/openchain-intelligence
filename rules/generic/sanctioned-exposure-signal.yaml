@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: sanctioned-exposure-signal
-version: 1.1.0
+version: 1.1.1
 name: Exposure to a sanctioned address (direct or indirect)
 description: The detection engine reports direct or indirect (multi-hop) value exposure of a wallet to an address on a sanctions list (e.g. OFAC SDN).
 author: openchain-community
@@ -38,6 +38,23 @@ documentation: |
   listed-address-exposure, worded and graded for what the source actually says.
   Exposure describes where funds came from; it is not a statement about the wallet owner. Propagation stops at
   exchanges and bridges (pooled funds). One alert per wallet per 6 hours.
+translations:
+  fr:
+    name: "Exposition à une adresse sanctionnée (directe ou indirecte)"
+    description: "Le moteur de détection signale une exposition directe ou indirecte (en plusieurs sauts) d'un portefeuille à une adresse figurant sur une liste de sanctions (p. ex. OFAC SDN)."
+    documentation: |
+      Lève une alerte quand oci-intelligence émet un signal SANCTIONED_EXPOSURE (contrepartie directe figurant sur une liste
+      de sanctions) ou INDIRECT_EXPOSURE (valeur parvenue au portefeuille par des intermédiaires) avec une confiance d'au
+      moins 0,5. La confiance d'une exposition indirecte décroît à chaque saut (fiabilité de la source x 0,5^(sauts-1)), si
+      bien que le plancher de 0,5 conserve l'exposition directe et l'exposition à 2 sauts à une liste faisant autorité, et
+      écarte les chemins plus faibles et plus lointains.
+      Seules comptent les adresses qu'une source liste comme SANCTIONED (signal.listed_category = sanctioned) : avant la
+      1.1.0, une exposition indirecte à n'importe quelle adresse listée (p. ex. gelée par l'émetteur d'un stablecoin) levait
+      cette alerte ; ces cas relèvent désormais de listed-address-exposure, règle formulée et graduée selon ce que la source
+      dit réellement.
+      L'exposition décrit d'où viennent les fonds ; ce n'est pas une affirmation sur le propriétaire du portefeuille. La
+      propagation s'arrête aux plateformes d'échange et aux bridges (fonds mutualisés). Une alerte par portefeuille toutes
+      les 6 heures.
 examples:
   - name: 2-hop exposure with confidence 0.5 matches
     expect: MATCH

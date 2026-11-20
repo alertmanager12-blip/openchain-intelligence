@@ -50,6 +50,23 @@ public final class Dto {
     public record ProfileDto(Instant firstSeen, Instant lastSeen, long txCount, Boolean isContract, long inboundTransfers,
                              long outboundTransfers, double txPerDay) {}
 
+    /** A stable machine code (an {@link ApiCode#id()}) with the values of its placeholders; clients translate the code. */
+    public record Coded(String code, java.util.Map<String, Object> params) {
+        public Coded {
+            params = params == null ? java.util.Map.of() : java.util.Map.copyOf(params);
+        }
+
+        public static Coded of(ApiCode code, Object... kv) {
+            java.util.Map<String, Object> p = new java.util.LinkedHashMap<>();
+            if (kv.length % 2 != 0) throw new IllegalArgumentException("key/value pairs expected, got " + kv.length + " argument(s)");
+            for (int i = 0; i + 1 < kv.length; i += 2) p.put((String) kv[i], kv[i + 1]);
+            return new Coded(code.id(), p);
+        }
+
+        /** The English sentence: the code's template filled with the params. */
+        public String text() { return ApiCode.byId(code).fill(params); }
+    }
+
     public record WalletAnalysisDto(String address, String network, Instant firstSeen, Instant lastSeen, long txCount,
                                     /** true / false from the provider (code at the address); null = unknown */
                                     Boolean isContract, List<LabelDto> labels, List<BalanceDto> balances, List<FlowDto> flows,
@@ -57,7 +74,9 @@ public final class Dto {
                                     RiskScoreDto risk, ProfileDto profile, RiskScoreDto riskScore, String dataFreshness,
                                     String disclaimer, HistoryCoverageDto history,
                                     /** What this instance cannot see or detect on this network (data-source limits). */
-                                    List<String> limitations) {}
+                                    List<String> limitations,
+                                    /** The same limitations as stable codes, in the same order. */
+                                    List<Coded> limitationCodes) {}
 
     /**
      * Coverage of the on-demand address history (ADR-0020) for one wallet.
@@ -96,6 +115,8 @@ public final class Dto {
                              Long indexerLag, boolean simulated,
                              /** What this instance cannot see or detect on this network (data-source limits). */
                              List<String> limitations,
+                             /** The same limitations as stable codes, in the same order. */
+                             List<Coded> limitationCodes,
                              /** Timestamp of the last indexed block; null until one is known (just after a start). */
                              Instant lastIndexedBlockTime) {}
 
@@ -225,13 +246,19 @@ public final class Dto {
                            /** VALID, PARTIALLY_WITHDRAWN or WITHDRAWN: matched events that left the canonical chain (reorganisation). */
                            String evidenceState,
                            /** Matched events withdrawn by a reorganisation and not re-included since. */
-                           List<String> withdrawnEventIds) {}
+                           List<String> withdrawnEventIds,
+                           /** The current version's translations of the rule (by language); empty when the rule is gone. */
+                           Map<String, io.openchain.alerting.rule.RuleTranslation> ruleTranslations) {}
 
     public record RuleDto(String id, String name, String description, boolean enabled, String severity, String evidenceLevel,
                           String yaml, String format, int version, String ruleVersion, String compiledHash, List<String> tags,
                           List<String> networks, String origin, Instant createdAt, Instant updatedAt,
                           /** Why the rule can never fire on this instance (fields/event types never produced); empty = may fire. */
-                          List<String> unreachableReasons) {}
+                          List<String> unreachableReasons,
+                          /** The same reasons as stable codes, in the same order. */
+                          List<Coded> unreachableCodes,
+                          /** The rule's texts in other languages ({@code translations} of its source); absent texts are left out. */
+                          Map<String, io.openchain.alerting.rule.RuleTranslation> translations) {}
 
     public record WebhookDto(String id, String type, String name, String target, String url, List<String> events, boolean enabled,
                              Instant createdAt, Instant lastDeliveryAt, String lastDeliveryStatus,

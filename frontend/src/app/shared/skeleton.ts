@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { I18nService } from '../core/i18n/i18n.service';
 
 export type SkeletonKind = 'table' | 'readout' | 'lines';
 
@@ -9,7 +10,7 @@ export type SkeletonKind = 'table' | 'readout' | 'lines';
 @Component({
   selector: 'oci-skeleton',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { role: 'status', 'aria-busy': 'true', '[attr.aria-label]': 'label()', '[class]': "'skeleton skeleton--' + kind()" },
+  host: { role: 'status', 'aria-busy': 'true', '[attr.aria-label]': 'labelText()', '[class]': "'skeleton skeleton--' + kind()" },
   template: `
     @switch (kind()) {
       @case ('table') {
@@ -45,7 +46,10 @@ export class Skeleton {
   readonly rows = input(5);
   /** Relative column widths for the table shape (percent of each grid cell). */
   readonly columns = input<number[]>([70, 90, 60, 80, 50]);
-  readonly label = input('Loading');
+  private readonly i18n = inject(I18nService);
+  /** Spoken label; the console's "Loading" when absent. */
+  readonly label = input<string | null>(null);
+  readonly labelText = computed(() => this.label() ?? this.i18n.t('state.loading'));
   readonly rowList = computed(() => Array.from({ length: this.rows() }, (_, i) => i));
   readonly cols = computed(() => this.columns());
 }

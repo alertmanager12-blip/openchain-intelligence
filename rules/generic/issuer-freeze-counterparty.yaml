@@ -1,6 +1,6 @@
 apiVersion: openchain.io/rule/v1
 id: issuer-freeze-counterparty
-version: 1.0.0
+version: 1.0.1
 name: Stablecoin issuer froze a known counterparty
 description: The issuer of a stablecoin (Tether, Circle) froze an address that already exchanged value with wallets indexed by this deployment.
 author: openchain-community
@@ -34,6 +34,21 @@ documentation: |
   law-enforcement requests, for sanctions, after hacks, and sometimes by precaution or mistake, and freezes can be
   lifted (STABLECOIN_UNFREEZE removes the ISSUER_FROZEN label). Review the counterparties' exposure signals
   (FLAGGED_EXPOSURE) before acting. Freezes older than the indexer start block are not seen.
+translations:
+  fr:
+    name: "Contrepartie connue gelée par l'émetteur d'un stablecoin"
+    description: "L'émetteur d'un stablecoin (Tether, Circle) a gelé une adresse qui avait déjà échangé de la valeur avec des portefeuilles indexés par ce déploiement."
+    documentation: |
+      Se déclenche sur un événement STABLECOIN_FREEZE : le contrat officiel USDT/USDC (AddedBlackList, Blacklisted,
+      BlockPlaced) a ajouté une adresse à la liste noire de l'émetteur, et au moins un portefeuille indexé avait déjà envoyé
+      de la valeur à cette adresse ou reçu de la valeur de celle-ci (freeze.known_counterparties est calculé à partir des
+      flux de valeur indexés).
+      Le gel lui-même est CONFIRMED_BY_SOURCE : il a été émis par le propre contrat de l'émetteur (les journaux de contrats
+      imitateurs ne sont jamais décodés comme des gels). Il indique ce que l'émetteur a fait, pas pourquoi : les émetteurs
+      gèlent à la demande des autorités, au titre de sanctions, après des piratages, et parfois par précaution ou par
+      erreur, et les gels peuvent être levés (STABLECOIN_UNFREEZE retire l'étiquette ISSUER_FROZEN). Examinez les signaux
+      d'exposition des contreparties (FLAGGED_EXPOSURE) avant d'agir. Les gels antérieurs au bloc de départ de l'indexeur ne
+      sont pas vus.
 examples:
   - name: freeze of an address with indexed counterparties matches
     expect: MATCH
