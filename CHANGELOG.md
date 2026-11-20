@@ -8,9 +8,22 @@ Public API stability (REST API v1, rule schema `openchain.io/rule/v1`) is guaran
 
 ## [Unreleased]
 
+### Added (console entirely in English and French)
+
+- **Every console screen is available in English and French**: a FR | EN switch in every page header and on the landing page, a language setting in Settings; the default follows the browser and the choice is stored in the browser. Dictionaries are split by area (`frontend/src/app/core/i18n/en|fr/`), with ICU plurals/select and French typography. Sentences composed by the engine stay in English, shown under "Formulation du moteur :" with `lang="en"`. A test refuses hard-coded English in any screen, and a test checks that every server code has English and French text.
+- **Rules can carry translations**: optional `translations: { fr: { name, description, documentation } }` in rule schema `openchain.io/rule/v1` (additive; see docs/guides/writing-rules.md). The 10 shipped rules are translated with a patch version bump, "translations only": detection is unchanged.
+- **Codes catalogue** `docs/api/codes.json` (206 codes) listing every machine-readable code the API emits.
+
+### Changed (API codes, additive except renamed field codes)
+
+- problem+json gains `code` and `params`; every `errors[]` item gains `params`. Details in docs/api/README.md.
+- **Renamed field codes (breaking for clients matching on `errors[].code`)**: field codes are now namespaced `field.*` and rule-validation codes `rule.*`; the old bare codes (for example `required`, `unsupported`, `max_exceeded`; now `field.required`, `field.max_exceeded`, ...) no longer appear. Look up the new names in `docs/api/codes.json`.
+- Additive fields: `limitationCodes` (networks, wallet), `unreachableCodes` (rules), `RuleDto.translations`, `AlertDto.ruleTranslations`, and `alerts.last24h.byRule[].translations` in `GET /api/v1/dashboard`.
+- Frontend bundle budget: the `initial` budget warning in `frontend/angular.json` goes from 600 kB to 800 kB (error stays 1 MB). Both dictionaries load eagerly by design (no lazy loading), so the initial bundle is about 761.5 kB raw / 185.6 kB transferred.
+
 ### Added (console — French and English)
 
-- **The console speaks French and English**: a FR | EN switch in every page's top bar, without reloading; the default follows the browser, the choice is remembered in the browser. Translated now: navigation, command palette, page header, verdicts, levels of proof, coverage and sanctions sentences, risk badges, and the whole overview. Numbers, dates and durations follow the language. The other screens are still English (next steps, screen by screen).
+- **The console speaks French and English**: a FR | EN switch in every page's top bar, without reloading; the default follows the browser, the choice is remembered in the browser. Translated now: navigation, command palette, page header, verdicts, levels of proof, coverage and sanctions sentences, risk badges, and the whole overview. Numbers, dates and durations follow the language.
 - **Alert sentences written from the alert's own fields** in both languages for the rules seen in production (wallet-draining, large-usdt-transfer, fund-splitting, issuer-freeze-counterparty, sanctioned-exposure-signal, listed-address-exposure); the engine's English wording stays reachable ("Engine's wording") and is used when a field is missing. An exposure is called "sanctioned" only when the signal says the list is a sanctions list.
 
 ### Changed (overview — "is monitoring reliable?")
