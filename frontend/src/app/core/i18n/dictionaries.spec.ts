@@ -7,6 +7,7 @@ import { verdict, prefixes as verdictPrefixes } from './en/verdict';
 import { enums, prefixes as enumsPrefixes } from './en/enums';
 import { errors, prefixes as errorsPrefixes } from './en/errors';
 import { shared, prefixes as sharedPrefixes } from './en/shared';
+import { alerts, prefixes as alertsPrefixes } from './en/alerts';
 import { ALERT_STATUSES, SEVERITIES } from '../models';
 
 /** Spec 2026-11-19 §1: dictionaries are split by area; a key lives in one area, under that area's prefixes. */
@@ -18,6 +19,7 @@ const AREAS: Record<string, { keys: string[]; prefixes: readonly string[] }> = {
   enums: { keys: Object.keys(enums), prefixes: enumsPrefixes },
   errors: { keys: Object.keys(errors), prefixes: errorsPrefixes },
   shared: { keys: Object.keys(shared), prefixes: sharedPrefixes },
+  alerts: { keys: Object.keys(alerts), prefixes: alertsPrefixes },
 };
 
 describe('dictionaries by area', () => {

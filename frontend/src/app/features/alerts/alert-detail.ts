@@ -1,30 +1,36 @@
-import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBar } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { FormField, email, form, required, submit } from '@angular/forms/signals';
 import { Observable, firstValueFrom } from 'rxjs';
-import { ApiError, toApiError } from '../../core/api-error';
+import { ApiError, errorText, toApiError } from '../../core/api-error';
 import { ApiService } from '../../core/api.service';
 import { Alert, AlertStatus } from '../../core/models';
-import { I18nService } from '../../core/i18n/i18n.service';
+import { I18nService, hasKey, type Key } from '../../core/i18n/i18n.service';
 import { Toasts } from '../../core/toasts';
 import { ruleName } from '../../shared/rule-text';
-import { timeAgo } from '../../shared/format';
+import { statusName, timeAgo } from '../../shared/format';
 import { MAT_FORM } from '../../shared/material';
-import { UI, sentence } from '../../shared/ui';
+import { UI } from '../../shared/ui';
+import { EngineText } from '../../shared/engine-text';
 import { AlertWhy } from './alert-why';
 
-export interface AlertAction { to: AlertStatus; label: string; done: string; primary?: boolean; key?: string }
+export interface AlertAction { to: AlertStatus; label: Key; done: Key; primary?: boolean; key?: string }
 
-/** Lifecycle actions available from each status (mirrors the backend state machine); `done` is the toast text. */
+const ACK: AlertAction = { to: 'ACKNOWLEDGED', label: 'alerts.act.acknowledge', done: 'alerts.done.acknowledge', primary: true, key: 'E' };
+const INVESTIGATE: AlertAction = { to: 'INVESTIGATING', label: 'alerts.act.investigate', done: 'alerts.done.investigate' };
+const RESOLVE: AlertAction = { to: 'RESOLVED', label: 'alerts.act.resolve', done: 'alerts.done.resolve' };
+const FALSE_POSITIVE: AlertAction = { to: 'FALSE_POSITIVE', label: 'alerts.act.falsePositive', done: 'alerts.done.falsePositive' };
+const REOPEN: AlertAction = { to: 'OPEN', label: 'alerts.act.reopen', done: 'alerts.done.reopen' };
+
+/** Lifecycle actions available from each status (mirrors the backend state machine); `label` and `done` (the toast) are dictionary keys. */
 export const ACTIONS: Record<AlertStatus, AlertAction[]> = {
-  OPEN: [{ to: 'ACKNOWLEDGED', label: 'Acknowledge', done: 'Alert acknowledged', primary: true, key: 'E' }, { to: 'INVESTIGATING', label: 'Investigate', done: 'Investigation started' }, { to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
-  ACKNOWLEDGED: [{ to: 'INVESTIGATING', label: 'Investigate', done: 'Investigation started', primary: true }, { to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved' }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
-  INVESTIGATING: [{ to: 'RESOLVED', label: 'Resolve', done: 'Alert resolved', primary: true }, { to: 'FALSE_POSITIVE', label: 'False positive', done: 'Marked as false positive' }],
-  RESOLVED: [{ to: 'OPEN', label: 'Reopen', done: 'Alert reopened' }],
-  FALSE_POSITIVE: [{ to: 'OPEN', label: 'Reopen', done: 'Alert reopened' }],
+  OPEN: [ACK, INVESTIGATE, RESOLVE, FALSE_POSITIVE],
+  ACKNOWLEDGED: [{ ...INVESTIGATE, primary: true }, RESOLVE, FALSE_POSITIVE],
+  INVESTIGATING: [{ ...RESOLVE, primary: true }, FALSE_POSITIVE],
+  RESOLVED: [REOPEN],
+  FALSE_POSITIVE: [REOPEN],
 };
 
 /**
@@ -33,9 +39,10 @@ export const ACTIONS: Record<AlertStatus, AlertAction[]> = {
  */
 import { EvidenceLine } from '../../shared/evidence-line';
 import { alertLines } from './alert-lines';
+import { fmtStamp } from './evidence';
 @Component({
   selector: 'oci-alert-detail',
-  imports: [DatePipe, FormField, AlertWhy, EvidenceLine, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],
+  imports: [FormField, AlertWhy, EngineText, EvidenceLine, MatButtonModule, MatProgressBar, MatTabsModule, ...MAT_FORM, ...UI],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './alert-detail.html',
   styleUrl: './alert-detail.scss',
@@ -44,12 +51,12 @@ import { alertLines } from './alert-lines';
 export class AlertDetail {
   private readonly api = inject(ApiService);
   private readonly toasts = inject(Toasts);
-  private readonly i18n = inject(I18nService);
+  protected readonly i18n = inject(I18nService);
   readonly alert = input.required<Alert>();
   /** Rule name in the console's language. */
   readonly title = computed(() => ruleName(this.alert(), this.i18n.lang()));
   /** The finding of the alert with its level of proof (spec 2026-11-18). */
-  readonly lines = computed(() => alertLines(this.alert()));
+  readonly lines = computed(() => alertLines(this.alert(), this.i18n.lang()));
   readonly updated = output<Alert>();
   readonly closed = output<void>();
   readonly busy = signal(false);
@@ -58,25 +65,32 @@ export class AlertDetail {
   readonly reason = linkedSignal({ source: () => this.alert().id, computation: () => '' });
   readonly assigning = linkedSignal({ source: () => this.alert().id, computation: () => false });
   readonly tab = linkedSignal({ source: () => this.alert().id, computation: () => 0 });
-  readonly ago = timeAgo;
-  readonly sentence = sentence;
+  readonly ago = (iso: string) => timeAgo(iso, Date.now(), this.i18n.lang());
+  readonly statName = (st: string) => statusName(st, this.i18n.lang());
+  readonly stamp = (iso: string) => fmtStamp(iso, this.i18n.lang());
+  readonly errText = (e: ApiError) => errorText(e, this.i18n.lang());
+  /** True in French, where engine-composed sentences stay English and are marked as such. */
+  readonly fr = computed(() => this.i18n.lang() === 'fr');
+  /** The assignee field's message, from the kind of the error (the server-side wording is never involved). */
+  readonly assignError = computed(() => (this.assignForm.assignee().errors().length ? this.i18n.t('alerts.assigneeInvalid') : ''));
 
   /** Signal Forms: the assignee follows the alert; the comment draft resets when another alert opens. */
   readonly assignModel = linkedSignal(() => ({ assignee: this.alert().assignee ?? '' }));
-  readonly assignForm = form(this.assignModel, (p) => email(p.assignee, { message: 'Enter an email address, or leave empty to unassign.' }));
+  readonly assignForm = form(this.assignModel, (p) => email(p.assignee));
   readonly commentModel = linkedSignal({ source: () => this.alert().id, computation: () => ({ body: '' }) });
-  readonly commentForm = form(this.commentModel, (p) => required(p.body, { message: 'Write a comment first.' }));
+  readonly commentForm = form(this.commentModel, (p) => required(p.body));
 
   actions(s: AlertStatus): AlertAction[] {
     return ACTIONS[s];
   }
 
   action(a: string): string {
-    return a === 'CREATED' ? 'Created' : a === 'ANNOTATED' ? 'Annotated' : sentence(a);
+    const k = `alerts.hist.${a}`;
+    return hasKey(k) ? this.i18n.t(k) : this.statName(a);
   }
 
   evidenceHelp(a: Alert): string {
-    return a.evidenceLevel === 'ANOMALY' ? 'Unusual behaviour, no risk claim.' : a.evidenceLevel === 'RISK_SIGNAL' ? 'Pattern associated with risk, not proof.' : 'Stated by a cited external source.';
+    return this.i18n.t(`alerts.help.${a.evidenceLevel}`);
   }
 
   private async mutate(call: Observable<Alert>, done: string): Promise<boolean> {
@@ -89,32 +103,32 @@ export class AlertDetail {
     } catch (e) {
       const err = toApiError(e);
       this.actionError.set(err);
-      this.toasts.error(err.title, err.detail ?? undefined);
+      this.toasts.error(errorText(err, this.i18n.lang()));
       return false;
     } finally {
       this.busy.set(false);
     }
   }
 
-  async move(to: AlertStatus, done: string): Promise<void> {
+  async move(to: AlertStatus, done: Key): Promise<void> {
     if (this.busy()) return;
     const a = this.alert();
     const reason = this.reason().trim() || undefined;
-    if (await this.mutate(to === 'ACKNOWLEDGED' && !reason ? this.api.acknowledgeAlert(a.id) : this.api.setAlertStatus(a.id, to, reason), done)) this.reason.set('');
+    if (await this.mutate(to === 'ACKNOWLEDGED' && !reason ? this.api.acknowledgeAlert(a.id) : this.api.setAlertStatus(a.id, to, reason), this.i18n.t(done))) this.reason.set('');
   }
 
   assign(e: Event): void {
     e.preventDefault();
     void submit(this.assignForm, async () => {
       const who = this.assignModel().assignee.trim() || null;
-      if (await this.mutate(this.api.assignAlert(this.alert().id, who), who ? `Alert assigned to ${who}` : 'Alert unassigned')) this.assigning.set(false);
+      if (await this.mutate(this.api.assignAlert(this.alert().id, who), who ? this.i18n.t('alerts.toastAssigned', { who }) : this.i18n.t('alerts.toastUnassigned'))) this.assigning.set(false);
     });
   }
 
   comment(e: Event): void {
     e.preventDefault();
     void submit(this.commentForm, async () => {
-      if (await this.mutate(this.api.commentAlert(this.alert().id, this.commentModel().body.trim()), 'Comment posted')) this.commentModel.set({ body: '' });
+      if (await this.mutate(this.api.commentAlert(this.alert().id, this.commentModel().body.trim()), this.i18n.t('alerts.toastComment'))) this.commentModel.set({ body: '' });
     });
   }
 }

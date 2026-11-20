@@ -14,7 +14,7 @@ import { Level, levelWord } from './levels';
   template: `
     <div class="line lvl-{{ level().toLowerCase() }}">
       <span class="lvl">{{ word() }}</span>
-      <span class="text">{{ text() }}</span>
+      <span class="text" [attr.lang]="textLang()">{{ text() }}</span>
       @if (detail()) { <span class="detail">{{ detail() }}</span> }
       @if (original()) { <oci-engine-text class="orig" mode="collapsed" [text]="original()!" /> }
       @if (cite()) { <button type="button" class="cite" (click)="citeClick.emit(cite()!)" [attr.aria-label]="citeLabel(cite()!)">{{ cite() }}</button> }
@@ -40,6 +40,8 @@ export class EvidenceLine {
   readonly text = input.required<string>();
   readonly detail = input<string | null>(null);
   readonly cite = input<string | null>(null);
+  /** Language of the text when it differs from the page's (the engine's English wording). */
+  readonly textLang = input<string | null>(null);
   readonly citeClick = output<string>();
   protected readonly i18n = inject(I18nService);
   /** The engine's own wording (English), kept reachable when the line is written in the console's language. */

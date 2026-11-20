@@ -4,9 +4,6 @@
  */
 export const COVERAGE_ALLOWLIST: { files: string[]; tokens: RegExp[] } = {
   files: [
-    'features/alerts/alert-detail.html',
-    'features/alerts/alert-why.ts',
-    'features/alerts/alerts.html',
     'features/community/community.ts',
     'features/explorer/explorer.ts',
     'features/integrations/integrations.html',

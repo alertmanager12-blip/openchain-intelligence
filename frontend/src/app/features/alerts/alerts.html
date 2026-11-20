@@ -1,25 +1,25 @@
 <div class="page wide inbox-page" [class.has-sel]="!!selectedId()">
-  <oci-page-header heading="Alerts" [titleHidden]="true" [crumbs]="crumbs()">
-    <button matButton="outlined" class="hide-sm" type="button" (click)="refresh()" [disabled]="list.loading()">Refresh</button>
+  <oci-page-header [heading]="i18n.t('alerts.title')" [titleHidden]="true" [crumbs]="crumbs()">
+    <button matButton="outlined" class="hide-sm" type="button" (click)="refresh()" [disabled]="list.loading()">{{ i18n.t('alerts.refresh') }}</button>
   </oci-page-header>
 
-  <div class="filters" role="toolbar" aria-label="Filter alerts">
-    <div class="seg" role="group" aria-label="Status">
-      <button type="button" [attr.aria-pressed]="status() === ''" (click)="status.set('')">All</button>
+  <div class="filters" role="toolbar" [attr.aria-label]="i18n.t('alerts.filterAlerts')">
+    <div class="seg" role="group" [attr.aria-label]="i18n.t('alerts.status')">
+      <button type="button" [attr.aria-pressed]="status() === ''" (click)="status.set('')">{{ i18n.t('alerts.all') }}</button>
       @for (s of statuses; track s) {
         <button type="button" [attr.aria-pressed]="status() === s" (click)="status.set(s)">
-          <span class="status st-{{ s.toLowerCase() }}">{{ sentence(s) }}</span>@if (counts(); as c) { <span class="n">{{ c[s] ?? 0 }}</span> }</button>
+          <span class="status st-{{ s.toLowerCase() }}">{{ statName(s) }}</span>@if (counts(); as c) { <span class="n">{{ c[s] ?? 0 }}</span> }</button>
       }
     </div>
     <span class="spacer"></span>
     <mat-form-field class="f-sel" subscriptSizing="dynamic">
-      <mat-select [value]="severity()" (valueChange)="severity.set($event)" aria-label="Severity">
-        <mat-option value="">Any severity</mat-option>@for (s of severities; track s) { <mat-option [value]="s">{{ sentence(s) }}</mat-option> }
+      <mat-select [value]="severity()" (valueChange)="severity.set($event)" [attr.aria-label]="i18n.t('alerts.severity')">
+        <mat-option value="">{{ i18n.t('alerts.anySeverity') }}</mat-option>@for (s of severities; track s) { <mat-option [value]="s">{{ sevName(s) }}</mat-option> }
       </mat-select>
     </mat-form-field>
     <mat-form-field class="f-sel" subscriptSizing="dynamic">
-      <mat-select [value]="t.sortKey()" (valueChange)="setSort($event)" aria-label="Sort">
-        <mat-option value="created">Newest first</mat-option><mat-option value="severity">Most severe first</mat-option>
+      <mat-select [value]="t.sortKey()" (valueChange)="setSort($event)" [attr.aria-label]="i18n.t('alerts.sort')">
+        <mat-option value="created">{{ i18n.t('alerts.sortNewest') }}</mat-option><mat-option value="severity">{{ i18n.t('alerts.sortSevere') }}</mat-option>
       </mat-select>
     </mat-form-field>
   </div>
@@ -28,44 +28,44 @@
     <section class="list-col" aria-labelledby="h-list">
       <label class="search">
       <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
-      <input type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" placeholder="Filter by rule, address, id or assignee" aria-label="Filter alerts" />
+      <input type="search" [value]="t.filter()" (input)="t.filter.set($any($event.target).value)" [placeholder]="i18n.t('alerts.searchPlaceholder')" [attr.aria-label]="i18n.t('alerts.filterAlerts')" />
     </label>
-      <div class="list-head"><h2 id="h-list">{{ status() ? sentence(status()) : 'All alerts' }}</h2>
-        <span class="small muted" aria-live="polite"><span class="num">{{ t.view().length }}</span> {{ t.view().length === 1 ? 'alert' : 'alerts' }}</span></div>
+      <div class="list-head"><h2 id="h-list">{{ status() ? statName(status()) : i18n.t('alerts.allAlerts') }}</h2>
+        <span class="small muted" aria-live="polite">{{ i18n.t('alerts.count', { count: t.view().length }) }}</span></div>
       <oci-state [loading]="list.loading()" [error]="list.error()" [hasData]="!!list.value()" [empty]="t.view().length === 0" skeleton="lines" [skeletonRows]="8"
-        emptyText="No alert matches these filters." (retry)="list.reload()">
-        <button empty matButton="outlined" class="sm" type="button" (click)="status.set(''); severity.set(''); t.filter.set('')">Clear filters</button>
-        <div class="list" role="listbox" tabindex="0" aria-label="Alerts" [attr.aria-activedescendant]="cursor() ? 'opt-' + cursor() : null" [class.stale]="list.loading()"
+        [emptyText]="i18n.t('alerts.noMatch')" (retry)="list.reload()">
+        <button empty matButton="outlined" class="sm" type="button" (click)="status.set(''); severity.set(''); t.filter.set('')">{{ i18n.t('alerts.clearFilters') }}</button>
+        <div class="list" role="listbox" tabindex="0" [attr.aria-label]="i18n.t('alerts.title')" [attr.aria-activedescendant]="cursor() ? 'opt-' + cursor() : null" [class.stale]="list.loading()"
           (focus)="!cursor() && move(1)">
           @for (a of t.view(); track a.id) {
             <div class="item" role="option" [id]="'opt-' + a.id" [attr.aria-selected]="selectedId() === a.id" [class.cursor]="cursor() === a.id" (click)="select(a.id)">
-              <span class="sev-dot {{ a.severity }}" [attr.title]="sentence(a.severity)"></span>
-              <span class="sr-only">{{ sentence(a.severity) }},</span>
+              <span class="sev-dot {{ a.severity }}" [attr.title]="sevName(a.severity)"></span>
+              <span class="sr-only">{{ sevName(a.severity) }},</span>
               <div class="it-main">
                 <div class="it-title" [attr.title]="ruleName(a)">{{ ruleName(a) }}</div>
-                @if (a.evidenceSummary) { <div class="it-why" [attr.title]="a.evidenceSummary">{{ a.evidenceSummary }}</div> }
-                <div class="it-meta">@if (a.severity === 'CRITICAL' || a.severity === 'HIGH') { <span class="badge sev-{{ a.severity.toLowerCase() }}" aria-hidden="true">{{ sentence(a.severity) }}</span> }<span class="status st-{{ a.status.toLowerCase() }}">{{ sentence(a.status) }}</span>@if (a.evidenceState === 'WITHDRAWN') { <span class="badge sev-critical" title="Every transaction behind this alert left the canonical chain">No valid evidence</span> } @else if (a.evidenceState === 'PARTIALLY_WITHDRAWN') { <span class="badge sev-medium" title="Some matched events left the canonical chain">Evidence partly withdrawn</span> }
-                  @if (a.address) { <span class="mono it-wallet" [attr.title]="a.address"><span class="sr-only">Wallet </span>{{ short(a.address) }}</span> } @else { <span class="muted">No wallet</span> }<span>{{ netLabel(a.network) }}</span></div>
+                @if (a.evidenceSummary) { <div class="it-why" [attr.lang]="whyIsEnglish(a) ? 'en' : null" [attr.title]="why(a)">{{ why(a) }}</div> }
+                <div class="it-meta">@if (a.severity === 'CRITICAL' || a.severity === 'HIGH') { <span class="badge sev-{{ a.severity.toLowerCase() }}" aria-hidden="true">{{ sevName(a.severity) }}</span> }<span class="status st-{{ a.status.toLowerCase() }}">{{ statName(a.status) }}</span>@if (a.evidenceState === 'WITHDRAWN') { <span class="badge sev-critical" [attr.title]="i18n.t('alerts.noValidEvidenceTitle')">{{ i18n.t('alerts.noValidEvidence') }}</span> } @else if (a.evidenceState === 'PARTIALLY_WITHDRAWN') { <span class="badge sev-medium" [attr.title]="i18n.t('alerts.partlyBadgeTitle')">{{ i18n.t('alerts.partlyBadge') }}</span> }
+                  @if (a.address) { <span class="mono it-wallet" [attr.title]="a.address"><span class="sr-only">{{ i18n.t('alerts.wallet') }} </span>{{ short(a.address) }}</span> } @else { <span class="muted">{{ i18n.t('alerts.noWallet') }}</span> }<span>{{ netLabel(a.network) }}</span></div>
               </div>
               <time class="it-time" [attr.datetime]="a.createdAt">{{ ago(a.createdAt) }}</time>
             </div>
           }
         </div>
       </oci-state>
-      <p class="keys small muted" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> move <kbd>Enter</kbd> open <kbd>E</kbd> acknowledge <kbd>?</kbd> all shortcuts</p>
+      <p class="keys small muted" aria-hidden="true"><kbd>J</kbd><kbd>K</kbd> {{ i18n.t('alerts.keyMove') }} <kbd>{{ i18n.t('alerts.keyEnter') }}</kbd> {{ i18n.t('alerts.keyOpen') }} <kbd>E</kbd> {{ i18n.t('alerts.keyAck') }} <kbd>?</kbd> {{ i18n.t('alerts.keyAll') }}</p>
     </section>
 
-    <section class="pane-col" [attr.aria-label]="selected() ? null : 'Alert details'">
+    <section class="pane-col" [attr.aria-label]="selected() ? null : i18n.t('alerts.paneLabel')">
       @if (selected(); as a) {
         <oci-alert-detail [alert]="a" (updated)="onUpdated($event)" (closed)="close()" />
       } @else if (selectedId() && detail.error(); as e) {
-        <div class="pane-empty"><div class="state state--error" role="alert"><strong>{{ e.title }}</strong><p>{{ e.detail }} Pick the alert from the list instead.</p></div></div>
+        <div class="pane-empty"><div class="state state--error" role="alert"><strong>{{ errText(e) }}</strong><p>{{ i18n.t('alerts.pickInstead') }}</p></div></div>
       } @else if (selectedId()) {
-        <div class="pane-empty"><oci-state [loading]="true" skeleton="lines" [skeletonRows]="6" loadingText="Loading the alert" /></div>
+        <div class="pane-empty"><oci-state [loading]="true" skeleton="lines" [skeletonRows]="6" [loadingText]="i18n.t('alerts.loadingAlert')" /></div>
       } @else {
         <div class="pane-empty">
-          <p>Select an alert to see why it fired and record your conclusion.</p>
-          <p class="small muted"><kbd>J</kbd> <kbd>K</kbd> to move, <kbd>Enter</kbd> to open</p>
+          <p>{{ i18n.t('alerts.selectPrompt') }}</p>
+          <p class="small muted"><kbd>J</kbd> <kbd>K</kbd> {{ i18n.t('alerts.toMove') }} <kbd>{{ i18n.t('alerts.keyEnter') }}</kbd> {{ i18n.t('alerts.toOpen') }}</p>
         </div>
       }
     </section>

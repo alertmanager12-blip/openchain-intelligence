@@ -5,6 +5,7 @@ import { verdict } from './verdict';
 import { enums } from './enums';
 import { errors } from './errors';
 import { shared } from './shared';
+import { alerts } from './alerts';
 import type { Dictionary } from '../i18n.service';
 
 /** French: typed against the English areas, so a missing key does not compile. */
@@ -16,4 +17,5 @@ export const fr: Dictionary = {
   ...enums,
   ...errors,
   ...shared,
+  ...alerts,
 };
