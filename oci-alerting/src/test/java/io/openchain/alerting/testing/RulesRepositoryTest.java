@@ -148,9 +148,28 @@ class RulesRepositoryTest {
         };
         assertThat(numbers("10,000 USDT, 80% in 2 minutes")).containsExactly("10000", "80", "2");
         assertThat(fr.apply("generic/wallet-draining.yaml")).contains("80\u202F%").contains("2 minutes");
-        assertThat(fr.apply("generic/fund-splitting.yaml")).contains("30 destinataires distincts").contains("3 minutes");
+        assertThat(fr.apply("generic/fund-splitting.yaml")).startsWith("Répartition de fonds")
+                .contains("30 destinataires distincts").contains("3 minutes");
         assertThat(fr.apply("generic/listed-address-exposure.yaml")).contains("indirecte").contains("hors sanctions");
         assertThat(fr.apply("generic/sanctioned-exposure-signal.yaml")).contains("directe ou indirecte");
+    }
+
+    /**
+     * Final review: one French word per concept. « fractionnement » is structuring only (fund-splitting is a
+     * « répartition »); a bare « preuve » is proof, evidence reads « élément(s) de preuve » or « élément à charge ».
+     */
+    @TestFactory Stream<DynamicTest> frenchTextsKeepOneWordPerConcept() throws IOException {
+        return ruleFiles().stream().map(file -> DynamicTest.dynamicTest(rulesDir().relativize(file).toString(), () -> {
+            Rule r = rule(file);
+            String english = String.join("\n", r.name(), String.valueOf(r.description()), r.documentation());
+            String text = frenchText(r.translations().get("fr"));
+            if (!english.toLowerCase().contains("structuring"))
+                assertThat(text.toLowerCase()).as("« fractionnement » without structuring in " + file).doesNotContain("fractionn");
+            String bare = text.replaceAll("(?i)[ée]léments? de preuve|niveaux? de preuve", "");
+            if (!english.toLowerCase().contains("proof"))
+                assertThat(java.util.regex.Pattern.compile("(?iU)\\bpreuves?\\b").matcher(bare).find())
+                        .as("« preuve » where the English says evidence in " + file).isFalse();
+        }));
     }
 
     @Test void frenchBanListCatchesFeminineAndPluralForms() {

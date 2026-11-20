@@ -43,7 +43,7 @@ describe('Rule builder in French', () => {
     page.patch({ window: { duration: 'x', aggregate: 'sum', field: 'transaction.amount', groupBy: ['transaction.from'], op: 'gte', value: '5' } });
     await settle(f);
     expect(el.textContent).toContain('Somme de transaction.amount');
-    expect(el.textContent).toContain('d’au moins');
+    expect(el.textContent).toContain('Somme de transaction.amount par transaction.from sur x atteint au moins 5.');
 
     TestBed.inject(I18nService).set('en');
     await settle(f);

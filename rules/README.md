@@ -67,7 +67,7 @@ documentation: |
   Why this pattern matters, known false positives, required enrichments.
 translations:                           # optional; fr only for now; each text optional (falls back to English)
   fr:
-    name: "Fractionnement de fonds"
+    name: "Répartition de fonds"
     description: "..."
     documentation: |
       Même contenu que documentation, phrase pour phrase.

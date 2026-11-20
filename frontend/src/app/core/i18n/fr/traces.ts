@@ -3,7 +3,7 @@ import type { traces as enTraces } from '../en/traces';
 
 export const traces: Record<keyof typeof enTraces, Entry> = {
   'traces.title': 'Traçages enregistrés',
-  'traces.lede': 'Des traçages conservés avec les preuves qu’ils ont lues, pour qu’un résultat puisse être expliqué plus tard exactement tel qu’il a été calculé. Lancez-en un depuis le graphe des flux de fonds (sens Sortant ou Entrant).',
+  'traces.lede': 'Des traçages conservés avec les éléments de preuve qu’ils ont lus, pour qu’un résultat puisse être expliqué plus tard exactement tel qu’il a été calculé. Lancez-en un depuis le graphe des flux de fonds (sens Sortant ou Entrant).',
   'traces.yours': 'Vos traçages',
   'traces.empty': 'Aucun traçage enregistré pour l’instant.',
   'traces.seed': 'Point de départ',
@@ -27,7 +27,7 @@ export const traces: Record<keyof typeof enTraces, Entry> = {
   'traces.dirIn': 'entrant : d’où venait la valeur qu’il a reçue',
   'traces.versionLabel': 'Version',
   'traces.follows': '(suit {id})',
-  'traces.evidence': 'Preuves',
+  'traces.evidence': 'Éléments de preuve',
   'traces.evidenceLine': '{count, plural, one {# transfert figé} other {# transferts figés}}, moteur {version}',
   'traces.staleNote': 'Périmé : {count, plural, one {# transfert sur lequel il s’appuyait a quitté} other {# transferts sur lesquels il s’appuyait ont quitté}} la chaîne canonique. Le résultat ci-dessous est tel qu’il a été calculé ; relancez-le pour la chaîne actuelle.',
   'traces.rerun': 'Relancer (nouvelle version)',
